@@ -28,23 +28,11 @@ This is experimental research code, not a production server. It is incomplete, i
 2. Run `manage_accounts_v24.bat` to create local test accounts.
 3. Run `start_masterserver_v24.bat`.
 4. Run `chat-server/START_CHAT_SERVER_V8.bat` to test chat functionality.
-5. This only works if your hosts file has these entries: 
---------------------------------------------------------
-127.0.0.1 masterserver.euw.heroesofnewerth.com
-127.0.0.1 masterserver.sea.heroesofnewerth.com
-127.0.0.1 masterserver.naeu.heroesofnewerth.com
-127.0.0.1 client.sea.heroesofnewerth.com
-127.0.0.1 client.naeu.heroesofnewerth.com
-127.0.0.1 client.euw.heroesofnewerth.com
-127.0.0.1 client.gs.heroesofnewerth.com
-127.0.0.1 chatserver.heroesofnewerth.com
-127.0.0.1 authserver.heroesofnewerth.com
-127.0.0.1 s2.honpatchserver.com
-127.0.0.1 masterserver.hon.s2games.com
---------------------------------------------------------
+5. Read the included notes before changing network or hosts-file settings.
 6. HoN 3.2.7 installer can be found below:
 
 https://www.moddb.com/games/heroes-of-newerth/downloads/hon-client-327
+
 
 ## Independence notice
 
