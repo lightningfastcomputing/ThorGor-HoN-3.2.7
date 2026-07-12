@@ -1,0 +1,23 @@
+Thanks for checking out this project, here's some brief running instructions:
+
+This project only works if your hosts file has these entries: 
+--------------------------------------------------------
+127.0.0.1 masterserver.euw.heroesofnewerth.com
+127.0.0.1 masterserver.sea.heroesofnewerth.com
+127.0.0.1 masterserver.naeu.heroesofnewerth.com
+127.0.0.1 client.sea.heroesofnewerth.com
+127.0.0.1 client.naeu.heroesofnewerth.com
+127.0.0.1 client.euw.heroesofnewerth.com
+127.0.0.1 client.gs.heroesofnewerth.com
+127.0.0.1 chatserver.heroesofnewerth.com
+127.0.0.1 authserver.heroesofnewerth.com
+127.0.0.1 s2.honpatchserver.com
+127.0.0.1 masterserver.hon.s2games.com
+--------------------------------------------------------
+
+Location of Hosts File
+--------------------------------------------------------
+C:\Windows\System32\drivers\etc\hosts
+--------------------------------------------------------
+
+This just basically makes the external requests from the unpatched 3.2.7 launcher loop back so the local python server may receive and respond to requests. 
