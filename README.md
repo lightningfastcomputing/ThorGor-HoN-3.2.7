@@ -11,16 +11,30 @@ This repository contains independently written Python code for a small local/LAN
 - Windows batch launchers and account-management helper
 - Technical notes describing the tested behavior
 
-## What is not included
+## One-command Windows setup and launch
 
-- No Heroes of Newerth client or server binaries
-- No game assets, maps, textures, audio, or other copyrighted game files
-- No official source code
-- No credentials, account database, packet captures, or runtime logs
+Paste the following command into PowerShell from any folder:
 
-## Status and limitations
+```powershell
+$dir="$HOME\ThorGor-HoN-3.2.7"; if(Test-Path "$dir\.git"){git -C $dir pull}else{git clone https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git $dir}; Start-Process -FilePath "cmd.exe" -ArgumentList "/c","`"$dir\manage_accounts_v24.bat`"" -WorkingDirectory $dir -Wait; Start-Process -FilePath "cmd.exe" -ArgumentList "/k","`"$dir\start_masterserver_v24.bat`"" -WorkingDirectory $dir; Start-Process -FilePath "cmd.exe" -ArgumentList "/k","`"$dir\chat-server\START_CHAT_SERVER_V8.bat`"" -WorkingDirectory "$dir\chat-server"
+```
 
-This is experimental research code, not a production server. It is incomplete, insecure for internet-facing deployment, and intended only for controlled local/LAN testing. Expect bugs and missing features.
+This command:
+
+- clones the repository into `%USERPROFILE%\ThorGor-HoN-3.2.7`
+- pulls the latest version when the repository already exists
+- opens the account manager first
+- waits until the account-manager window is closed
+- starts the master server in a separate command window
+- starts the chat server in another command window
+
+### Requirements
+
+- Windows
+- Git installed and available from PowerShell
+- Python installed and available on `PATH`
+
+The account manager must be closed before the master and chat servers are launched.
 
 ## Basic use
 
@@ -37,4 +51,3 @@ https://www.moddb.com/games/heroes-of-newerth/downloads/hon-client-327
 ## Independence notice
 
 Independent educational research and game-preservation documentation. Not affiliated with, endorsed by, or sponsored by the original developers, publishers, Project KONGOR, or HoN Reborn. Heroes of Newerth and related names and assets belong to their respective rights holders.
-
