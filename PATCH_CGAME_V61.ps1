@@ -2,13 +2,7 @@ param([string]$HonHome = "")
 $ErrorActionPreference = 'Stop'
 
 if (-not $HonHome) {
-    if (Test-Path -LiteralPath 'C:\intelprop\Heroes of Newerth\hon.exe') {
-        $HonHome = 'C:\intelprop\Heroes of Newerth'
-    } elseif (Test-Path -LiteralPath 'C:\Program Files (x86)\Heroes of Newerth\hon.exe') {
-        $HonHome = 'C:\Program Files (x86)\Heroes of Newerth'
-    } else {
-        throw 'HoN installation not found. Pass -HonHome explicitly.'
-    }
+    $HonHome = 'C:\Program Files (x86)\Heroes of Newerth'
 }
 
 $target = Join-Path $HonHome 'game\cgame.dll'

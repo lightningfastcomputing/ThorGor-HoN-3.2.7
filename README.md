@@ -14,8 +14,8 @@ The patch installers verify exact SHA-256 hashes, generate the interoperability 
 
 - Windows
 - Git on `PATH`
-- Python 3 on `PATH`
-- A user-supplied HoN 3.2.7.1 installation
+- Python 3.10 or newer on `PATH` (Python 3.14 is the tested version)
+- A user-supplied HoN 3.2.7.1 installation at `C:\Program Files (x86)\Heroes of Newerth`
 - Administrator approval for hosts-file, firewall, and Program Files changes
 
 ## One-command acquire, install, and run

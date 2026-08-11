@@ -22,6 +22,8 @@ from pathlib import Path
 from tkinter import ttk, messagebox
 
 ROOT = Path(__file__).resolve().parent
+HON_HOME = Path(r"C:\Program Files (x86)\Heroes of Newerth")
+HON_EXE = HON_HOME / "hon.exe"
 LOG_DIR = ROOT / "dashboard_logs"
 LOG_DIR.mkdir(exist_ok=True)
 
@@ -231,6 +233,8 @@ def create_debug_bundle(status_snapshot: dict | None = None) -> Path:
         "created": datetime.now().isoformat(timespec="seconds"),
         "lan_ip": LAN_IP,
         "python": sys.executable,
+        "hon_home": str(HON_HOME),
+        "hon_exe_exists": HON_EXE.is_file(),
         "dashboard_pid": os.getpid(),
         "status": status_snapshot or {},
         "start_errors": START_ERRORS,
@@ -454,7 +458,8 @@ class Dashboard(tk.Tk):
         launch("manager", [
             "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
             "-File", str(ROOT / "start_manager_v39.ps1"),
-        ])
+            "-HonHome", str(HON_HOME),
+        ], HON_HOME)
         self.after(15000, self._start_native)
 
     def _start_native(self) -> None:

@@ -1,7 +1,7 @@
+param([string]$HonHome = 'C:\Program Files (x86)\Heroes of Newerth')
 $ErrorActionPreference='Stop'
-$honHome='C:\intelprop\Heroes of Newerth'
 $hon=Join-Path $honHome 'hon.exe'
-if(!(Test-Path $hon)){throw "hon.exe not found: $hon"}
+if(!(Test-Path -LiteralPath $hon -PathType Leaf)){throw "hon.exe not found: $hon"}
 $settings=@(
  'Set man_masterLogin thorgorhost:',
  'Set man_masterPassword test123',
@@ -27,4 +27,5 @@ $settings=@(
  'Set upd_checkForUpdates false'
 )-join ';'
 Write-Host 'v39: original manager TCP 1136; readiness/status bridge TCP 1135; real slave UDP 11235; public picker shim UDP 11236.' -ForegroundColor Green
+Set-Location -LiteralPath $HonHome
 & $hon -manager -noconfig -execute $settings -masterserver 127.0.0.1
