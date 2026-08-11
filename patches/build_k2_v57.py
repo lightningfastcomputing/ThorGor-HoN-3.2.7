@@ -12,8 +12,20 @@ import sys
 from pathlib import Path
 
 
-SOURCE_SHA256 = "8929AE8993AF41AE9F63BEE43DAB27402205621CFFC57F8ACC8DB0C4FB95FAE9"
+CLEAN_SOURCE_SHA256 = "04AA0DBCC88A86AD8D7C5429A24CE79A62DBB8C40B552AC629D0D76079254095"
+SANDBOXED_SOURCE_SHA256 = "8929AE8993AF41AE9F63BEE43DAB27402205621CFFC57F8ACC8DB0C4FB95FAE9"
+SOURCE_SHA256S = frozenset((CLEAN_SOURCE_SHA256, SANDBOXED_SOURCE_SHA256))
 OUTPUT_SHA256 = "6F5FC1F7BF4E01CDEB0360A6F703299F5422F2C06A104FADCB24FD96A546B8DF"
+
+# The genuine clean DLL uses the retired public auto-patcher hostname. The
+# earlier private fixture had already changed this fixed-width UTF-16LE field
+# to localhost. Normalize either verified input before applying v57 so both
+# produce one reproducible, sandboxed output.
+AUTOPATCHER_OFFSET = 0x7602B0
+AUTOPATCHER_FIELD_SIZE = 108
+LOCAL_AUTOPATCHER = ("127.0.0.1/patcher/auto_patcher.php\0").encode("utf-16le").ljust(
+    AUTOPATCHER_FIELD_SIZE, b"\0"
+)
 
 # Offset and replacement bytes. These reproduce the independently developed
 # v39-v57 interoperability changes without embedding or distributing k2.dll.
@@ -53,8 +65,15 @@ def sha256(data: bytes) -> str:
 def build(source: Path, target: Path) -> str:
     data = bytearray(source.read_bytes())
     digest = sha256(data)
-    if digest != SOURCE_SHA256:
+    if digest not in SOURCE_SHA256S:
         raise ValueError(f"unexpected source hash {digest}")
+    if digest == CLEAN_SOURCE_SHA256:
+        data[AUTOPATCHER_OFFSET : AUTOPATCHER_OFFSET + AUTOPATCHER_FIELD_SIZE] = (
+            LOCAL_AUTOPATCHER
+        )
+        normalized = sha256(data)
+        if normalized != SANDBOXED_SOURCE_SHA256:
+            raise ValueError(f"unexpected normalized source hash {normalized}")
     for offset, replacement_hex in PATCHES:
         replacement = bytes.fromhex(replacement_hex)
         data[offset : offset + len(replacement)] = replacement
