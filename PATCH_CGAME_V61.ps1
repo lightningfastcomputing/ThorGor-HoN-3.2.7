@@ -27,10 +27,20 @@ if ($currentHash -eq $v61Hash) {
     Write-Host 'cgame v61 is already installed.' -ForegroundColor DarkGray
     exit 0
 }
-if ($currentHash -ne $stockHash) {
-    throw "Expected an unmodified HoN 3.2.7.1 cgame.dll. Got $currentHash"
+
+$verifiedBackup = (Test-Path -LiteralPath $backup -PathType Leaf) -and ((Hash $backup) -eq $stockHash)
+if ($currentHash -eq $stockHash) {
+    if (Test-Path -LiteralPath $backup -PathType Leaf) {
+        if (-not $verifiedBackup) { throw "The existing cgame backup is not stock HoN 3.2.7.1: $backup" }
+    } else {
+        Copy-Item -LiteralPath $target -Destination $backup
+        $verifiedBackup = $true
+    }
+} elseif ($verifiedBackup) {
+    Write-Host "Current cgame.dll is unrecognized ($currentHash); recovering from the verified stock backup." -ForegroundColor Yellow
+} else {
+    throw "Unsupported cgame.dll ($currentHash). Restore stock HoN 3.2.7.1 cgame.dll (SHA-256 $stockHash), or restore a verified copy at $backup."
 }
-if (!(Test-Path -LiteralPath $backup)) { Copy-Item -LiteralPath $target -Destination $backup }
 if ((Hash $backup) -ne $stockHash) { throw 'Verified stock cgame backup is unavailable.' }
 
 try {

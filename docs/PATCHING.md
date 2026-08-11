@@ -12,7 +12,7 @@ The repository intentionally distributes patch logic, hashes, and documentationâ
 - K2 v57: `6F5FC1F7BF4E01CDEB0360A6F703299F5422F2C06A104FADCB24FD96A546B8DF`
 - cgame v61: `88C4ACA3C31AF8948E1C2A33EEA2F6EE83888FA46A1DE8BE678DF32A958DF988`
 
-`INSTALL_V61_PATCHES.ps1` preserves verified stock backups and installs only an output matching these hashes. Unknown versions are rejected.
+`INSTALL_V61_PATCHES.ps1` preserves verified stock backups and installs only an output matching these hashes. If an earlier test changed a target DLL but its verified stock backup remains, the installer safely regenerates the current patch from that backup. Unknown versions without a verified stock backup are rejected.
 
 The builders can also be invoked directly:
 
