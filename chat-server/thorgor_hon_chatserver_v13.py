@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ThorGor HoN LAN Chat Server v8
+ThorGor HoN LAN Chat Server v11
 Corrected for HoN 3.2.7.1 / chat protocol 47.
 
 Wire framing observed from the real client:
@@ -26,6 +26,7 @@ import argparse
 import hashlib
 import json
 import os
+import sys
 import sqlite3
 import socket
 import socketserver
@@ -37,7 +38,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-APP_NAME = "ThorGor HoN LAN Chat Server v8"
+APP_NAME = "ThorGor HoN LAN Chat Server v13 - 3.2.7 Registration Probe"
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 11031
 DEFAULT_NICK = "Guest"
@@ -45,6 +46,13 @@ ACCOUNT_DB_PATH: Path | None = None
 
 # 16-bit special commands
 HON_CS_AUTH_INFO = 0x0C00
+# ProjectKONGOR / data-mined game-server and manager control commands.
+NET_CHAT_GS_CONNECT = 0x0500
+NET_CHAT_GS_STATUS = 0x0502
+NET_CHAT_GS_ACCEPT = 0x1500
+NET_CHAT_SM_CONNECT = 0x1600
+NET_CHAT_SM_STATUS = 0x1602
+NET_CHAT_SM_ACCEPT = 0x1700
 HON_SC_AUTH_ACCEPTED = 0x1C00
 HON_SC_PING = 0x2A00
 HON_CS_PONG = 0x2A01
@@ -62,10 +70,33 @@ HON_CS_JOIN_CHANNEL = 0x1E
 HON_CS_LEAVE_CHANNEL = 0x22
 
 BASE_DIR = Path(__file__).resolve().parent
-LOG_PATH = BASE_DIR / "thorgor_chat_v8.log"
-CAPTURE_DIR = BASE_DIR / "thorgor_chat_v8_captures"
+LOG_PATH = BASE_DIR / "thorgor_chat_v13.log"
+CAPTURE_DIR = BASE_DIR / "thorgor_chat_v13_captures"
 CAPTURE_DIR.mkdir(exist_ok=True)
+HOST_CAPTURE_DIR = BASE_DIR / "thorgor_chat_v13_host_captures"
+HOST_CAPTURE_DIR.mkdir(exist_ok=True)
+HOST_LOG_PATH = BASE_DIR / "thorgor_chat_v13_host.log"
 LOG_LOCK = threading.Lock()
+V31_STATE_PATH = BASE_DIR.parent / "work" / "v31_registration_state.json"
+V31_STATE_LOCK = threading.RLock()
+
+def v31_read_state():
+    with V31_STATE_LOCK:
+        try:
+            return json.loads(V31_STATE_PATH.read_text(encoding="utf-8-sig"))
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return {}
+
+def v31_update_state(**updates):
+    with V31_STATE_LOCK:
+        state = v31_read_state()
+        state.update(updates)
+        state["chat_updated_at"] = datetime.now().isoformat(timespec="seconds")
+        V31_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = V31_STATE_PATH.with_suffix(".chat.tmp")
+        tmp.write_text(json.dumps(state, indent=2, sort_keys=True)+"\n", encoding="utf-8")
+        tmp.replace(V31_STATE_PATH)
+        return state
 
 
 def stamp() -> str:
@@ -80,6 +111,22 @@ def log(msg: str) -> None:
             f.write(line + "\n")
 
 
+def host_log(msg: str) -> None:
+    line = f"{stamp()} | HOST_CONTROL | {msg}"
+    with LOG_LOCK:
+        print(line, flush=True)
+        with LOG_PATH.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+        with HOST_LOG_PATH.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+
+
+def is_host_username(username: str) -> bool:
+    """Identify manager-created slave identities such as thorgorhost:1."""
+    base, sep, suffix = username.rpartition(":")
+    return bool(sep and base and suffix.isdigit())
+
+
 def cstr(text: str) -> bytes:
     return text.encode("utf-8", errors="replace") + b"\x00"
 
@@ -91,7 +138,7 @@ def read_cstr(data: bytes, offset: int) -> tuple[str, int]:
     return data[offset:end].decode("utf-8", errors="replace"), end + 1
 
 
-def save_capture(peer: str, direction: str, data: bytes, **extra) -> None:
+def save_capture(peer: str, direction: str, data: bytes, *, directory: Path | None = None, **extra) -> None:
     now = datetime.now()
     record = {
         "timestamp": now.isoformat(timespec="milliseconds"),
@@ -103,7 +150,9 @@ def save_capture(peer: str, direction: str, data: bytes, **extra) -> None:
         **extra,
     }
     name = now.strftime("%Y%m%d_%H%M%S_%f") + f"_{direction}.json"
-    (CAPTURE_DIR / name).write_text(json.dumps(record, indent=2), encoding="utf-8")
+    target_dir = directory or CAPTURE_DIR
+    target_dir.mkdir(exist_ok=True)
+    (target_dir / name).write_text(json.dumps(record, indent=2), encoding="utf-8")
 
 
 def encode_packet(command: int, payload: bytes = b"") -> bytes:
@@ -279,9 +328,11 @@ def expected_auth_hash(account: AccountRecord) -> str:
 class ClientState:
     handler: "ChatConnection"
     account_id: int = 0
+    username: str = ""
     nickname: str = DEFAULT_NICK
     channel: Optional[str] = None
     chat_id: int = 0
+    is_host: bool = False
 
 
 class ChatWorld:
@@ -340,12 +391,19 @@ class ChatConnection(socketserver.BaseRequestHandler):
         self.stop = threading.Event()
         self.state = ClientState(self)
         self.authed = False
+        self.control_role = None
         self.request.settimeout(1.0)
         log(f"CONNECT | {self.peer}")
 
     def finish(self):
         self.stop.set()
+        if self.control_role == "game_server":
+            v31_update_state(chat_server_connected=False, idle_confirmed=False, lifecycle="chat_disconnected")
+        elif self.control_role == "manager":
+            v31_update_state(manager_chat_connected=False)
         WORLD.unregister(self.state)
+        if self.state.is_host:
+            host_log(f"DISCONNECT account={self.state.username!r} peer={self.peer}")
         log(f"DISCONNECT | {self.peer}")
 
     def send_packet(self, command: int, payload: bytes = b""):
@@ -355,6 +413,20 @@ class ChatConnection(socketserver.BaseRequestHandler):
         save_capture(self.peer, "server_to_client", frame,
                      command=f"0x{command:04X}", payload_length=len(payload))
         log(f"TX | {self.peer} | cmd=0x{command:04X} payload={len(payload)} total={len(frame)}")
+        if self.state.is_host:
+            save_capture(
+                self.peer,
+                "host_server_to_peer",
+                frame,
+                directory=HOST_CAPTURE_DIR,
+                account=self.state.username,
+                command=f"0x{command:04X}",
+                payload_length=len(payload),
+            )
+            host_log(
+                f"TX_RAW account={self.state.username!r} peer={self.peer} cmd=0x{command:04X} "
+                f"payload={len(payload)} total={len(frame)} frame_hex={frame.hex()}"
+            )
 
     def heartbeat(self):
         if self.stop.wait(5):
@@ -367,7 +439,7 @@ class ChatConnection(socketserver.BaseRequestHandler):
             if self.stop.wait(15):
                 return
 
-    def auth(self, payload: bytes):
+    def auth(self, payload: bytes, raw: bytes):
         try:
             info = parse_auth(payload)
         except Exception as exc:
@@ -394,9 +466,27 @@ class ChatConnection(socketserver.BaseRequestHandler):
             return
 
         self.state.account_id = account.account_id
+        self.state.username = account.username
         self.state.nickname = account.nickname
+        self.state.is_host = is_host_username(account.username)
         self.authed = True
         WORLD.register(self.state)
+
+        if self.state.is_host:
+            save_capture(
+                self.peer,
+                "host_peer_to_server",
+                raw,
+                directory=HOST_CAPTURE_DIR,
+                account=self.state.username,
+                command=f"0x{HON_CS_AUTH_INFO:04X}",
+                payload_length=len(payload),
+                parsed_auth=info,
+            )
+            host_log(
+                f"IDENTIFIED account={self.state.username!r} peer={self.peer} protocol={info['protocol']} "
+                f"AUTH_RAW frame_hex={raw.hex()}"
+            )
 
         # Empty payload is the documented AUTH_ACCEPTED form.
         # Correct bytes are: 02 00 00 1c
@@ -487,13 +577,129 @@ class ChatConnection(socketserver.BaseRequestHandler):
             except OSError:
                 pass
 
+    def game_server_connect(self, payload: bytes):
+        try:
+            off=0
+            server_id=struct.unpack_from("<I",payload,off)[0]; off+=4
+            session,off=read_cstr(payload,off)
+            protocol=struct.unpack_from("<I",payload,off)[0]
+        except Exception as exc:
+            log(f"GS CONNECT PARSE ERROR | {self.peer} | {exc} | {payload.hex()}")
+            return
+        state=v31_read_state()
+        if int(state.get("server_id",-1)) != server_id or state.get("server_session") != session:
+            log(f"GS CONNECT REJECT | {self.peer} server_id={server_id} protocol={protocol}")
+            return
+        self.authed=True; self.control_role="game_server"
+        v31_update_state(chat_server_connected=True, chat_server_protocol=protocol)
+        self.send_packet(NET_CHAT_GS_ACCEPT)
+        log(f"GS CONNECT ACCEPT | {self.peer} server_id={server_id} protocol={protocol}")
+
+    def manager_connect(self, payload: bytes):
+        try:
+            off=0
+            manager_id=struct.unpack_from("<I",payload,off)[0]; off+=4
+            session,off=read_cstr(payload,off)
+            protocol=struct.unpack_from("<I",payload,off)[0]
+        except Exception as exc:
+            log(f"SM CONNECT PARSE ERROR | {self.peer} | {exc} | {payload.hex()}")
+            return
+        state=v31_read_state()
+        if int(state.get("manager_id",-1)) != manager_id or state.get("manager_session") != session:
+            log(f"SM CONNECT REJECT | {self.peer} manager_id={manager_id} protocol={protocol}")
+            return
+        self.authed=True; self.control_role="manager"
+        v31_update_state(manager_chat_connected=True, manager_chat_protocol=protocol)
+        self.send_packet(NET_CHAT_SM_ACCEPT)
+        log(f"SM CONNECT ACCEPT | {self.peer} manager_id={manager_id} protocol={protocol}")
+
+    def game_server_status(self, payload: bytes):
+        """Decode both the older and later HoN GS STATUS layouts.
+
+        Common prefix:
+          u32 server_id, cstr address, i16 port, cstr location, cstr name
+
+        Older builds then place status immediately. Later builds (the layout
+        Project KONGOR data-mined) insert u32 slave_id + u32 match_id first.
+        v13 accepts either and logs the raw tail so 3.2.7 tells us which it uses.
+        """
+        try:
+            off = 0
+            server_id = struct.unpack_from("<I", payload, off)[0]; off += 4
+            address, off = read_cstr(payload, off)
+            port = struct.unpack_from("<H", payload, off)[0]; off += 2
+            location, off = read_cstr(payload, off)
+            name, off = read_cstr(payload, off)
+            tail = payload[off:]
+            if not tail:
+                raise ValueError("empty status tail")
+
+            old_status = tail[0] if tail[0] <= 6 else None
+            slave_id = None
+            match_id = None
+            new_status = None
+            if len(tail) >= 9:
+                cand_slave = struct.unpack_from("<I", tail, 0)[0]
+                cand_match = struct.unpack_from("<I", tail, 4)[0]
+                cand_status = tail[8]
+                if cand_status <= 6 and cand_slave < 4096:
+                    slave_id, match_id, new_status = cand_slave, cand_match, cand_status
+
+            if new_status is not None:
+                layout = "kongor/slave+match"
+                status = new_status
+            elif old_status is not None:
+                layout = "legacy/direct-status"
+                status = old_status
+            else:
+                raise ValueError(f"no plausible status byte in tail {tail[:24].hex()}")
+        except Exception as exc:
+            log(f"GS STATUS PARSE ERROR | {self.peer} | {exc} | {payload[:160].hex()}")
+            v31_update_state(last_status_parse_error=str(exc), last_status_payload_hex=payload.hex())
+            return
+
+        names = {0:"sleeping", 1:"idle", 2:"loading", 3:"active", 4:"crashed", 5:"killed", 6:"unknown"}
+        status_name = names.get(status, f"status_{status}")
+        v31_update_state(
+            server_id=server_id, server_ip=address, server_port=port, server_location=location,
+            server_name=name, slave_id=slave_id, match_id=match_id, server_status=status,
+            lifecycle=status_name, idle_confirmed=(status==1), sleeping_confirmed=(status==0),
+            available_confirmed=(status in (0,1)), chat_server_connected=True,
+            status_layout=layout, last_status_payload_hex=payload.hex()
+        )
+        log(f"GS STATUS | {self.peer} id={server_id} slave={slave_id} {address}:{port} "
+            f"status={status_name} match={match_id} layout={layout} tail={tail[:32].hex()}")
+
     def process(self, command: int, payload: bytes, raw: bytes):
         save_capture(self.peer, "client_to_server", raw,
                      command=f"0x{command:04X}", payload_length=len(payload))
         log(f"RX | {self.peer} | cmd=0x{command:04X} payload={len(payload)}")
 
-        if command == HON_CS_AUTH_INFO:
-            self.auth(payload)
+        if command != HON_CS_AUTH_INFO and self.state.is_host:
+            save_capture(
+                self.peer,
+                "host_peer_to_server",
+                raw,
+                directory=HOST_CAPTURE_DIR,
+                account=self.state.username,
+                command=f"0x{command:04X}",
+                payload_length=len(payload),
+            )
+            host_log(
+                f"RX_RAW account={self.state.username!r} peer={self.peer} cmd=0x{command:04X} "
+                f"payload={len(payload)} total={len(raw)} frame_hex={raw.hex()} payload_hex={payload.hex()}"
+            )
+
+        if command == NET_CHAT_GS_CONNECT:
+            self.game_server_connect(payload)
+        elif command == NET_CHAT_SM_CONNECT:
+            self.manager_connect(payload)
+        elif command == NET_CHAT_GS_STATUS and self.control_role == "game_server":
+            self.game_server_status(payload)
+        elif command == NET_CHAT_SM_STATUS and self.control_role == "manager":
+            log(f"SM STATUS | {self.peer} payload={payload.hex()}")
+        elif command == HON_CS_AUTH_INFO:
+            self.auth(payload, raw)
         elif command == HON_CS_PONG:
             log(f"PONG | {self.peer}")
         elif command == 0x00B9:
@@ -504,6 +710,11 @@ class ChatConnection(socketserver.BaseRequestHandler):
             #
             # status 0 = normal online
             status_payload = b"\x00\x00"
+            if self.state.is_host:
+                host_log(
+                    f"COMPAT account={self.state.username!r} cmd=0x00B9 currently handled with client-style "
+                    "0x0066 online response; preserved from v8 for observation"
+                )
             self.send_packet(HON_SC_STATUS_UPDATE, status_payload)
             log(f"STATUS ONLINE | {self.peer} | sent cmd=0x0066 status=0")
         elif not self.authed:
@@ -515,6 +726,11 @@ class ChatConnection(socketserver.BaseRequestHandler):
         elif command == HON_CS_LEAVE_CHANNEL:
             log(f"LEAVE CHANNEL | {self.peer}")
         else:
+            if self.state.is_host:
+                host_log(
+                    f"UNKNOWN account={self.state.username!r} peer={self.peer} cmd=0x{command:04X} "
+                    f"payload_hex={payload.hex()}"
+                )
             log(f"UNKNOWN | {self.peer} | cmd=0x{command:04X} hex={payload.hex()}")
 
     def handle(self):
@@ -532,6 +748,19 @@ class ChatConnection(socketserver.BaseRequestHandler):
             self.buffer += chunk
             save_capture(self.peer, "tcp_chunk", chunk, buffered_after_chunk=len(self.buffer))
             log(f"TCP RX | {self.peer} | chunk={len(chunk)} buffer={len(self.buffer)}")
+            if self.state.is_host:
+                save_capture(
+                    self.peer,
+                    "host_tcp_chunk",
+                    chunk,
+                    directory=HOST_CAPTURE_DIR,
+                    account=self.state.username,
+                    buffered_after_chunk=len(self.buffer),
+                )
+                host_log(
+                    f"TCP_CHUNK account={self.state.username!r} peer={self.peer} bytes={len(chunk)} "
+                    f"buffer={len(self.buffer)} chunk_hex={chunk.hex()}"
+                )
 
             while True:
                 try:
@@ -580,6 +809,8 @@ def main():
     print("Observed client: HoN 3.2.7.1, protocol 47")
     print("Expected auth accepted bytes: 02 00 00 1c")
     print(f"Log: {LOG_PATH}")
+    print(f"Host/slave raw log: {HOST_LOG_PATH}")
+    print(f"Host/slave raw captures: {HOST_CAPTURE_DIR}")
     print("=" * 88)
 
     try:
@@ -593,4 +824,5 @@ def main():
 
 
 if __name__ == "__main__":
+    log(f"PROCESS_START | pid={os.getpid()} argv={sys.argv!r}")
     raise SystemExit(main())
