@@ -12,6 +12,11 @@ if not exist "%HON_HOME%\hon.exe" (
   goto :failed
 )
 
+set "PYTHON_EXE="
+for /f "usebackq delims=" %%P in (`powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0FIND_PYTHON.ps1" 2^>nul`) do set "PYTHON_EXE=%%P"
+if not defined PYTHON_EXE goto :python_missing
+set "THORGOR_PYTHON_EXE=%PYTHON_EXE%"
+
 echo ============================================================
 echo ThorGor HoN 3.2.7.1 - V61 COMPLETE REGISTRY GUARD
 echo ============================================================
@@ -20,6 +25,7 @@ echo Server networking retains the v57 two-client admission fix.
 echo Both clients receive primary and fallback registry guards.
 echo Manager/slave control and real UDP target remain localhost.
 echo HoN executables: %HON_HOME%
+echo Python runtime: %PYTHON_EXE%
 echo.
 
 set "LAN_IP=%~1"
@@ -43,22 +49,27 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0RESET_V43.ps1"
 if errorlevel 1 goto :failed
 
 rem Preserve the proven milestone's local test accounts and launch behavior.
-python "%~dp0thorgor_hon_sandboxed_masterserver_v39.py" --password-chain pre-md5 --add-account pwnrbwnr pwnrbwnr --nickname pwnrbwnr
+"%PYTHON_EXE%" "%~dp0thorgor_hon_sandboxed_masterserver_v39.py" --password-chain pre-md5 --add-account pwnrbwnr pwnrbwnr --nickname pwnrbwnr
 if errorlevel 1 goto :failed
-python "%~dp0thorgor_hon_sandboxed_masterserver_v39.py" --password-chain pre-md5 --add-account player player --nickname player
+"%PYTHON_EXE%" "%~dp0thorgor_hon_sandboxed_masterserver_v39.py" --password-chain pre-md5 --add-account player player --nickname player
 if errorlevel 1 goto :failed
-
-set "PYTHONW=pythonw.exe"
-where pythonw.exe >nul 2>nul
-if errorlevel 1 set "PYTHONW=python.exe"
 
 if defined LAN_IP (
-  start "ThorGor HoN v61 Complete Registry Guard" /D "%~dp0" "%PYTHONW%" "%~dp0hon_v49_dashboard.py" "%LAN_IP%"
+  start "ThorGor HoN v61 Complete Registry Guard" /D "%~dp0" "%PYTHON_EXE%" "%~dp0hon_v49_dashboard.py" "%LAN_IP%"
 ) else (
-  start "ThorGor HoN v61 Complete Registry Guard" /D "%~dp0" "%PYTHONW%" "%~dp0hon_v49_dashboard.py"
+  start "ThorGor HoN v61 Complete Registry Guard" /D "%~dp0" "%PYTHON_EXE%" "%~dp0hon_v49_dashboard.py"
 )
 if errorlevel 1 goto :failed
 exit /b 0
+
+:python_missing
+echo.
+echo Python 3.10 or newer was not found. The Microsoft Store alias is not Python.
+echo Install the tested release from PowerShell with:
+echo   winget install --exact --id Python.Python.3.14
+echo Close and reopen PowerShell after installation, then rerun ThorGor.
+pause
+exit /b 4
 
 :failed
 echo.

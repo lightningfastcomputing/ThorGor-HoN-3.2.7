@@ -40,7 +40,8 @@ if ($stockHashes -contains $currentHash) {
 if ($stockHashes -notcontains (Hash $backup)) { throw 'Verified stock K2 backup is unavailable.' }
 
 try {
-    & python $builder $backup $candidate
+    $pythonExe = if ($env:THORGOR_PYTHON_EXE) { $env:THORGOR_PYTHON_EXE } else { & (Join-Path $PSScriptRoot 'FIND_PYTHON.ps1') }
+    & $pythonExe $builder $backup $candidate
     if ($LASTEXITCODE -ne 0) { throw 'K2 patch builder failed.' }
     if ((Hash $candidate) -ne $v57Hash) { throw 'Generated K2 hash verification failed.' }
     Move-Item -LiteralPath $candidate -Destination $target -Force

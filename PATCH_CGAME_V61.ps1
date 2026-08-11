@@ -38,7 +38,8 @@ if ($currentHash -eq $stockHash) {
 if ((Hash $backup) -ne $stockHash) { throw 'Verified stock cgame backup is unavailable.' }
 
 try {
-    & python $builder $backup $candidate
+    $pythonExe = if ($env:THORGOR_PYTHON_EXE) { $env:THORGOR_PYTHON_EXE } else { & (Join-Path $PSScriptRoot 'FIND_PYTHON.ps1') }
+    & $pythonExe $builder $backup $candidate
     if ($LASTEXITCODE -ne 0) { throw 'cgame patch builder failed.' }
     if ((Hash $candidate) -ne $v61Hash) { throw 'Generated cgame hash verification failed.' }
     Move-Item -LiteralPath $candidate -Destination $target -Force
