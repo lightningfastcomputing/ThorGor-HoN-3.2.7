@@ -34,6 +34,14 @@ class LaunchPathTests(unittest.TestCase):
             text = self.read(relative)
             self.assertIn(CANONICAL_HON_HOME, text, relative)
 
+    def test_runtime_uses_validated_python_and_host_safe_player_guard(self):
+        server = self.read("1_START_V61_COMPLETE_REGISTRY_GUARD.bat")
+        remote = self.read("remote-client/START_REMOTE_PLAYER.bat")
+        dashboard = self.read("hon_v49_dashboard.py")
+        self.assertIn("FIND_PYTHON.ps1", server)
+        self.assertIn("CHECK_HON_PLAYER_NOT_RUNNING.ps1", remote)
+        self.assertIn("PYTHON = sys.executable", dashboard)
+
 
 if __name__ == "__main__":
     unittest.main()

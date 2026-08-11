@@ -11,11 +11,11 @@ if not exist "%HON_HOME%\hon.exe" (
   exit /b 2
 )
 
-tasklist /FI "IMAGENAME eq hon.exe" /NH 2>nul | find /I "hon.exe" >nul
-if not errorlevel 1 (
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\CHECK_HON_PLAYER_NOT_RUNNING.ps1"
+if errorlevel 1 (
   echo.
-  echo [STOP] hon.exe is already running on this PC.
-  echo Close it completely in Task Manager, then run this launcher again.
+  echo Close only the HoN player client, then run this launcher again.
+  echo The ThorGor manager and dedicated slave may remain running.
   echo v61 cannot protect a cgame.dll that an older process already loaded.
   pause
   exit /b 7

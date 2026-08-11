@@ -67,7 +67,7 @@ def _autodetect_lan_ipv4() -> str:
 _arg_ip = _valid_ipv4(sys.argv[1]) if len(sys.argv) > 1 else None
 LAN_IP = _arg_ip or _autodetect_lan_ipv4()
 LAN_IP_SOURCE = "argument" if _arg_ip else ("auto-detected" if LAN_IP != "127.0.0.1" else "loopback fallback")
-PYTHON = "python"  # Match the original BAT launcher exactly; dashboard itself may run under pythonw.
+PYTHON = sys.executable
 
 # Keep handles alive for the life of the dashboard. Closing the dashboard does
 # not explicitly terminate services, matching the old independent-window model.
@@ -423,14 +423,8 @@ class Dashboard(tk.Tk):
         self.after(2000, self._start_chat)
 
     def _start_chat(self) -> None:
-        # Preserve the known-good v49 chat launch path exactly: the milestone
-        # build starts chat as `cmd /k python thorgor_hon_chatserver_v13.py ...`
-        # from the chat-server directory.  Use cmd.exe here too, but /c because
-        # the dashboard owns the lifetime/status UI and the console is hidden.
-        # The Python chat server code itself is unchanged from the milestone.
         launch("chat", [
-            "cmd.exe", "/d", "/c",
-            "python", "thorgor_hon_chatserver_v13.py",
+            PYTHON, "thorgor_hon_chatserver_v13.py",
             "--host", "0.0.0.0", "--port", "11031",
             "--db", str(ROOT / "thorgor_accounts.db"),
         ], ROOT / "chat-server")
