@@ -27,10 +27,20 @@ if ($currentHash -eq $v57Hash) {
     Write-Host 'K2 v57 is already installed.' -ForegroundColor DarkGray
     exit 0
 }
-if ($currentHash -ne $stockHash) {
-    throw "Expected an unmodified HoN 3.2.7.1 k2.dll. Got $currentHash"
+
+$verifiedBackup = (Test-Path -LiteralPath $backup -PathType Leaf) -and ((Hash $backup) -eq $stockHash)
+if ($currentHash -eq $stockHash) {
+    if (Test-Path -LiteralPath $backup -PathType Leaf) {
+        if (-not $verifiedBackup) { throw "The existing K2 backup is not stock HoN 3.2.7.1: $backup" }
+    } else {
+        Copy-Item -LiteralPath $target -Destination $backup
+        $verifiedBackup = $true
+    }
+} elseif ($verifiedBackup) {
+    Write-Host "Current k2.dll is unrecognized ($currentHash); recovering from the verified stock backup." -ForegroundColor Yellow
+} else {
+    throw "Unsupported k2.dll ($currentHash). Restore stock HoN 3.2.7.1 k2.dll (SHA-256 $stockHash), or restore a verified copy at $backup."
 }
-if (!(Test-Path -LiteralPath $backup)) { Copy-Item -LiteralPath $target -Destination $backup }
 if ((Hash $backup) -ne $stockHash) { throw 'Verified stock K2 backup is unavailable.' }
 
 try {
