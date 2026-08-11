@@ -28,9 +28,23 @@ class PatchBuilderTests(unittest.TestCase):
             previous_end = offset + len(replacement)
 
     def test_k2_source_and_output_hashes_are_distinct_sha256(self):
-        self.assertRegex(k2.SOURCE_SHA256, r"^[0-9A-F]{64}$")
+        self.assertEqual(
+            k2.SOURCE_SHA256S,
+            {k2.CLEAN_SOURCE_SHA256, k2.SANDBOXED_SOURCE_SHA256},
+        )
+        for source_hash in k2.SOURCE_SHA256S:
+            self.assertRegex(source_hash, r"^[0-9A-F]{64}$")
+            self.assertNotEqual(source_hash, k2.OUTPUT_SHA256)
         self.assertRegex(k2.OUTPUT_SHA256, r"^[0-9A-F]{64}$")
-        self.assertNotEqual(k2.SOURCE_SHA256, k2.OUTPUT_SHA256)
+
+    def test_k2_clean_source_normalization_is_fixed_width_utf16(self):
+        self.assertEqual(len(k2.LOCAL_AUTOPATCHER), k2.AUTOPATCHER_FIELD_SIZE)
+        self.assertTrue(
+            k2.LOCAL_AUTOPATCHER.startswith(
+                "127.0.0.1/patcher/auto_patcher.php\0".encode("utf-16le")
+            )
+        )
+        self.assertGreater(k2.AUTOPATCHER_OFFSET, 0)
 
     def test_cgame_call_patch_shape(self):
         patch = cgame.call_patch(0x1000, 0x2000, 8)
