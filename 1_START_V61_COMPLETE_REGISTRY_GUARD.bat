@@ -4,6 +4,14 @@ cd /d "%~dp0"
 title ThorGor HoN 3.2.7.1 - v61 Complete Registry Guard
 color 0A
 
+set "HON_HOME=C:\Program Files (x86)\Heroes of Newerth"
+if not exist "%HON_HOME%\hon.exe" (
+  echo Required HoN executable was not found:
+  echo   %HON_HOME%\hon.exe
+  echo Install HoN 3.2.7.1 in the canonical Program Files folder, then retry.
+  goto :failed
+)
+
 echo ============================================================
 echo ThorGor HoN 3.2.7.1 - V61 COMPLETE REGISTRY GUARD
 echo ============================================================
@@ -11,6 +19,7 @@ echo.
 echo Server networking retains the v57 two-client admission fix.
 echo Both clients receive primary and fallback registry guards.
 echo Manager/slave control and real UDP target remain localhost.
+echo HoN executables: %HON_HOME%
 echo.
 
 set "LAN_IP=%~1"
@@ -26,9 +35,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0ENSURE_V49_LAN_FIR
 if errorlevel 1 goto :failed
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0CLEANUP_OLD_TESTS.ps1"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0PATCH_K2_V57.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0PATCH_K2_V57.ps1" -HonHome "%HON_HOME%"
 if errorlevel 1 goto :failed
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0PATCH_CGAME_V61.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0PATCH_CGAME_V61.ps1" -HonHome "%HON_HOME%"
 if errorlevel 1 goto :failed
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0RESET_V43.ps1"
 if errorlevel 1 goto :failed
