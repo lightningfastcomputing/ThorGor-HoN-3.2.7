@@ -1,14 +1,14 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 title ThorGor HoN 3.2.7.1 - v61 Complete Registry Guard
 color 0A
 
 set "HON_HOME=C:\Program Files (x86)\Heroes of Newerth"
 set "THORGOR_HON_HOME=%HON_HOME%"
-if not exist "%HON_HOME%\hon.exe" (
+if not exist "!HON_HOME!\hon.exe" (
   echo Required HoN executable was not found:
-  echo   %HON_HOME%\hon.exe
+  echo   !HON_HOME!\hon.exe
   echo Install HoN 3.2.7.1 in the canonical Program Files folder, then retry.
   goto :failed
 )
