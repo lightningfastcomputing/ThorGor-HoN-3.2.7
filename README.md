@@ -49,6 +49,7 @@ The launcher preserves the proven v61 startup order and automatically provisions
 - `ThorGor*.exe` — PyInstaller one-file launchers for running without Python
 - `BUILD_COMPILED.ps1` — reproducible local build recipe for the launchers
 - `patches/` — source-only, hash-gated binary patch generators
+- `REMOTE HOST/` — self-contained copy of the v57/v61 DLL patch installers and builders
 - `tests/` — protocol and patch-manifest regression tests
 
 ## Security and privacy
