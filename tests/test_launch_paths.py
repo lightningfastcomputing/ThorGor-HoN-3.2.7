@@ -49,6 +49,11 @@ class LaunchPathTests(unittest.TestCase):
         self.assertIn("if ($process.HasExited)", launcher)
         self.assertIn("dashboard-startup.stderr.log", launcher)
 
+    def test_readme_one_liner_elevates_batch_directly(self):
+        readme = self.read("README.md")
+        self.assertIn("Start-Process -FilePath $launcher -Verb RunAs", readme)
+        self.assertNotIn("Start-Process cmd.exe -Verb RunAs", readme)
+
 
 if __name__ == "__main__":
     unittest.main()
