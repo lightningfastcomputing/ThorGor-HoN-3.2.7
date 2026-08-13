@@ -34,14 +34,16 @@ class LaunchPathTests(unittest.TestCase):
             text = self.read(relative)
             self.assertIn(CANONICAL_HON_HOME, text, relative)
 
-    def test_runtime_uses_validated_python_and_host_safe_player_guard(self):
+    def test_runtime_uses_compiled_services_and_host_safe_player_guard(self):
         server = self.read("1_START_V61_COMPLETE_REGISTRY_GUARD.bat")
         remote = self.read("remote-client/START_REMOTE_PLAYER.bat")
         dashboard = self.read("hon_v49_dashboard.py")
-        self.assertIn("FIND_PYTHON.ps1", server)
-        self.assertIn("START_DASHBOARD.ps1", server)
+        self.assertIn("ThorGorDashboard.exe", server)
+        self.assertIn("ThorGorMasterServer.exe", server)
+        self.assertNotIn("FIND_PYTHON.ps1", server)
         self.assertIn("CHECK_HON_PLAYER_NOT_RUNNING.ps1", remote)
-        self.assertIn("PYTHON = sys.executable", dashboard)
+        self.assertIn("_service_command", dashboard)
+        self.assertIn("ThorGor*.exe", self.read("README.md"))
 
     def test_dashboard_launcher_checks_early_process_exit(self):
         launcher = self.read("START_DASHBOARD.ps1")

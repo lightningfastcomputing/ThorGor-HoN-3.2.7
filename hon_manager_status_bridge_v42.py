@@ -34,6 +34,7 @@ import re
 import socket
 import socketserver
 import struct
+import sys
 import threading
 import time
 from datetime import datetime
@@ -42,7 +43,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-BASE = Path(__file__).resolve().parent
+BASE = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 WORK = BASE / 'work'
 LOG = WORK / 'manager_status_bridge_v42.log'
 EVENTS = WORK / 'manager_status_bridge_v42_events.jsonl'

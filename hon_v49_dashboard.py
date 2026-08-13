@@ -17,12 +17,16 @@ import zipfile
 import shutil
 import json
 import ipaddress
+import contextlib
+import ctypes
+import threading
 from datetime import datetime
 from pathlib import Path
 from tkinter import ttk, messagebox
 
-ROOT = Path(__file__).resolve().parent
-HON_HOME = Path(r"C:\Program Files (x86)\Heroes of Newerth")
+IS_FROZEN = bool(getattr(sys, "frozen", False))
+ROOT = Path(sys.executable).resolve().parent if IS_FROZEN else Path(__file__).resolve().parent
+HON_HOME = Path(os.environ.get("THORGOR_HON_HOME", r"C:\Program Files (x86)\Heroes of Newerth"))
 HON_EXE = HON_HOME / "hon.exe"
 LOG_DIR = ROOT / "dashboard_logs"
 LOG_DIR.mkdir(exist_ok=True)
@@ -68,6 +72,12 @@ _arg_ip = _valid_ipv4(sys.argv[1]) if len(sys.argv) > 1 else None
 LAN_IP = _arg_ip or _autodetect_lan_ipv4()
 LAN_IP_SOURCE = "argument" if _arg_ip else ("auto-detected" if LAN_IP != "127.0.0.1" else "loopback fallback")
 PYTHON = sys.executable
+SMOKE_TEST = "--smoke-test" in sys.argv
+MASTER_EXE = ROOT / "ThorGorMasterServer.exe"
+CHAT_EXE = ROOT / "ThorGorChatServer.exe"
+UDP_EXE = ROOT / "ThorGorUdpShim.exe"
+MANAGER_BRIDGE_EXE = ROOT / "ThorGorManagerBridge.exe"
+NATIVE_BRIDGE_EXE = ROOT / "ThorGorNativeBridge.exe"
 
 # Keep handles alive for the life of the dashboard. Closing the dashboard does
 # not explicitly terminate services, matching the old independent-window model.
@@ -76,6 +86,37 @@ LOG_HANDLES = []
 START_ERRORS: dict[str, str] = {}
 VALIDATION_OK = False
 VALIDATION_DONE = False
+
+# PyInstaller points the process-wide DLL search directory at its temporary
+# extraction folder. External children inherit that setting, which prevents the
+# stock HoN slave from resolving game\game_shared.dll while loading game.dll.
+_DLL_SEARCH_LOCK = threading.Lock()
+
+
+@contextlib.contextmanager
+def _native_child_dll_search():
+    """Give external child processes normal Windows DLL-search semantics."""
+    if os.name != "nt" or not IS_FROZEN:
+        yield
+        return
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    set_dll_directory = kernel32.SetDllDirectoryW
+    set_dll_directory.argtypes = [ctypes.c_wchar_p]
+    set_dll_directory.restype = ctypes.c_int
+    bundled_dir = getattr(sys, "_MEIPASS", None)
+    with _DLL_SEARCH_LOCK:
+        if not set_dll_directory(None):
+            raise OSError(ctypes.get_last_error(), "Could not reset child DLL search path")
+        try:
+            yield
+        finally:
+            if bundled_dir:
+                set_dll_directory(str(bundled_dir))
+
+
+def _service_command(executable: Path, script: Path) -> list[str]:
+    return [str(executable)] if IS_FROZEN else [PYTHON, str(script)]
 
 def _debug_output_dir() -> Path:
     # Program Files is normally not writable by a non-elevated dashboard.
@@ -106,14 +147,15 @@ def launch(name: str, args: list[str], cwd: Path = ROOT) -> None:
         out = _log_handle(name)
         out.write(f"\n===== dashboard launch {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n")
         out.write("COMMAND: " + subprocess.list2cmdline(args) + "\n\n")
-        PROCS[name] = subprocess.Popen(
-            args,
-            cwd=str(cwd),
-            stdout=out,
-            stderr=subprocess.STDOUT,
-            stdin=subprocess.DEVNULL,
-            creationflags=FLAGS,
-        )
+        with _native_child_dll_search():
+            PROCS[name] = subprocess.Popen(
+                args,
+                cwd=str(cwd),
+                stdout=out,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                creationflags=FLAGS,
+            )
     except Exception as exc:
         START_ERRORS[name] = str(exc)
 
@@ -373,8 +415,11 @@ class Dashboard(tk.Tk):
         self.bundle_status.pack(anchor="w", padx=23, pady=(2, 13))
 
         self.last_statuses = {}
-        self.after(250, self.start_stack)
-        self.after(700, self.refresh_status)
+        if SMOKE_TEST:
+            self.after(100, self.destroy)
+        else:
+            self.after(250, self.start_stack)
+            self.after(700, self.refresh_status)
 
     def set_row(self, key: str, ok: bool, detail: str | None = None) -> None:
         icon, detail_label = self.rows[key]
@@ -413,8 +458,7 @@ class Dashboard(tk.Tk):
 
     def start_stack(self) -> None:
         # Exact v49 LAN command arguments and original startup order.
-        launch("master", [
-            PYTHON, str(ROOT / "thorgor_hon_sandboxed_masterserver_v39.py"),
+        launch("master", _service_command(MASTER_EXE, ROOT / "thorgor_hon_sandboxed_masterserver_v39.py") + [
             "--host", "0.0.0.0", "--port", "80", "--password-chain", "pre-md5",
             "--chat-host", LAN_IP, "--server-list-ip", LAN_IP, "--server-list-port", "11236",
             "--match-server-ip", "127.0.0.1", "--match-server-port", "11235",
@@ -423,16 +467,15 @@ class Dashboard(tk.Tk):
         self.after(2000, self._start_chat)
 
     def _start_chat(self) -> None:
-        launch("chat", [
-            PYTHON, "thorgor_hon_chatserver_v13.py",
+        launch("chat", _service_command(CHAT_EXE, ROOT / "chat-server" / "thorgor_hon_chatserver_v13.py") + [
             "--host", "0.0.0.0", "--port", "11031",
             "--db", str(ROOT / "thorgor_accounts.db"),
         ], ROOT / "chat-server")
         self.after(2000, self._start_udp)
 
     def _start_udp(self) -> None:
-        launch("udp", [
-            PYTHON, str(ROOT / "hon_udp_shim.py"), "--preset", "thorgor-public-list",
+        launch("udp", _service_command(UDP_EXE, ROOT / "hon_udp_shim.py") + [
+            "--preset", "thorgor-public-list",
             "--listen-host", "0.0.0.0", "--listen-port", "11236", "--browser-ip", LAN_IP,
             "--require-c0-auth", "--master-url", "http://127.0.0.1/server_requester.php",
             "--manager-start-timeout", "3", "--max-client-routes", "16",
@@ -441,8 +484,7 @@ class Dashboard(tk.Tk):
         self.after(1000, self._start_backend)
 
     def _start_backend(self) -> None:
-        launch("backend", [
-            PYTHON, str(ROOT / "hon_manager_status_bridge_v42.py"),
+        launch("backend", _service_command(MANAGER_BRIDGE_EXE, ROOT / "hon_manager_status_bridge_v42.py") + [
             "--listen-host", "127.0.0.1", "--listen-port", "1135", "--target-port", "1136",
             "--master-url", "http://127.0.0.1/server_requester.php",
         ])
@@ -457,7 +499,7 @@ class Dashboard(tk.Tk):
         self.after(15000, self._start_native)
 
     def _start_native(self) -> None:
-        launch("native", [PYTHON, str(ROOT / "hon_native_matchid_bridge_v47.py")])
+        launch("native", _service_command(NATIVE_BRIDGE_EXE, ROOT / "hon_native_matchid_bridge_v47.py"))
         self.after(1000, self._start_health_check)
 
     def _start_health_check(self) -> None:

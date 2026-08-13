@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from getpass import getpass
 from pathlib import Path
 
@@ -112,7 +113,7 @@ def main() -> int:
     parser.add_argument(
         "--database",
         type=Path,
-        default=Path(__file__).resolve().with_name("thorgor_accounts.db"),
+        default=(Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent) / "thorgor_accounts.db",
         help="Account database to manage.",
     )
     args = parser.parse_args()

@@ -69,7 +69,8 @@ HON_SC_WHISPER = 0x08
 HON_CS_JOIN_CHANNEL = 0x1E
 HON_CS_LEAVE_CHANNEL = 0x22
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = ((Path(sys.executable).resolve().parent / "chat-server")
+            if getattr(sys, "frozen", False) else Path(__file__).resolve().parent)
 LOG_PATH = BASE_DIR / "thorgor_chat_v13.log"
 CAPTURE_DIR = BASE_DIR / "thorgor_chat_v13_captures"
 CAPTURE_DIR.mkdir(exist_ok=True)
