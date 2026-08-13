@@ -55,9 +55,9 @@ if errorlevel 1 goto :failed
 if errorlevel 1 goto :failed
 
 if defined LAN_IP (
-  start "ThorGor HoN v61 Complete Registry Guard" /D "%~dp0" "%PYTHON_EXE%" "%~dp0hon_v49_dashboard.py" "%LAN_IP%"
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0START_DASHBOARD.ps1" -PythonExe "%PYTHON_EXE%" -LanIp "%LAN_IP%"
 ) else (
-  start "ThorGor HoN v61 Complete Registry Guard" /D "%~dp0" "%PYTHON_EXE%" "%~dp0hon_v49_dashboard.py"
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0START_DASHBOARD.ps1" -PythonExe "%PYTHON_EXE%"
 )
 if errorlevel 1 goto :failed
 exit /b 0

@@ -26,7 +26,7 @@ After the requirements above are installed, paste this single line into PowerShe
 $dir=Join-Path $env:USERPROFILE 'ThorGor-HoN-3.2.7'; if(Test-Path (Join-Path $dir '.git')){if(git -C $dir status --porcelain){throw "Existing ThorGor clone has local changes: $dir"}; git -C $dir fetch origin main; if($LASTEXITCODE -ne 0){throw 'Git fetch failed'}; git -C $dir show-ref --verify --quiet refs/heads/main; if($LASTEXITCODE -eq 0){git -C $dir switch main}else{git -C $dir switch --track -c main origin/main}; if($LASTEXITCODE -ne 0){throw 'Could not switch the existing clone to main'}; git -C $dir pull --ff-only origin main}else{git clone --branch main --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git $dir}; if($LASTEXITCODE -ne 0){throw 'Git acquire/update failed'}; Start-Process cmd.exe -Verb RunAs -WorkingDirectory $dir -ArgumentList '/c',('"' + (Join-Path $dir '1_START_V61_COMPLETE_REGISTRY_GUARD.bat') + '"')
 ```
 
-The repository supplies no HoN binaries. During startup, the installers verify the user-supplied 3.2.7.1 DLL hashes, generate the v57/v61 interoperability patches locally, preserve verified backups, configure the LAN firewall rules, provision the disposable test accounts, and start the dashboard.
+The repository supplies no HoN binaries. During startup, the installers verify the user-supplied 3.2.7.1 DLL hashes, generate the v57/v61 interoperability patches locally, preserve verified backups, configure the LAN firewall rules, provision the disposable test accounts, and start the dashboard. The launcher verifies that the dashboard stays alive through initialization; if it cannot open, the elevated window remains visible with the error and writes `dashboard_logs/dashboard-startup.stderr.log`.
 
 ## First run
 

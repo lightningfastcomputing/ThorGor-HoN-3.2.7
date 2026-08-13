@@ -39,8 +39,15 @@ class LaunchPathTests(unittest.TestCase):
         remote = self.read("remote-client/START_REMOTE_PLAYER.bat")
         dashboard = self.read("hon_v49_dashboard.py")
         self.assertIn("FIND_PYTHON.ps1", server)
+        self.assertIn("START_DASHBOARD.ps1", server)
         self.assertIn("CHECK_HON_PLAYER_NOT_RUNNING.ps1", remote)
         self.assertIn("PYTHON = sys.executable", dashboard)
+
+    def test_dashboard_launcher_checks_early_process_exit(self):
+        launcher = self.read("START_DASHBOARD.ps1")
+        self.assertIn("-RedirectStandardError $stderrLog", launcher)
+        self.assertIn("if ($process.HasExited)", launcher)
+        self.assertIn("dashboard-startup.stderr.log", launcher)
 
 
 if __name__ == "__main__":
