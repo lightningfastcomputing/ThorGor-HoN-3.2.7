@@ -14,7 +14,8 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
-STATE_FILE = Path(__file__).resolve().parent / "work" / "v31_registration_state.json"
+BASE_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
+STATE_FILE = BASE_DIR / "work" / "v31_registration_state.json"
 
 
 @dataclass(frozen=True)
@@ -531,11 +532,11 @@ def main() -> int:
 
     log_path = Path(args.log_file)
     if not log_path.is_absolute():
-        log_path = Path(__file__).resolve().parent / log_path
+        log_path = BASE_DIR / log_path
     log_path.parent.mkdir(parents=True, exist_ok=True)
     state_path = Path(args.registration_state_file)
     if not state_path.is_absolute():
-        state_path = Path(__file__).resolve().parent / state_path
+        state_path = BASE_DIR / state_path
 
     def log(line: str) -> None:
         text = f"{now_text()} | {line}"

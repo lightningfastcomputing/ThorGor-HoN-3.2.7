@@ -48,7 +48,7 @@ from ctypes import wintypes
 from datetime import datetime
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
+BASE = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 DEFAULT_SHARED_STATE = BASE / "work" / "v31_registration_state.json"
 DEFAULT_STATUS = BASE / "work" / "native_matchid_bridge_v47_state.json"
 DEFAULT_LOG = BASE / "work" / "native_matchid_bridge_v47.log"

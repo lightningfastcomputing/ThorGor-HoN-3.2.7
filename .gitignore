@@ -8,6 +8,7 @@ __pycache__/
 .ruff_cache/
 .coverage
 htmlcov/
+/build/
 .venv/
 venv/
 
@@ -49,6 +50,13 @@ REMOTE_DEBUG_*.zip
 # Generated or third-party game binaries/assets
 *.dll
 *.exe
+!/ThorGorAccountManager.exe
+!/ThorGorChatServer.exe
+!/ThorGorDashboard.exe
+!/ThorGorManagerBridge.exe
+!/ThorGorMasterServer.exe
+!/ThorGorNativeBridge.exe
+!/ThorGorUdpShim.exe
 *.s2z
 *.pak
 *.bin

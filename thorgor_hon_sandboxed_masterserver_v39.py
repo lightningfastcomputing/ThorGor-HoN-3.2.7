@@ -45,7 +45,7 @@ APP_NAME = "ThorGor HoN Sandboxed Masterserver v39 - Public Picker"
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 80
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 LOG_PATH = BASE_DIR / "thorgor_srp_v39.log"
 CAPTURE_DIR = BASE_DIR / "thorgor_srp_v39_captures"
 CAPTURE_DIR.mkdir(exist_ok=True)
