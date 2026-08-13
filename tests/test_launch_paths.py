@@ -34,6 +34,13 @@ class LaunchPathTests(unittest.TestCase):
             text = self.read(relative)
             self.assertIn(CANONICAL_HON_HOME, text, relative)
 
+    def test_server_launcher_delays_program_files_path_expansion(self):
+        server = self.read("1_START_V61_COMPLETE_REGISTRY_GUARD.bat")
+        self.assertIn("EnableDelayedExpansion", server)
+        self.assertIn('if not exist "!HON_HOME!\\hon.exe" (', server)
+        self.assertIn("echo   !HON_HOME!\\hon.exe", server)
+        self.assertNotIn("echo   %HON_HOME%\\hon.exe", server)
+
     def test_runtime_uses_compiled_services_and_host_safe_player_guard(self):
         server = self.read("1_START_V61_COMPLETE_REGISTRY_GUARD.bat")
         remote = self.read("remote-client/START_REMOTE_PLAYER.bat")
