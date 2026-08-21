@@ -51,6 +51,7 @@ The v77 launcher verifies and installs K2 v77 plus cgame v61, resets volatile ru
 - `ThorGor*.exe` — PyInstaller one-file launchers for running without Python
 - `BUILD_COMPILED.ps1` — reproducible local build recipe for the launchers
 - `patches/` — source-only, hash-gated binary patch generators
+- `legacy/` — retired launchers, patch experiments, and milestone notes retained for history
 - `REMOTE HOST/` — self-contained copy of the v65/v61 DLL patch installers and builders
 - `tests/` — protocol and patch-manifest regression tests
 

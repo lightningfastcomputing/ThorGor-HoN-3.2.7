@@ -7,29 +7,44 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RemoteHostPatcherBundleTests(unittest.TestCase):
     def test_bundle_contains_byte_identical_canonical_patchers(self):
-        relative_files = (
-            "INSTALL_V61_PATCHES.ps1",
-            "INSTALL_V75_PATCHES.ps1",
-            "INSTALL_V76_PATCHES.ps1",
-            "INSTALL_V77_PATCHES.ps1",
-            "PATCH_K2_V57.ps1",
-            "PATCH_K2_V65.ps1",
-            "PATCH_K2_V75.ps1",
-            "PATCH_K2_V76.ps1",
-            "PATCH_K2_V77.ps1",
-            "PATCH_CGAME_V61.ps1",
-            "FIND_PYTHON.ps1",
-            "patches/build_k2_v57.py",
-            "patches/build_k2_v65_state_delivery.py",
-            "patches/build_k2_v75_hero_state_reconciliation.py",
-            "patches/build_k2_v76_world_ready_hero_state_reconciliation.py",
-            "patches/build_k2_v77_tail_recipient_hero_fix.py",
-            "patches/build_cgame_v61_complete_registry_guard.py",
+        file_pairs = (
+            ("INSTALL_V61_PATCHES.ps1", "INSTALL_V61_PATCHES.ps1"),
+            ("legacy/INSTALL_V75_PATCHES.ps1", "INSTALL_V75_PATCHES.ps1"),
+            ("legacy/INSTALL_V76_PATCHES.ps1", "INSTALL_V76_PATCHES.ps1"),
+            ("INSTALL_V77_PATCHES.ps1", "INSTALL_V77_PATCHES.ps1"),
+            ("PATCH_K2_V57.ps1", "PATCH_K2_V57.ps1"),
+            ("PATCH_K2_V65.ps1", "PATCH_K2_V65.ps1"),
+            ("legacy/PATCH_K2_V75.ps1", "PATCH_K2_V75.ps1"),
+            ("legacy/PATCH_K2_V76.ps1", "PATCH_K2_V76.ps1"),
+            ("PATCH_K2_V77.ps1", "PATCH_K2_V77.ps1"),
+            ("PATCH_CGAME_V61.ps1", "PATCH_CGAME_V61.ps1"),
+            ("FIND_PYTHON.ps1", "FIND_PYTHON.ps1"),
+            ("patches/build_k2_v57.py", "patches/build_k2_v57.py"),
+            (
+                "patches/build_k2_v65_state_delivery.py",
+                "patches/build_k2_v65_state_delivery.py",
+            ),
+            (
+                "patches/build_k2_v75_hero_state_reconciliation.py",
+                "patches/build_k2_v75_hero_state_reconciliation.py",
+            ),
+            (
+                "patches/build_k2_v76_world_ready_hero_state_reconciliation.py",
+                "patches/build_k2_v76_world_ready_hero_state_reconciliation.py",
+            ),
+            (
+                "patches/build_k2_v77_tail_recipient_hero_fix.py",
+                "patches/build_k2_v77_tail_recipient_hero_fix.py",
+            ),
+            (
+                "patches/build_cgame_v61_complete_registry_guard.py",
+                "patches/build_cgame_v61_complete_registry_guard.py",
+            ),
         )
-        for relative in relative_files:
-            canonical = (ROOT / relative).read_bytes()
-            bundled = (ROOT / "REMOTE HOST" / relative).read_bytes()
-            self.assertEqual(canonical, bundled, relative)
+        for canonical_relative, bundled_relative in file_pairs:
+            canonical = (ROOT / canonical_relative).read_bytes()
+            bundled = (ROOT / "REMOTE HOST" / bundled_relative).read_bytes()
+            self.assertEqual(canonical, bundled, canonical_relative)
 
     def test_bundle_documents_expected_output_hashes(self):
         readme = (ROOT / "REMOTE HOST" / "README.md").read_text(encoding="utf-8")

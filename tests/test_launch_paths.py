@@ -12,7 +12,7 @@ class LaunchPathTests(unittest.TestCase):
 
     def test_hon_launchers_use_canonical_program_files_home(self):
         launchers = (
-            "1_START_V61_COMPLETE_REGISTRY_GUARD.bat",
+            "legacy/1_START_V61_COMPLETE_REGISTRY_GUARD.bat",
             "START_LOCAL_PLAYER.bat",
             "remote-client/START_REMOTE_PLAYER.bat",
             "start_manager_v39.ps1",
@@ -24,7 +24,7 @@ class LaunchPathTests(unittest.TestCase):
 
     def test_player_launchers_allow_an_explicit_hon_home_override(self):
         for relative in (
-            "1_START_V61_COMPLETE_REGISTRY_GUARD.bat",
+            "legacy/1_START_V61_COMPLETE_REGISTRY_GUARD.bat",
             "remote-client/START_REMOTE_PLAYER.bat",
         ):
             self.assertIn(
@@ -50,14 +50,14 @@ class LaunchPathTests(unittest.TestCase):
             self.assertIn(CANONICAL_HON_HOME, text, relative)
 
     def test_server_launcher_delays_program_files_path_expansion(self):
-        server = self.read("1_START_V61_COMPLETE_REGISTRY_GUARD.bat")
+        server = self.read("legacy/1_START_V61_COMPLETE_REGISTRY_GUARD.bat")
         self.assertIn("EnableDelayedExpansion", server)
         self.assertIn('if not exist "!HON_HOME!\\hon.exe" (', server)
         self.assertIn("echo   !HON_HOME!\\hon.exe", server)
         self.assertNotIn("echo   %HON_HOME%\\hon.exe", server)
 
     def test_runtime_uses_compiled_services_and_host_safe_player_guard(self):
-        server = self.read("1_START_V61_COMPLETE_REGISTRY_GUARD.bat")
+        server = self.read("legacy/1_START_V61_COMPLETE_REGISTRY_GUARD.bat")
         remote = self.read("remote-client/START_REMOTE_PLAYER.bat")
         dashboard = self.read("hon_v49_dashboard.py")
         self.assertIn("ThorGorDashboard.exe", server)
@@ -76,18 +76,22 @@ class LaunchPathTests(unittest.TestCase):
         self.assertIn("dashboard-startup.stderr.log", launcher)
 
     def test_v75_launcher_installs_server_side_fix_without_proxy_injection(self):
-        launcher = self.read("START_V75_SERVER_HERO_STATE_FIX.bat")
+        launcher = self.read("legacy/START_V75_SERVER_HERO_STATE_FIX.bat")
         dashboard = self.read("hon_v49_dashboard.py")
         self.assertIn("INSTALL_V75_PATCHES.ps1", launcher)
-        self.assertIn("PATCH_K2_V75.ps1", self.read("INSTALL_V75_PATCHES.ps1"))
+        self.assertIn(
+            "PATCH_K2_V75.ps1", self.read("legacy/INSTALL_V75_PATCHES.ps1")
+        )
         self.assertNotIn('"--repair-joiner-hero-blocks"', dashboard)
 
     def test_v76_launcher_installs_world_ready_fix_without_proxy_injection(self):
-        launcher = self.read("START_V76_WORLD_READY_HERO_STATE_FIX.bat")
+        launcher = self.read("legacy/START_V76_WORLD_READY_HERO_STATE_FIX.bat")
         dashboard = self.read("hon_v49_dashboard.py")
-        patcher = self.read("PATCH_K2_V76.ps1")
+        patcher = self.read("legacy/PATCH_K2_V76.ps1")
         self.assertIn("INSTALL_V76_PATCHES.ps1", launcher)
-        self.assertIn("PATCH_K2_V76.ps1", self.read("INSTALL_V76_PATCHES.ps1"))
+        self.assertIn(
+            "PATCH_K2_V76.ps1", self.read("legacy/INSTALL_V76_PATCHES.ps1")
+        )
         self.assertIn("k2.dll.thorgor_v65_before_v75", patcher)
         self.assertNotIn('"--repair-joiner-hero-blocks"', dashboard)
 
@@ -123,6 +127,26 @@ class LaunchPathTests(unittest.TestCase):
             "K2 v57 baseline installation failed",
             self.read("PATCH_K2_V65.ps1"),
         )
+
+    def test_retired_root_artifacts_are_archived_under_legacy(self):
+        retired = (
+            "1_START_V61_COMPLETE_REGISTRY_GUARD.bat",
+            "START_V72_DIAGNOSTIC.bat",
+            "START_V73_DIAGNOSTIC.bat",
+            "START_V74_HERO_LIST_FIX.bat",
+            "START_V75_SERVER_HERO_STATE_FIX.bat",
+            "START_V76_WORLD_READY_HERO_STATE_FIX.bat",
+            "PATCH_K2_V63.ps1",
+            "PATCH_K2_V64.ps1",
+            "PATCH_K2_V66.ps1",
+            "PATCH_K2_V67.ps1",
+            "PATCH_K2_V68.ps1",
+            "PATCH_K2_V75.ps1",
+            "PATCH_K2_V76.ps1",
+        )
+        for relative in retired:
+            self.assertFalse((ROOT / relative).exists(), relative)
+            self.assertTrue((ROOT / "legacy" / relative).is_file(), relative)
 
 
 if __name__ == "__main__":
