@@ -95,6 +95,14 @@ class LaunchPathTests(unittest.TestCase):
         launcher = self.read("START_V77_TAIL_RECIPIENT_HERO_FIX.bat")
         dashboard = self.read("hon_v49_dashboard.py")
         patcher = self.read("PATCH_K2_V77.ps1")
+        self.assertIn("EnableDelayedExpansion", launcher)
+        self.assertIn(
+            'if not defined HON_HOME set "HON_HOME=C:\\Program Files (x86)\\Heroes of Newerth"',
+            launcher,
+        )
+        self.assertIn('if not exist "!HON_HOME!\\hon.exe" (', launcher)
+        self.assertIn('-HonHome "!HON_HOME!"', launcher)
+        self.assertNotIn("if not defined HON_HOME (", launcher)
         self.assertIn("INSTALL_V77_PATCHES.ps1", launcher)
         self.assertIn("PATCH_K2_V77.ps1", self.read("INSTALL_V77_PATCHES.ps1"))
         self.assertIn("k2.dll.thorgor_v65_before_v75", patcher)

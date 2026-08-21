@@ -1,5 +1,5 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 echo ThorGor v77 tail-recipient joined-client hero-state fix
@@ -10,25 +10,20 @@ echo - Uses K2's guarded queue so snapshot state sequences stay synchronized.
 echo - The v74 UDP packet injection is disabled.
 echo.
 
-if not defined HON_HOME (
-    if exist "C:\intelprop\Heroes of Newerth\hon.exe" (
-        set "HON_HOME=C:\intelprop\Heroes of Newerth"
-    ) else (
-        set "HON_HOME=C:\Program Files (x86)\Heroes of Newerth"
-    )
-)
-set "THORGOR_HON_HOME=%HON_HOME%"
+if not defined HON_HOME if exist "C:\intelprop\Heroes of Newerth\hon.exe" set "HON_HOME=C:\intelprop\Heroes of Newerth"
+if not defined HON_HOME set "HON_HOME=C:\Program Files (x86)\Heroes of Newerth"
+set "THORGOR_HON_HOME=!HON_HOME!"
 
-if not exist "%HON_HOME%\hon.exe" (
+if not exist "!HON_HOME!\hon.exe" (
     echo ERROR: hon.exe was not found in:
-    echo   %HON_HOME%
+    echo   !HON_HOME!
     pause
     exit /b 2
 )
 
 echo Installing and verifying K2 v77 plus cgame v61 in:
-echo   %HON_HOME%
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL_V77_PATCHES.ps1" -HonHome "%HON_HOME%"
+echo   !HON_HOME!
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL_V77_PATCHES.ps1" -HonHome "!HON_HOME!"
 if errorlevel 1 (
     echo ERROR: v77 DLL installation failed. Do not start a client.
     pause
