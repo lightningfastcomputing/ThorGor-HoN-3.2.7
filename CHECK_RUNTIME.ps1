@@ -8,6 +8,7 @@ $required = @(
     'hon_manager_status_bridge_v42.py',
     'hon_native_matchid_bridge_v47.py',
     'patches\build_k2_v57.py',
+    'patches\build_k2_v77_tail_recipient_hero_fix.py',
     'patches\build_cgame_v61_complete_registry_guard.py'
 )
 foreach ($relative in $required) {
@@ -17,7 +18,7 @@ foreach ($relative in $required) {
 
 if ($HonHome) {
     $expected = @{
-        (Join-Path $HonHome 'k2.dll') = '6F5FC1F7BF4E01CDEB0360A6F703299F5422F2C06A104FADCB24FD96A546B8DF'
+        (Join-Path $HonHome 'k2.dll') = '25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026'
         (Join-Path $HonHome 'game\cgame.dll') = '88C4ACA3C31AF8948E1C2A33EEA2F6EE83888FA46A1DE8BE678DF32A958DF988'
     }
     foreach ($path in $expected.Keys) {

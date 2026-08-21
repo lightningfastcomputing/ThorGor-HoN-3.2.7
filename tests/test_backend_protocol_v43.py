@@ -2,6 +2,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -109,7 +110,20 @@ class BackendProtocolTests(unittest.TestCase):
         self.assertEqual(response["nickname"], "Fixture User")
         self.assertTrue(response["game_cookie"])
         self.assertEqual(response["infos"][0]["acc_pub_skill"], 1500.0)
-        self.assertEqual(response["my_upgrades"], [])
+        self.assertEqual(response["my_upgrades"], ["h.AllHeroes.Hero"])
+
+    def test_account_login_grants_the_lan_all_heroes_product(self):
+        session = SimpleNamespace(
+            M2=b"\x01\x02",
+            account_id=self.account.account_id,
+            nickname=self.account.nickname,
+            username=self.account.username,
+        )
+
+        response = backend.success_payload(session)
+
+        self.assertEqual(response["my_upgrades"], ["h.AllHeroes.Hero"])
+        self.assertEqual(response["selected_upgrades"], [])
 
     def test_client_auth_rejects_an_unknown_cookie(self):
         with self.assertRaisesRegex(ValueError, "Invalid player cookie"):
@@ -130,6 +144,7 @@ class BackendProtocolTests(unittest.TestCase):
         self.assertIn(b's:10:"account_id";i:', backend.php_serialize(auth))
         self.assertIn(b's:11:"game_cookie";s:', backend.php_serialize(auth))
         self.assertIn(b's:13:"acc_pub_skill";d:1500.0;', backend.php_serialize(auth))
+        self.assertIn(b's:16:"h.AllHeroes.Hero";', backend.php_serialize(auth))
 
     def test_http_start_game_route_returns_the_allocated_match(self):
         wire = self.post_server_request(

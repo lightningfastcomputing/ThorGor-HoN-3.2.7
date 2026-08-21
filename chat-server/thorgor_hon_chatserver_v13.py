@@ -156,6 +156,39 @@ def save_capture(peer: str, direction: str, data: bytes, *, directory: Path | No
     (target_dir / name).write_text(json.dumps(record, indent=2), encoding="utf-8")
 
 
+
+
+def diagnostic_chat_context(state: "ClientState", command: int, payload: bytes) -> dict:
+    """Build account-correlated context for post-auth commands under investigation.
+
+    Diagnostic only: this function never changes protocol behavior.
+    """
+    shared = v31_read_state()
+    decoded = None
+    if command == 0x000F:
+        try:
+            decoded, _ = read_cstr(payload, 0)
+        except Exception:
+            decoded = payload.decode("utf-8", errors="replace").rstrip("\x00")
+    return {
+        "account": state.username,
+        "account_id": state.account_id,
+        "nickname": state.nickname,
+        "channel": state.channel,
+        "chat_id": state.chat_id,
+        "command": f"0x{command:04X}",
+        "payload_hex": payload.hex(),
+        "decoded_endpoint": decoded,
+        "lifecycle": shared.get("lifecycle"),
+        "match_id": shared.get("match_id"),
+        "match_name": shared.get("match_name"),
+        "match_host_account_id": shared.get("match_host_account_id"),
+        "match_host_nickname": shared.get("match_host_nickname"),
+        "server_ip": shared.get("server_ip"),
+        "server_port": shared.get("server_port"),
+        "server_status": shared.get("server_status"),
+    }
+
 def encode_packet(command: int, payload: bytes = b"") -> bytes:
     # HoN 3.2.7.1 uses the same framing in both directions:
     # the uint16 length counts bytes AFTER the two-byte length field.
@@ -726,6 +759,24 @@ class ChatConnection(socketserver.BaseRequestHandler):
             self.channel_message(payload)
         elif command == HON_CS_LEAVE_CHANNEL:
             log(f"LEAVE CHANNEL | {self.peer}")
+        elif command in {0x0D07, 0x000F, 0x0011}:
+            # Diagnostic-only observation of the recurring post-auth/game-transition
+            # commands.  Do not send a guessed reply until we know their semantics.
+            context = diagnostic_chat_context(self.state, command, payload)
+            log(
+                "TRANSITION_PROBE "
+                f"account={self.state.username!r} account_id={self.state.account_id} "
+                f"peer={self.peer} cmd=0x{command:04X} "
+                f"channel={self.state.channel!r} lifecycle={context['lifecycle']!r} "
+                f"match_id={context['match_id']!r} endpoint={context['decoded_endpoint']!r} "
+                f"payload_hex={payload.hex()}"
+            )
+            save_capture(
+                self.peer,
+                "transition_probe",
+                raw,
+                **context,
+            )
         else:
             if self.state.is_host:
                 host_log(

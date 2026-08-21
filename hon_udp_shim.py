@@ -155,6 +155,70 @@ def validate_c_conn_response(wire: bytes, expected_cookie: str) -> tuple[bool, s
     return True, f"account_id={account.group(1).decode('ascii')}"
 
 
+def describe_trace_datagram(data: bytes) -> dict[str, object]:
+    """Return compact, non-mutating K2 transport metadata for a datagram."""
+    record: dict[str, object] = {
+        "bytes": len(data),
+        "prefix": data[:32].hex(),
+    }
+    if len(data) >= 7 and data[:3] == b"\x00\x00\x03":
+        record["kind"] = "reliable_data"
+        record["sequence"] = struct.unpack_from("<I", data, 3)[0]
+        record["payload_bytes"] = len(data) - 7
+        record["payload_prefix"] = data[7:23].hex()
+        record["hex"] = data.hex()
+    elif len(data) >= 7 and data[:3] == b"\x00\x00\x05":
+        record["kind"] = "reliable_ack"
+        record["sequence"] = struct.unpack_from("<I", data, 3)[0]
+    elif len(data) >= 4 and data[:3] == b"\x00\x00\x01":
+        record["kind"] = "control"
+        record["command"] = data[3]
+    else:
+        record["kind"] = "raw"
+        record["hex"] = data.hex()
+    return record
+
+
+PICKER_STATE_PREFIX = bytes.fromhex("5fb703905f0100ffffffff")
+PICKER_HERO_BLOCK_IDS = tuple(range(3, 9))
+
+
+def extract_picker_hero_block_suffix(data: bytes) -> tuple[bytes, tuple[int, ...]] | None:
+    """Extract an exact, complete 3..8 hero-list suffix from a reliable packet."""
+    if len(data) < 7 + len(PICKER_STATE_PREFIX) or data[:3] != b"\x00\x00\x03":
+        return None
+    payload = data[7:]
+    if not payload.startswith(PICKER_STATE_PREFIX):
+        return None
+    cursor = len(PICKER_STATE_PREFIX)
+    block_ids: list[int] = []
+    while cursor < len(payload):
+        if cursor + 5 > len(payload) or payload[cursor] != 0x60:
+            return None
+        block_id, block_size = struct.unpack_from("<HH", payload, cursor + 1)
+        cursor += 5
+        if block_size == 0 or block_size % 5 != 0 or cursor + block_size > len(payload):
+            return None
+        block_ids.append(block_id)
+        cursor += block_size
+    if tuple(block_ids) != PICKER_HERO_BLOCK_IDS:
+        return None
+    return payload[len(PICKER_STATE_PREFIX):], tuple(block_ids)
+
+
+def repair_truncated_picker_packet(data: bytes, hero_suffix: bytes) -> bytes | None:
+    """Append a validated cached suffix only to the exact truncated picker packet."""
+    if not hero_suffix or len(data) != 7 + len(PICKER_STATE_PREFIX):
+        return None
+    if data[:3] != b"\x00\x00\x03" or data[7:] != PICKER_STATE_PREFIX:
+        return None
+    repaired = data + hero_suffix
+    extracted = extract_picker_hero_block_suffix(repaired)
+    if extracted is None or extracted[0] != hero_suffix:
+        return None
+    return repaired
+
+
 def authorize_connect_c0(packet: ConnectC0, master_url: str, timeout: float) -> tuple[bool, str]:
     fields = {
         "f": "c_conn",
@@ -388,6 +452,34 @@ def main() -> int:
         default=128,
         help="Maximum packets retained per direction for each admission transcript.",
     )
+    parser.add_argument(
+        "--route-trace-seconds",
+        type=float,
+        default=0.0,
+        help="Passively capture each authenticated route for this many seconds. Set 0 to disable.",
+    )
+    parser.add_argument(
+        "--route-trace-packets",
+        type=int,
+        default=20000,
+        help="Maximum non-keepalive packets retained per direction in a route trace.",
+    )
+    parser.add_argument(
+        "--route-trace-checkpoint-seconds",
+        type=float,
+        default=1.0,
+        help="Seconds between batched route-trace writes.",
+    )
+    parser.add_argument(
+        "--route-trace-dir",
+        default="work/route_traces",
+        help="Directory for passive per-route JSONL captures and summaries.",
+    )
+    parser.add_argument(
+        "--repair-joiner-hero-blocks",
+        action="store_true",
+        help="Repair only the exact truncated picking packet using validated host blocks 3 through 8.",
+    )
     parser.add_argument("--idle-timeout", type=float, default=120.0)
     parser.add_argument(
         "--client-route-timeout",
@@ -564,8 +656,13 @@ def main() -> int:
     route_challenge_at: dict[tuple[str, int], float] = {}
     route_source_ip: dict[tuple[str, int], str] = {}
     admission_traces: dict[tuple[str, int], dict[str, object]] = {}
+    route_traces: dict[tuple[str, int], dict[str, object]] = {}
+    route_trace_dir = BASE_DIR / args.route_trace_dir
+    if args.route_trace_seconds > 0:
+        route_trace_dir.mkdir(parents=True, exist_ok=True)
     challenge_sequence = 0
     pending_browser_queries: dict[bytes, dict[str, object]] = {}
+    cached_picker_hero_suffix: bytes | None = None
 
     # Keep the forwarding hot path quiet. Full per-packet formatting, console flushes,
     # and opening/closing a log file for every datagram caused visible gameplay jitter.
@@ -604,6 +701,7 @@ def main() -> int:
 
     def close_route(client_addr: tuple[str, int], reason: str) -> None:
         flush_admission_trace(client_addr, f"route_close:{reason}")
+        flush_route_trace(client_addr, f"route_close:{reason}")
         upstream = upstream_by_client.pop(client_addr, None)
         route_activity.pop(client_addr, None)
         route_connect.pop(client_addr, None)
@@ -675,6 +773,136 @@ def main() -> int:
             flush=True,
         )
 
+    def start_route_trace(client_addr: tuple[str, int], username: str) -> None:
+        if args.route_trace_seconds <= 0 or args.route_trace_packets <= 0:
+            return
+        flush_route_trace(client_addr, "replaced_by_new_c0")
+        started = time.monotonic()
+        safe_user = re.sub(r"[^A-Za-z0-9_.-]+", "_", username)[:48] or "unknown"
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        stem = f"route_{stamp}_{safe_user}_{client_addr[0].replace('.', '-')}_{client_addr[1]}"
+        route_traces[client_addr] = {
+            "username": username,
+            "started": started,
+            "deadline": started + args.route_trace_seconds,
+            "next_checkpoint": started + max(args.route_trace_checkpoint_seconds, 0.1),
+            "path": route_trace_dir / f"{stem}.jsonl",
+            "summary_path": route_trace_dir / f"{stem}_summary.json",
+            "pending": [],
+            "stored": {"to_server": 0, "from_server": 0},
+            "seen": {"to_server": 0, "from_server": 0},
+            "bytes": {"to_server": 0, "from_server": 0},
+            "kinds": {},
+            "server_reliable_sequences": [],
+            "client_ack_sequences": [],
+            "server_payload_prefixes": {},
+        }
+        route_traces[client_addr]["pending"].append({
+            "type": "route_trace_begin",
+            "username": username,
+            "client": f"{client_addr[0]}:{client_addr[1]}",
+            "duration_seconds": args.route_trace_seconds,
+            "format": "ThorGor passive route trace v73",
+        })
+        checkpoint_route_trace(client_addr)
+        log(
+            f"ROUTE_TRACE_BEGIN client={client_addr[0]}:{client_addr[1]} "
+            f"user={username!r} seconds={args.route_trace_seconds:.1f}"
+        )
+
+    def capture_route_packet(client_addr: tuple[str, int], direction: str, data: bytes) -> None:
+        trace = route_traces.get(client_addr)
+        if trace is None:
+            return
+        trace["seen"][direction] += 1
+        trace["bytes"][direction] += len(data)
+        metadata = describe_trace_datagram(data)
+        kind = str(metadata["kind"])
+        kind_key = f"{direction}:{kind}"
+        trace["kinds"][kind_key] = trace["kinds"].get(kind_key, 0) + 1
+
+        if direction == "from_server" and kind == "reliable_data":
+            trace["server_reliable_sequences"].append(int(metadata["sequence"]))
+            payload_prefix = str(metadata.get("payload_prefix", ""))[:2] or "empty"
+            trace["server_payload_prefixes"][payload_prefix] = (
+                trace["server_payload_prefixes"].get(payload_prefix, 0) + 1
+            )
+        elif direction == "to_server" and kind == "reliable_ack":
+            trace["client_ack_sequences"].append(int(metadata["sequence"]))
+
+        # C9 keepalives dominate the stream and carry no state payload. Count
+        # them in the summary but do not duplicate them in the evidence file.
+        if kind == "control" and metadata.get("command") == 0xC9:
+            return
+        if trace["stored"][direction] >= args.route_trace_packets:
+            return
+        trace["stored"][direction] += 1
+        trace["pending"].append({
+            "type": "packet",
+            "dt_ms": int((time.monotonic() - trace["started"]) * 1000),
+            "direction": direction,
+            **metadata,
+        })
+
+    def checkpoint_route_trace(client_addr: tuple[str, int]) -> None:
+        trace = route_traces.get(client_addr)
+        if trace is None or not trace["pending"]:
+            return
+        pending = trace["pending"]
+        trace["pending"] = []
+        with trace["path"].open("a", encoding="utf-8") as handle:
+            for record in pending:
+                handle.write(json.dumps(record, separators=(",", ":")) + "\n")
+
+    def flush_route_trace(client_addr: tuple[str, int], reason: str) -> None:
+        trace = route_traces.get(client_addr)
+        if trace is None:
+            return
+        checkpoint_route_trace(client_addr)
+        server_sequences = sorted(set(trace["server_reliable_sequences"]))
+        gaps = [
+            [previous, current]
+            for previous, current in zip(server_sequences, server_sequences[1:])
+            if current != previous + 1
+        ]
+        summary = {
+            "format": "ThorGor passive route trace v73",
+            "username": trace["username"],
+            "client": f"{client_addr[0]}:{client_addr[1]}",
+            "reason": reason,
+            "elapsed_seconds": round(time.monotonic() - trace["started"], 3),
+            "seen_packets": trace["seen"],
+            "seen_bytes": trace["bytes"],
+            "stored_packets": trace["stored"],
+            "truncated": {
+                direction: trace["stored"][direction] >= args.route_trace_packets
+                for direction in ("to_server", "from_server")
+            },
+            "kinds": trace["kinds"],
+            "server_reliable": {
+                "count": len(trace["server_reliable_sequences"]),
+                "unique_count": len(server_sequences),
+                "first": server_sequences[0] if server_sequences else None,
+                "last": server_sequences[-1] if server_sequences else None,
+                "gaps": gaps,
+                "payload_first_byte_counts": trace["server_payload_prefixes"],
+            },
+            "client_reliable_acks": {
+                "count": len(trace["client_ack_sequences"]),
+                "unique_count": len(set(trace["client_ack_sequences"])),
+                "last": max(trace["client_ack_sequences"], default=None),
+            },
+            "trace_file": trace["path"].name,
+        }
+        trace["summary_path"].write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        route_traces.pop(client_addr, None)
+        log(
+            f"ROUTE_TRACE_SAVED client={client_addr[0]}:{client_addr[1]} "
+            f"user={trace['username']!r} reason={reason} "
+            f"server_reliable={len(trace['server_reliable_sequences'])} "
+            f"file={trace['path'].name!r}"
+        )
+
     def send_proxy_challenge(client_addr: tuple[str, int]) -> None:
         nonlocal challenge_sequence
         if not args.proxy_challenge:
@@ -689,6 +917,38 @@ def main() -> int:
             f"PROXY_CHALLENGE client={client_addr[0]}:{client_addr[1]} "
             f"sequence={challenge_sequence} sent={sent}"
         )
+
+    def maybe_repair_joiner_picker_packet(
+        client_addr: tuple[str, int], data: bytes
+    ) -> bytes:
+        nonlocal cached_picker_hero_suffix
+        if not args.repair_joiner_hero_blocks:
+            return data
+
+        extracted = extract_picker_hero_block_suffix(data)
+        if extracted is not None:
+            suffix, block_ids = extracted
+            connect = route_connect.get(client_addr)
+            if connect is not None and connect.match_key:
+                cached_picker_hero_suffix = suffix
+                log(
+                    f"HERO_BLOCK_CACHE client={client_addr[0]}:{client_addr[1]} "
+                    f"user={connect.username!r} blocks={list(block_ids)} suffix_bytes={len(suffix)}"
+                )
+            return data
+
+        connect = route_connect.get(client_addr)
+        if connect is None or connect.match_key or cached_picker_hero_suffix is None:
+            return data
+        repaired = repair_truncated_picker_packet(data, cached_picker_hero_suffix)
+        if repaired is None:
+            return data
+        log(
+            f"JOINER_HERO_BLOCK_REPAIR client={client_addr[0]}:{client_addr[1]} "
+            f"user={connect.username!r} original_bytes={len(data)} repaired_bytes={len(repaired)} "
+            f"blocks={list(PICKER_HERO_BLOCK_IDS)}"
+        )
+        return repaired
 
     def allocate_route_source_ip() -> str:
         if not args.unique_loopback_sources:
@@ -819,6 +1079,12 @@ def main() -> int:
         for trace_client, trace in list(admission_traces.items()):
             if stats_now >= trace["deadline"]:
                 flush_admission_trace(trace_client, "window_complete")
+        for trace_client, trace in list(route_traces.items()):
+            if stats_now >= trace["deadline"]:
+                flush_route_trace(trace_client, "window_complete")
+            elif stats_now >= trace["next_checkpoint"]:
+                checkpoint_route_trace(trace_client)
+                trace["next_checkpoint"] = stats_now + max(args.route_trace_checkpoint_seconds, 0.1)
         if args.stats_interval > 0 and stats_now - stats_last >= args.stats_interval:
             elapsed = max(stats_now - stats_last, 0.001)
             log(
@@ -948,6 +1214,7 @@ def main() -> int:
                     data = make_authorized_local_c0(data, connect)
                     route_connect[addr] = connect
                     begin_admission_trace(addr, connect.username)
+                    start_route_trace(addr, connect.username)
                     log(
                         f"C0_AUTH_LOCALIZED client={addr[0]}:{addr[1]} "
                         f"flag_offset={connect.flag_offset} host_id_preserved=0x{connect.host_id:08X}"
@@ -996,6 +1263,7 @@ def main() -> int:
                 upstream = get_or_create_route(addr)
                 route_activity[addr] = time.time()
                 capture_admission_packet(addr, "to_server", data)
+                capture_route_packet(addr, "to_server", data)
                 sent = upstream.sendto(data, target)
                 counters["server_tx"] += 1
                 counters["server_tx_bytes"] += sent
@@ -1048,6 +1316,8 @@ def main() -> int:
                         f"{classify_packet(data)} | {format_packet(data)}"
                     )
                 capture_admission_packet(client_addr, "from_server", data)
+                capture_route_packet(client_addr, "from_server", data)
+                data = maybe_repair_joiner_picker_packet(client_addr, data)
                 special = describe_special_packet(data)
                 if special:
                     log(f"SERVER_RX_DETAIL {addr[0]}:{addr[1]} | {special}")

@@ -2,7 +2,7 @@
 
 ThorGor is an independently written, local/LAN authentication, chat, server-browser, and dedicated-server interoperability experiment for the obsolete Heroes of Newerth 3.2.7.1 client. The project is intended for protocol research, preservation, and private LAN testing.
 
-The current source milestone is **v61**. Two clients can authenticate, chat, discover and join a lobby, synchronize slots, enter hero selection, and—in the best tested direction—load Caldavar together. Important bugs remain; see [the milestone report](docs/MILESTONE_V61.md).
+The current stable source milestone is **v71**. It keeps the stable v65/v61 DLL path and adds the legacy `get_products` catalog envelope required for joined clients to initialize hero ownership. See [the milestone report](docs/MILESTONE_V71.md).
 
 ## No game files are included
 
@@ -21,13 +21,13 @@ Python is not required to run the checked-in compiled distribution. Python 3.10 
 
 ## One-command acquire, install, and run
 
-After the requirements above are installed, paste this single line into PowerShell. It clones the project into `%USERPROFILE%\ThorGor-HoN-3.2.7`, fast-forwards an existing clone, then launches the v61 installer and LAN stack with the required administrator prompt:
+After the requirements above are installed, paste this single line into PowerShell. It clones the project into `%USERPROFILE%\ThorGor-HoN-3.2.7`, fast-forwards an existing clone, then launches the v65/v61 installer and LAN stack with the required administrator prompt:
 
 ```powershell
 $dir=Join-Path $env:USERPROFILE 'ThorGor-HoN-3.2.7'; if(Test-Path (Join-Path $dir '.git')){if(git -C $dir status --porcelain){throw "Existing ThorGor clone has local changes: $dir"}; git -C $dir fetch origin main; if($LASTEXITCODE -ne 0){throw 'Git fetch failed'}; git -C $dir show-ref --verify --quiet refs/heads/main; if($LASTEXITCODE -eq 0){git -C $dir switch main}else{git -C $dir switch --track -c main origin/main}; if($LASTEXITCODE -ne 0){throw 'Could not switch the existing clone to main'}; git -C $dir pull --ff-only origin main}else{git clone --branch main --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git $dir}; if($LASTEXITCODE -ne 0){throw 'Git acquire/update failed'}; $launcher=Join-Path $dir '1_START_V61_COMPLETE_REGISTRY_GUARD.bat'; Start-Process -FilePath $launcher -Verb RunAs -WorkingDirectory $dir
 ```
 
-The repository supplies independently built ThorGor executables, but no HoN binaries or assets. During startup, the installers verify the user-supplied 3.2.7.1 DLL hashes, generate the v57/v61 interoperability patches locally, preserve verified backups, configure the LAN firewall rules, provision the disposable test accounts, and start the compiled dashboard.
+The repository supplies independently built ThorGor executables, but no HoN binaries or assets. During startup, the installers verify the user-supplied 3.2.7.1 DLL hashes, generate the v65/v61 interoperability patches locally, preserve verified backups, configure the LAN firewall rules, provision the disposable test accounts, and start the compiled dashboard.
 
 ## First run
 
@@ -36,7 +36,7 @@ The repository supplies independently built ThorGor executables, but no HoN bina
 3. On another PC with its own HoN 3.2.7.1 installation, run `remote-client\START_REMOTE_PLAYER.bat SERVER_LAN_IP` from a complete copy of this repository.
 4. Use the milestone's disposable local test accounts: `pwnrbwnr / pwnrbwnr` and `player / player`.
 
-The launcher preserves the proven v61 startup order and automatically provisions the two disposable test accounts. `MANAGE_ACCOUNTS.bat` remains available for adding unique accounts.
+The launcher preserves the proven startup order and automatically provisions the two disposable test accounts. `MANAGE_ACCOUNTS.bat` remains available for adding unique accounts.
 
 ## Main components
 
@@ -49,7 +49,7 @@ The launcher preserves the proven v61 startup order and automatically provisions
 - `ThorGor*.exe` — PyInstaller one-file launchers for running without Python
 - `BUILD_COMPILED.ps1` — reproducible local build recipe for the launchers
 - `patches/` — source-only, hash-gated binary patch generators
-- `REMOTE HOST/` — self-contained copy of the v57/v61 DLL patch installers and builders
+- `REMOTE HOST/` — self-contained copy of the v65/v61 DLL patch installers and builders
 - `tests/` — protocol and patch-manifest regression tests
 
 ## Security and privacy

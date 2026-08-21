@@ -311,11 +311,16 @@ def create_debug_bundle(status_snapshot: dict | None = None) -> Path:
             except Exception:
                 pass
 
-    for dirname in ("thorgor_server_v39_captures", "thorgor_srp_v39_captures"):
-        src = ROOT / dirname
+    for src, output_name in (
+        (ROOT / "thorgor_server_v39_captures", "thorgor_server_v39_captures"),
+        (ROOT / "thorgor_srp_v39_captures", "thorgor_srp_v39_captures"),
+        (ROOT / "chat-server" / "thorgor_chat_v13_captures", "thorgor_chat_v13_captures"),
+        (ROOT / "chat-server" / "thorgor_chat_v13_host_captures", "thorgor_chat_v13_host_captures"),
+        (ROOT / "work" / "route_traces", "route_traces"),
+    ):
         if src.exists():
             try:
-                shutil.copytree(src, evidence / dirname, dirs_exist_ok=True)
+                shutil.copytree(src, evidence / output_name, dirs_exist_ok=True)
             except Exception:
                 pass
 
@@ -355,7 +360,7 @@ def create_debug_bundle(status_snapshot: dict | None = None) -> Path:
 class Dashboard(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("ThorGor HoN 3.2.7.1 - v49 LAN Dedicated")
+        self.title("ThorGor HoN 3.2.7.1 - v77 Tail-Recipient Hero Fix")
         self.geometry("690x565")
         self.minsize(620, 515)
         self.configure(bg="#101418")
@@ -376,7 +381,7 @@ class Dashboard(tk.Tk):
         outer = ttk.Frame(self, padding=(22, 18), style="Panel.TFrame")
         outer.pack(fill="both", expand=True, padx=18, pady=(12, 10))
 
-        ttk.Label(self, text="ThorGor HoN v54 Per-Route Join Trace", style="Title.TLabel").pack(anchor="w", padx=22, pady=(17, 0))
+        ttk.Label(self, text="ThorGor HoN v77 Tail-Recipient Hero Fix", style="Title.TLabel").pack(anchor="w", padx=22, pady=(17, 0))
         ttk.Label(self, text=f"Exact v49 native behavior  •  per-client UDP telemetry  •  LAN {LAN_IP} ({LAN_IP_SOURCE})", style="Sub.TLabel").pack(anchor="w", padx=23, pady=(1, 0))
 
         self.rows: dict[str, tuple[tk.Label, ttk.Label]] = {}
@@ -480,6 +485,8 @@ class Dashboard(tk.Tk):
             "--require-c0-auth", "--master-url", "http://127.0.0.1/server_requester.php",
             "--manager-start-timeout", "3", "--max-client-routes", "16",
             "--client-route-timeout", "600", "--stats-interval", "1",
+            "--route-trace-seconds", "300", "--route-trace-packets", "40000",
+            "--route-trace-checkpoint-seconds", "1",
         ])
         self.after(1000, self._start_backend)
 

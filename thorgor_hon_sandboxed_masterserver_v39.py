@@ -97,6 +97,22 @@ class Config:
 
 CONFIG = Config()
 
+# The private ThorGor service has no cash shop or per-account catalog.  HoN's
+# non-host client still runs the legacy ownership gate while it constructs the
+# hero picker, so advertise the retail all-heroes product on both auth paths.
+LAN_ACCOUNT_UPGRADES = ("h.AllHeroes.Hero",)
+PRODUCT_CATEGORIES = (
+    "Alt Avatar",
+    "Taunt",
+    "Misc",
+    "Alt Announcement",
+    "Couriers",
+    "Hero",
+    "Ward",
+    "EAP",
+    "Mastery",
+)
+
 # v31 readiness state. KONGOR's newer implementation only exposes a server for
 # CREATE when it is authenticated, has reported Idle, and is actually reachable.
 # For 3.2.7 we preserve that invariant instead of advertising a synthetic row
@@ -682,8 +698,8 @@ def success_payload(session: Session, cookie: str | None = None) -> dict[Any, An
     strings. Earlier builds used strings for account_id/account_type/trial,
     which could make GetInteger() return -1 or corrupt later state.
 
-    Optional nested collections are omitted so their parser branches are
-    skipped cleanly.
+    The hero-ownership collections are supplied for the private LAN catalog;
+    unrelated optional collections are omitted so those branches skip cleanly.
     """
     payload: dict[Any, Any] = {
         "proof": session.M2.hex(),
@@ -710,6 +726,10 @@ def success_payload(session: Session, cookie: str | None = None) -> dict[Any, An
         "leaverthreshold": 0.0,
         "minimum_ranked_level": 0.0,
         "is_subaccount": False,
+
+        # Parsed by the client before it builds the local hero registry.
+        "my_upgrades": list(LAN_ACCOUNT_UPGRADES),
+        "selected_upgrades": [],
 
         0: True,
     }
@@ -792,9 +812,70 @@ def client_auth_response(store: AccountStore, params: dict[str, list[str]]) -> d
         "tag": "",
         "infos": [neutral_stats],
         "game_cookie": authorization.game_cookie,
-        "my_upgrades": [],
+        "my_upgrades": list(LAN_ACCOUNT_UPGRADES),
         "selected_upgrades": [],
     }
+
+
+
+
+def diagnostic_request_identity(store: AccountStore | None, params: dict[str, list[str]]) -> dict[str, Any]:
+    """Resolve a master request to an account when its cookie is available.
+
+    Diagnostic only; failures intentionally return anonymous context rather than
+    influencing request handling.
+    """
+    cookie = params.get("cookie", [""])[0]
+    result: dict[str, Any] = {
+        "account": None,
+        "account_id": None,
+        "nickname": None,
+        "cookie_present": bool(cookie),
+    }
+    if store is None or not cookie:
+        return result
+    try:
+        authorization = store.get_game_authorization(cookie)
+    except Exception:
+        return result
+    if authorization is None:
+        return result
+    result.update(
+        account=authorization.account.username,
+        account_id=authorization.account.account_id,
+        nickname=authorization.account.nickname,
+    )
+    return result
+
+def get_products_response(store: AccountStore, params: dict[str, list[str]]) -> dict[str, Any]:
+    """Return the legacy store-catalog envelope required by HoN 3.2.7.1.
+
+    Base hero ownership is conveyed by ``h.AllHeroes.Hero`` in ``my_upgrades``;
+    it is not represented by one product per hero in this response.  The client
+    still requires every legacy product category to be present before it can
+    finish constructing its local product and hero registries.
+    """
+    cookie = params.get("cookie", [""])[0]
+    if not cookie:
+        raise ValueError("Missing product-catalog cookie")
+    authorization = store.get_game_authorization(cookie)
+    if authorization is None:
+        raise ValueError("Invalid product-catalog cookie")
+
+    supplied_account_id = params.get("account_id", [""])[0]
+    if supplied_account_id:
+        try:
+            account_id = int(supplied_account_id)
+        except ValueError as error:
+            raise ValueError("Invalid product-catalog account ID") from error
+        if account_id != authorization.account.account_id:
+            raise ValueError("Product-catalog account ID does not match cookie")
+
+    products = {category: {} for category in PRODUCT_CATEGORIES}
+    serialised = json.dumps(products, separators=(",", ":"), ensure_ascii=True)
+    digest = hashlib.sha256(serialised.encode("utf-8")).digest()
+    crc = int.from_bytes(digest[:4], "little", signed=True)
+    return {"products": products, "crc": crc}
 
 
 def match_server_list_payload(cookie: str, game_type: str) -> dict[Any, Any]:
@@ -1280,6 +1361,18 @@ class Handler(BaseHTTPRequestHandler):
         function = params.get("f", [""])[0]
         username = params.get("login", [""])[0]
 
+        # Account-correlated diagnostic trace for client-facing master calls.
+        # Do not log the cookie itself; presence plus resolved identity is enough.
+        identity = diagnostic_request_identity(ACCOUNTS, params)
+        shared_state = v31_read_state()
+        server_log(
+            "MASTER_TRACE "
+            f"f={function!r} ip={self.client_address[0]} "
+            f"login={username!r} account={identity['account']!r} "
+            f"account_id={identity['account_id']!r} cookie_present={identity['cookie_present']} "
+            f"lifecycle={shared_state.get('lifecycle')!r} match_id={shared_state.get('match_id')!r}"
+        )
+
         if parsed.path.lower().endswith("/server_requester.php"):
             self.handle_server_requester(body, params)
             return
@@ -1288,6 +1381,41 @@ class Handler(BaseHTTPRequestHandler):
             self.handle_preauth(body, params, username)
         elif function == "srpAuth":
             self.handle_srp_auth(body, params, username)
+        elif function == "get_products":
+            if ACCOUNTS is None:
+                self.send_php(error_payload("Account database unavailable"))
+                return
+            try:
+                response = get_products_response(ACCOUNTS, params)
+            except ValueError as error:
+                capture(self, body, params, {"stage": "get_products", "error": str(error)})
+                self.send_php(error_payload(str(error)))
+                return
+            auth = diagnostic_request_identity(ACCOUNTS, params)
+            capture(
+                self,
+                body,
+                params,
+                {
+                    "stage": "get_products",
+                    "account": auth["account"],
+                    "resolved_account_id": auth["account_id"],
+                    "supplied_account_id": params.get("account_id", [""])[0],
+                    "category_count": len(response["products"]),
+                    "category_sizes": {key: len(value) for key, value in response["products"].items()},
+                    "crc": response.get("crc"),
+                    "lifecycle": v31_read_state().get("lifecycle"),
+                    "match_id": v31_read_state().get("match_id"),
+                },
+            )
+            category_sizes = {key: len(value) for key, value in response["products"].items()}
+            server_log(
+                "PRODUCT_TRACE "
+                f"account={auth['account']!r} account_id={auth['account_id']!r} "
+                f"categories={len(response['products'])} sizes={category_sizes!r} "
+                f"crc={response.get('crc')!r}"
+            )
+            self.send_php(response)
         elif function == "server_list":
             cookie = params.get("cookie", [""])[0]
             game_type = params.get("gametype", [""])[0]

@@ -22,6 +22,17 @@ class LaunchPathTests(unittest.TestCase):
             text = self.read(relative)
             self.assertIn(CANONICAL_HON_HOME, text, relative)
 
+    def test_player_launchers_allow_an_explicit_hon_home_override(self):
+        for relative in (
+            "1_START_V61_COMPLETE_REGISTRY_GUARD.bat",
+            "remote-client/START_REMOTE_PLAYER.bat",
+        ):
+            self.assertIn(
+                'if not defined HON_HOME set "HON_HOME=',
+                self.read(relative),
+                relative,
+            )
+
     def test_manager_runs_from_hon_home(self):
         manager = self.read("start_manager_v39.ps1")
         dashboard = self.read("hon_v49_dashboard.py")
@@ -30,7 +41,11 @@ class LaunchPathTests(unittest.TestCase):
         self.assertIn("], HON_HOME)", dashboard)
 
     def test_default_patch_paths_do_not_prefer_development_install(self):
-        for relative in ("PATCH_K2_V57.ps1", "PATCH_CGAME_V61.ps1"):
+        for relative in (
+            "PATCH_K2_V57.ps1",
+            "PATCH_K2_V65.ps1",
+            "PATCH_CGAME_V61.ps1",
+        ):
             text = self.read(relative)
             self.assertIn(CANONICAL_HON_HOME, text, relative)
 
@@ -47,6 +62,8 @@ class LaunchPathTests(unittest.TestCase):
         dashboard = self.read("hon_v49_dashboard.py")
         self.assertIn("ThorGorDashboard.exe", server)
         self.assertIn("ThorGorMasterServer.exe", server)
+        self.assertIn("PATCH_K2_V65.ps1", server)
+        self.assertNotIn('PATCH_K2_V57.ps1" -HonHome', server)
         self.assertNotIn("FIND_PYTHON.ps1", server)
         self.assertIn("CHECK_HON_PLAYER_NOT_RUNNING.ps1", remote)
         self.assertIn("_service_command", dashboard)
@@ -57,6 +74,32 @@ class LaunchPathTests(unittest.TestCase):
         self.assertIn("-RedirectStandardError $stderrLog", launcher)
         self.assertIn("if ($process.HasExited)", launcher)
         self.assertIn("dashboard-startup.stderr.log", launcher)
+
+    def test_v75_launcher_installs_server_side_fix_without_proxy_injection(self):
+        launcher = self.read("START_V75_SERVER_HERO_STATE_FIX.bat")
+        dashboard = self.read("hon_v49_dashboard.py")
+        self.assertIn("INSTALL_V75_PATCHES.ps1", launcher)
+        self.assertIn("PATCH_K2_V75.ps1", self.read("INSTALL_V75_PATCHES.ps1"))
+        self.assertNotIn('"--repair-joiner-hero-blocks"', dashboard)
+
+    def test_v76_launcher_installs_world_ready_fix_without_proxy_injection(self):
+        launcher = self.read("START_V76_WORLD_READY_HERO_STATE_FIX.bat")
+        dashboard = self.read("hon_v49_dashboard.py")
+        patcher = self.read("PATCH_K2_V76.ps1")
+        self.assertIn("INSTALL_V76_PATCHES.ps1", launcher)
+        self.assertIn("PATCH_K2_V76.ps1", self.read("INSTALL_V76_PATCHES.ps1"))
+        self.assertIn("k2.dll.thorgor_v65_before_v75", patcher)
+        self.assertNotIn('"--repair-joiner-hero-blocks"', dashboard)
+
+    def test_v77_launcher_installs_tail_recipient_fix_without_proxy_injection(self):
+        launcher = self.read("START_V77_TAIL_RECIPIENT_HERO_FIX.bat")
+        dashboard = self.read("hon_v49_dashboard.py")
+        patcher = self.read("PATCH_K2_V77.ps1")
+        self.assertIn("INSTALL_V77_PATCHES.ps1", launcher)
+        self.assertIn("PATCH_K2_V77.ps1", self.read("INSTALL_V77_PATCHES.ps1"))
+        self.assertIn("k2.dll.thorgor_v65_before_v75", patcher)
+        self.assertIn("$v76Hash", patcher)
+        self.assertNotIn('"--repair-joiner-hero-blocks"', dashboard)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,48 @@
+THORGOR HON 3.2.7.1 - FROZEN WORKING BUILD
+Freeze date: 2026-08-21 (America/New_York)
+Build: v77 Tail-Recipient Hero Fix
+Status: USER-CONFIRMED WORKING
+
+Confirmed result
+----------------
+- Host and joined client load successfully.
+- Joined client receives the hero availability list.
+- Hero portraits are visible and functional on the joined client.
+- The v75/v76 "13253 unread bits" regression is absent.
+
+Installed DLL hashes
+--------------------
+k2.dll SHA-256:
+25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026
+
+game\cgame.dll SHA-256:
+88C4ACA3C31AF8948E1C2A33EEA2F6EE83888FA46A1DE8BE678DF32A958DF988
+
+Core build-file hashes
+----------------------
+patches\build_k2_v77_tail_recipient_hero_fix.py:
+7B855B10962FB9DA3808F4C227EE12F2AEB7DBF19274E36FD07E4CAF170C06F7
+
+PATCH_K2_V77.ps1:
+880343E116F77B616524E115EF381C3B279EAC6DA2C5EBB1F97A55D71DEEE088
+
+INSTALL_V77_PATCHES.ps1:
+2B53CDE0EE86AEE1BBF80B90790160AA2F56C90A81BB3F31B154A9CE172F01C5
+
+START_V77_TAIL_RECIPIENT_HERO_FIX.bat:
+6D9D3D00BB2F05A032472A4DDA8FD2B51BCEB32D2855837B5469972CA4814E5D
+
+Lineage and preservation rules
+------------------------------
+- v77 is built from verified K2 v65, never from v75 or v76.
+- v75 and v76 are retired because they replaced a required stock callback.
+- The stock periodic head-client queue and callback remain byte-for-byte intact.
+- v77 adds delivery for remaining linked clients only at the original loop tail.
+- Do not modify this frozen snapshot. Fork/copy it before future experiments.
+
+Install
+-------
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\INSTALL_V77_PATCHES.ps1 -HonHome 'C:\intelprop\Heroes of Newerth'
+
+Start the stack on the dev/server machine with:
+START_V77_TAIL_RECIPIENT_HERO_FIX.bat

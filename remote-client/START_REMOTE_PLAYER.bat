@@ -4,7 +4,7 @@ set "SERVER_IP=%~1"
 if not defined SERVER_IP set /p "SERVER_IP=Enter DEV/SERVER PC LAN IPv4 address: "
 if not defined SERVER_IP exit /b 3
 
-set "HON_HOME=C:\Program Files (x86)\Heroes of Newerth"
+if not defined HON_HOME set "HON_HOME=C:\Program Files (x86)\Heroes of Newerth"
 if not exist "%HON_HOME%\hon.exe" (
   echo hon.exe was not found at "%HON_HOME%\hon.exe"
   pause
@@ -26,7 +26,7 @@ echo ThorGor LAN client
 echo   HoN folder : %HON_HOME%
 echo   Server IP  : %SERVER_IP%
 echo.
-echo Generating and installing the v57/v61 patches from this PC's verified game files...
+echo Generating and installing the v65/v61 patches from this PC's verified game files...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
   "$p=Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','""%~dp0..\INSTALL_V61_PATCHES.ps1""','-HonHome','""%HON_HOME%""'; exit $p.ExitCode"
 if errorlevel 1 (
@@ -65,5 +65,5 @@ if errorlevel 1 (
 
 echo Starting HoN against ThorGor LAN backend at %SERVER_IP%
 echo Login with: player / player
-start "HoN Remote Player - ThorGor v61 LAN" /D "%HON_HOME%" hon.exe -masterserver %SERVER_IP%
+start "HoN Remote Player - ThorGor v65 LAN" /D "%HON_HOME%" hon.exe -masterserver %SERVER_IP%
 exit /b 0

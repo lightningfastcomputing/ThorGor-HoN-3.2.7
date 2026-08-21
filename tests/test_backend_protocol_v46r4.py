@@ -2,6 +2,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -50,6 +51,17 @@ class BackendProtocolTests(unittest.TestCase):
         body = urlencode(fields).encode("ascii")
         request = Request(
             f"http://127.0.0.1:{self.server.server_port}/server_requester.php",
+            data=body,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            method="POST",
+        )
+        with urlopen(request, timeout=3) as response:
+            return response.read()
+
+    def post_client_request(self, fields):
+        body = urlencode(fields).encode("ascii")
+        request = Request(
+            f"http://127.0.0.1:{self.server.server_port}/",
             data=body,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             method="POST",
@@ -109,7 +121,60 @@ class BackendProtocolTests(unittest.TestCase):
         self.assertEqual(response["nickname"], "Fixture User")
         self.assertTrue(response["game_cookie"])
         self.assertEqual(response["infos"][0]["acc_pub_skill"], 1500.0)
-        self.assertEqual(response["my_upgrades"], [])
+        self.assertEqual(response["my_upgrades"], ["h.AllHeroes.Hero"])
+
+    def test_account_login_grants_the_lan_all_heroes_product(self):
+        session = SimpleNamespace(
+            M2=b"\x01\x02",
+            account_id=self.account.account_id,
+            nickname=self.account.nickname,
+            username=self.account.username,
+        )
+
+        response = backend.success_payload(session)
+
+        self.assertEqual(response["my_upgrades"], ["h.AllHeroes.Hero"])
+        self.assertEqual(response["selected_upgrades"], [])
+
+    def test_product_catalog_has_the_complete_legacy_envelope(self):
+        response = backend.get_products_response(
+            self.store,
+            {
+                "account_id": [str(self.account.account_id)],
+                "cookie": [self.authorization.cookie],
+            },
+        )
+
+        self.assertEqual(tuple(response["products"]), backend.PRODUCT_CATEGORIES)
+        self.assertTrue(all(products == {} for products in response["products"].values()))
+        self.assertIsInstance(response["crc"], int)
+        self.assertEqual(
+            response["crc"],
+            backend.get_products_response(
+                self.store, {"cookie": [self.authorization.cookie]}
+            )["crc"],
+        )
+
+    def test_product_catalog_rejects_an_account_cookie_mismatch(self):
+        with self.assertRaisesRegex(ValueError, "does not match cookie"):
+            backend.get_products_response(
+                self.store,
+                {"account_id": ["999"], "cookie": [self.authorization.cookie]},
+            )
+
+    def test_http_get_products_route_returns_catalog_sections(self):
+        wire = self.post_client_request(
+            {
+                "f": "get_products",
+                "account_id": str(self.account.account_id),
+                "cookie": self.authorization.cookie,
+                "crc": "",
+            }
+        )
+
+        self.assertIn(b's:8:"products";a:9:{', wire)
+        self.assertIn(b's:4:"Hero";a:0:{}', wire)
+        self.assertIn(b's:3:"crc";i:', wire)
 
     def test_client_auth_rejects_an_unknown_cookie(self):
         with self.assertRaisesRegex(ValueError, "Invalid player cookie"):
@@ -130,6 +195,7 @@ class BackendProtocolTests(unittest.TestCase):
         self.assertIn(b's:10:"account_id";i:', backend.php_serialize(auth))
         self.assertIn(b's:11:"game_cookie";s:', backend.php_serialize(auth))
         self.assertIn(b's:13:"acc_pub_skill";d:1500.0;', backend.php_serialize(auth))
+        self.assertIn(b's:16:"h.AllHeroes.Hero";', backend.php_serialize(auth))
 
     def test_http_start_game_route_returns_the_allocated_match(self):
         wire = self.post_server_request(
