@@ -2,7 +2,7 @@
 
 ThorGor is an independently written, local/LAN authentication, chat, server-browser, and dedicated-server interoperability experiment for the obsolete Heroes of Newerth 3.2.7.1 client. The project is intended for protocol research, preservation, and private LAN testing.
 
-The current stable source milestone is **v71**. It keeps the stable v65/v61 DLL path and adds the legacy `get_products` catalog envelope required for joined clients to initialize hero ownership. See [the milestone report](docs/MILESTONE_V71.md).
+The current frozen working milestone is **v77**. It keeps the verified cgame v61 patch and adds the K2 v77 tail-recipient state-delivery fix that restores hero portraits and hero selection for joined clients. See [the frozen-build manifest](FROZEN_WORKING_BUILD_2026-08-21.txt) and [v77 test notes](V77_TAIL_RECIPIENT_HERO_FIX_README.txt).
 
 ## No game files are included
 
@@ -14,29 +14,29 @@ The patch installers verify exact SHA-256 hashes, generate the interoperability 
 
 - Windows
 - Git on `PATH`
-- A user-supplied HoN 3.2.7.1 installation at `C:\Program Files (x86)\Heroes of Newerth`
+- A user-supplied HoN 3.2.7.1 installation at `C:\intelprop\Heroes of Newerth` or `C:\Program Files (x86)\Heroes of Newerth`
 - Administrator approval for hosts-file, firewall, and Program Files changes
 
-Python is not required to run the checked-in compiled distribution. Python 3.10 or newer and PyInstaller are needed only when rebuilding the executables from source.
+Python 3.10 or newer is required on the stack/host PC by the frozen v77 launcher. PyInstaller is needed only when rebuilding the checked-in executables from source.
 
 ## One-command acquire, install, and run
 
-After the requirements above are installed, paste this single line into PowerShell. It clones the project into `%USERPROFILE%\ThorGor-HoN-3.2.7`, fast-forwards an existing clone, then launches the v65/v61 installer and LAN stack with the required administrator prompt:
+After the requirements above are installed, paste this single line into PowerShell on the stack/host PC. It clones the frozen v77 branch into `%USERPROFILE%\ThorGor-HoN-3.2.7`, safely fast-forwards a clean existing clone, then installs K2 v77 plus cgame v61 and launches the LAN stack with the required administrator prompt:
 
 ```powershell
-$dir=Join-Path $env:USERPROFILE 'ThorGor-HoN-3.2.7'; if(Test-Path (Join-Path $dir '.git')){if(git -C $dir status --porcelain){throw "Existing ThorGor clone has local changes: $dir"}; git -C $dir fetch origin main; if($LASTEXITCODE -ne 0){throw 'Git fetch failed'}; git -C $dir show-ref --verify --quiet refs/heads/main; if($LASTEXITCODE -eq 0){git -C $dir switch main}else{git -C $dir switch --track -c main origin/main}; if($LASTEXITCODE -ne 0){throw 'Could not switch the existing clone to main'}; git -C $dir pull --ff-only origin main}else{git clone --branch main --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git $dir}; if($LASTEXITCODE -ne 0){throw 'Git acquire/update failed'}; $launcher=Join-Path $dir '1_START_V61_COMPLETE_REGISTRY_GUARD.bat'; Start-Process -FilePath $launcher -Verb RunAs -WorkingDirectory $dir
+$branch='release/v77-frozen-working'; $dir=Join-Path $env:USERPROFILE 'ThorGor-HoN-3.2.7'; if(Test-Path (Join-Path $dir '.git')){if(git -C $dir status --porcelain){throw "Existing ThorGor clone has local changes: $dir"}; git -C $dir fetch origin "refs/heads/${branch}:refs/remotes/origin/${branch}"; if($LASTEXITCODE -ne 0){throw 'Git fetch failed'}; git -C $dir show-ref --verify --quiet "refs/heads/$branch"; if($LASTEXITCODE -eq 0){git -C $dir switch $branch}else{git -C $dir switch --track -c $branch "origin/$branch"}; if($LASTEXITCODE -ne 0){throw 'Could not switch to the v77 branch'}; git -C $dir pull --ff-only origin $branch}else{git clone --branch $branch --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git $dir}; if($LASTEXITCODE -ne 0){throw 'Git acquire/update failed'}; Start-Process -FilePath (Join-Path $dir 'START_V77_TAIL_RECIPIENT_HERO_FIX.bat') -Verb RunAs -WorkingDirectory $dir
 ```
 
-The repository supplies independently built ThorGor executables, but no HoN binaries or assets. During startup, the installers verify the user-supplied 3.2.7.1 DLL hashes, generate the v65/v61 interoperability patches locally, preserve verified backups, configure the LAN firewall rules, provision the disposable test accounts, and start the compiled dashboard.
+The repository supplies independently built ThorGor executables, but no HoN binaries or assets. During startup, the installers verify the user-supplied 3.2.7.1 DLL hashes, generate the K2 v77 and cgame v61 interoperability patches locally, preserve verified backups, reset volatile test state, provision the disposable test accounts, and start the dashboard.
 
 ## First run
 
 1. Clone or download this repository.
-2. Run `1_START_V61_COMPLETE_REGISTRY_GUARD.bat` on the server PC. `START_LAN_STACK.bat` is an alias for the same launcher.
+2. Run `START_V77_TAIL_RECIPIENT_HERO_FIX.bat` on the stack/host PC.
 3. On another PC with its own HoN 3.2.7.1 installation, run `remote-client\START_REMOTE_PLAYER.bat SERVER_LAN_IP` from a complete copy of this repository.
 4. Use the milestone's disposable local test accounts: `pwnrbwnr / pwnrbwnr` and `player / player`.
 
-The launcher preserves the proven startup order and automatically provisions the two disposable test accounts. `MANAGE_ACCOUNTS.bat` remains available for adding unique accounts.
+The v77 launcher verifies and installs K2 v77 plus cgame v61, resets volatile runtime state, preserves the proven startup order, and automatically provisions the two disposable test accounts. `MANAGE_ACCOUNTS.bat` remains available for adding unique accounts.
 
 ## Main components
 
