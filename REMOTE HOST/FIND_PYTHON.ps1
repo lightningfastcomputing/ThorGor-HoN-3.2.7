@@ -40,7 +40,7 @@ foreach ($candidate in $candidates) {
     $path = Resolve-Python $candidate[0] $candidate[1]
     if ($path) {
         Write-Output $path
-        exit 0
+        return
     }
 }
 

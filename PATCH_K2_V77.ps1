@@ -38,7 +38,13 @@ if ($currentHash -eq $v75Hash -or $currentHash -eq $v76Hash) {
     }
     $source = $v65Backup
 } elseif ($currentHash -ne $v65Hash) {
-    throw "K2 v77 requires verified v65, v75, or v76. Current hash: $currentHash"
+    Write-Host "K2 v77 requires the verified v65 baseline; preparing it from the current verified installation ($currentHash)." -ForegroundColor Yellow
+    & (Join-Path $PSScriptRoot 'PATCH_K2_V65.ps1') -HonHome $HonHome
+    $currentHash = Hash $target
+    if ($currentHash -ne $v65Hash) {
+        throw "K2 v65 baseline preparation failed. Current hash: $currentHash"
+    }
+    $source = $target
 }
 
 Copy-Item -LiteralPath $target -Destination $backup -Force

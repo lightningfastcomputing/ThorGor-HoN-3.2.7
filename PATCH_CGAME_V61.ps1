@@ -19,7 +19,7 @@ if (!(Test-Path -LiteralPath $builder -PathType Leaf)) { throw "Patch builder no
 $currentHash = Hash $target
 if ($currentHash -eq $v61Hash) {
     Write-Host 'cgame v61 is already installed.' -ForegroundColor DarkGray
-    exit 0
+    return
 }
 
 $verifiedBackup = (Test-Path -LiteralPath $backup -PathType Leaf) -and ((Hash $backup) -eq $stockHash)

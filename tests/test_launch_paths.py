@@ -105,9 +105,24 @@ class LaunchPathTests(unittest.TestCase):
         self.assertNotIn("if not defined HON_HOME (", launcher)
         self.assertIn("INSTALL_V77_PATCHES.ps1", launcher)
         self.assertIn("PATCH_K2_V77.ps1", self.read("INSTALL_V77_PATCHES.ps1"))
+        self.assertIn("PATCH_K2_V65.ps1", patcher)
+        self.assertIn("K2 v65 baseline preparation failed", patcher)
         self.assertIn("k2.dll.thorgor_v65_before_v75", patcher)
         self.assertIn("$v76Hash", patcher)
         self.assertNotIn('"--repair-joiner-hero-blocks"', dashboard)
+
+    def test_composable_v77_patch_helpers_return_to_the_parent_installer(self):
+        for relative in (
+            "FIND_PYTHON.ps1",
+            "PATCH_K2_V57.ps1",
+            "PATCH_K2_V65.ps1",
+            "PATCH_CGAME_V61.ps1",
+        ):
+            self.assertNotIn("exit 0", self.read(relative), relative)
+        self.assertNotIn(
+            "K2 v57 baseline installation failed",
+            self.read("PATCH_K2_V65.ps1"),
+        )
 
 
 if __name__ == "__main__":

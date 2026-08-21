@@ -21,7 +21,7 @@ if (!(Test-Path -LiteralPath $builder -PathType Leaf)) { throw "Patch builder no
 $currentHash = Hash $target
 if ($currentHash -eq $v57Hash) {
     Write-Host 'K2 v57 is already installed.' -ForegroundColor DarkGray
-    exit 0
+    return
 }
 
 $verifiedBackup = (Test-Path -LiteralPath $backup -PathType Leaf) -and ($stockHashes -contains (Hash $backup))

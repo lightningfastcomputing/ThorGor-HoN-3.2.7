@@ -17,13 +17,12 @@ if (!(Test-Path -LiteralPath $builder -PathType Leaf)) { throw "Patch builder no
 
 if ((Hash $target) -eq $v65Hash) {
     Write-Host 'K2 v65 linked-client state-block fix is already installed.' -ForegroundColor DarkGray
-    exit 0
+    return
 }
 
 # Recreate the exact, verified v57 baseline from the preserved stock DLL first.
 # This also rejects unsupported game versions and preserves the stock backup.
 & (Join-Path $PSScriptRoot 'PATCH_K2_V57.ps1') -HonHome $HonHome
-if ($LASTEXITCODE -ne 0) { throw 'K2 v57 baseline installation failed.' }
 if ((Hash $target) -ne $v57Hash) { throw 'The verified K2 v57 baseline is unavailable.' }
 
 try {
