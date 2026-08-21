@@ -27,6 +27,8 @@ After the requirements above are installed, paste this single line into PowerShe
 $branch='release/v77-frozen-working'; $dir=Join-Path $env:USERPROFILE 'ThorGor-HoN-3.2.7'; if(Test-Path (Join-Path $dir '.git')){if(git -C $dir status --porcelain){throw "Existing ThorGor clone has local changes: $dir"}; git -C $dir fetch origin "refs/heads/${branch}:refs/remotes/origin/${branch}"; if($LASTEXITCODE -ne 0){throw 'Git fetch failed'}; git -C $dir show-ref --verify --quiet "refs/heads/$branch"; if($LASTEXITCODE -eq 0){git -C $dir switch $branch}else{git -C $dir switch -c $branch "refs/remotes/origin/$branch"}; if($LASTEXITCODE -ne 0){throw 'Could not switch to the v77 branch'}; git -C $dir pull --ff-only origin $branch}else{git clone --branch $branch --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git $dir}; if($LASTEXITCODE -ne 0){throw 'Git acquire/update failed'}; Start-Process -FilePath (Join-Path $dir 'START_V77_TAIL_RECIPIENT_HERO_FIX.bat') -Verb RunAs -WorkingDirectory $dir
 ```
 
+This one-liner is verified on a clean Windows machine with HoN installed at `C:\Program Files (x86)\Heroes of Newerth`. The installer automatically advances the verified K2 v57 baseline (`6F5F...`) through v65 (`82D0...`) to v77 (`25B1...`), verifies cgame v61 (`88C4...`), and then starts the dashboard. Do not manually replace the DLLs between stages.
+
 The repository supplies independently built ThorGor executables, but no HoN binaries or assets. During startup, the installers verify the user-supplied 3.2.7.1 DLL hashes, generate the K2 v77 and cgame v61 interoperability patches locally, preserve verified backups, reset volatile test state, provision the disposable test accounts, and start the dashboard.
 
 ## First run
