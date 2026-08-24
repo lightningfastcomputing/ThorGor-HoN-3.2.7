@@ -43,7 +43,8 @@ from thorgor.master.accounts import AccountStore
 from thorgor.matchmaking.chat_gateway import MatchmakingChatGateway
 from thorgor.matchmaking.endpoint import DedicatedServerAllocator, MatchmakingEndpoint
 from thorgor.protocols import matchmaking_protocol as tmm_wire
-from .protocol import cstr, encode_packet, extract_packet, read_cstr
+from .protocol import cstr, encode_packet, encode_player_count, extract_packet, read_cstr
+from .social import FRIEND_APPROVE, FRIEND_REQUEST, SocialService
 
 APP_NAME = "ThorGor HoN 3.2.7 LAN Chat Service"
 DEFAULT_HOST = "0.0.0.0"
@@ -51,6 +52,7 @@ DEFAULT_PORT = 11031
 DEFAULT_NICK = "Guest"
 ACCOUNT_DB_PATH: Path | None = None
 MATCHMAKING: MatchmakingChatGateway | None = None
+SOCIAL: SocialService | None = None
 
 # 16-bit special commands
 HON_CS_AUTH_INFO = 0x0C00
@@ -69,6 +71,7 @@ HON_CS_PONG = 0x2A01
 HON_CS_CHANNEL_MSG = 0x03
 HON_SC_CHANNEL_MSG = 0x03
 HON_SC_STATUS_UPDATE = 0x66
+HON_SC_PLAYER_COUNT = 0x68
 HON_SC_CHANGED_CHANNEL = 0x04
 HON_SC_JOINED_CHANNEL = 0x05
 HON_SC_LEFT_CHANNEL = 0x06
@@ -383,8 +386,45 @@ class ChatWorld:
         with self.lock:
             return [self.clients[k] for k in self.channels.get(channel, set()) if k in self.clients]
 
+    def player_states(self) -> list[ClientState]:
+        with self.lock:
+            return [state for state in self.clients.values()
+                    if state.account_id and not state.is_host]
+
+    def account_states(self, account_id: int) -> list[ClientState]:
+        with self.lock:
+            return [state for state in self.clients.values()
+                    if state.account_id == account_id and not state.is_host]
+
 
 WORLD = ChatWorld()
+
+
+def send_to_account(account_id: int, command: int, payload: bytes) -> bool:
+    sent = False
+    for state in WORLD.account_states(account_id):
+        try:
+            state.handler.send_packet(command, payload)
+            sent = True
+        except OSError:
+            continue
+    return sent
+
+
+def account_is_online(account_id: int) -> bool:
+    return bool(WORLD.account_states(account_id))
+
+
+def broadcast_player_count() -> None:
+    states = WORLD.player_states()
+    count = len({state.account_id for state in states})
+    payload = encode_player_count(count)
+    for state in states:
+        try:
+            state.handler.send_packet(HON_SC_PLAYER_COUNT, payload)
+        except OSError:
+            continue
+    log(f"PLAYER COUNT | online={count} sessions={len(states)}")
 
 
 class ChatConnection(socketserver.BaseRequestHandler):
@@ -408,6 +448,8 @@ class ChatConnection(socketserver.BaseRequestHandler):
         elif self.control_role == "manager":
             v31_update_state(manager_chat_connected=False)
         WORLD.unregister(self.state)
+        if self.authed and not self.state.is_host:
+            broadcast_player_count()
         if self.state.is_host:
             host_log(f"DISCONNECT account={self.state.username!r} peer={self.peer}")
         log(f"DISCONNECT | {self.peer}")
@@ -499,6 +541,10 @@ class ChatConnection(socketserver.BaseRequestHandler):
         # Empty payload is the documented AUTH_ACCEPTED form.
         # Correct bytes are: 02 00 00 1c
         self.send_packet(HON_SC_AUTH_ACCEPTED)
+        if not self.state.is_host:
+            broadcast_player_count()
+            if SOCIAL is not None:
+                SOCIAL.deliver_pending(self.state.account_id)
         log(f"AUTH ACCEPTED | {self.peer} | account={account.username!r} nickname={account.nickname!r} protocol={info['protocol']}")
         threading.Thread(target=self.heartbeat, daemon=True).start()
 
@@ -724,6 +770,10 @@ class ChatConnection(socketserver.BaseRequestHandler):
                     "0x0066 online response; preserved from v8 for observation"
                 )
             self.send_packet(HON_SC_STATUS_UPDATE, status_payload)
+            self.send_packet(
+                HON_SC_PLAYER_COUNT,
+                encode_player_count(len({state.account_id for state in WORLD.player_states()})),
+            )
             log(f"STATUS ONLINE | {self.peer} | sent cmd=0x0066 status=0")
         elif not self.authed:
             log(f"IGNORED PRE-AUTH | {self.peer} | cmd=0x{command:04X}")
@@ -733,6 +783,20 @@ class ChatConnection(socketserver.BaseRequestHandler):
             self.channel_message(payload)
         elif command == HON_CS_LEAVE_CHANNEL:
             log(f"LEAVE CHANNEL | {self.peer}")
+        elif command == FRIEND_REQUEST:
+            try:
+                target_name, _ = read_cstr(payload)
+                accepted = bool(SOCIAL and SOCIAL.request(self.state.account_id, target_name))
+                log(f"FRIEND REQUEST | from={self.state.nickname!r} to={target_name!r} accepted={accepted}")
+            except (ValueError, struct.error) as exc:
+                log(f"FRIEND REQUEST ERROR | account={self.state.username!r} error={exc!r}")
+        elif command == FRIEND_APPROVE:
+            try:
+                requester_name, _ = read_cstr(payload)
+                accepted = bool(SOCIAL and SOCIAL.approve(self.state.account_id, requester_name))
+                log(f"FRIEND APPROVE | by={self.state.nickname!r} requester={requester_name!r} accepted={accepted}")
+            except (ValueError, struct.error) as exc:
+                log(f"FRIEND APPROVE ERROR | account={self.state.username!r} error={exc!r}")
         elif MATCHMAKING is not None and MATCHMAKING.handles(command):
             try:
                 MATCHMAKING.process(self.state.account_id, command, payload)
@@ -826,7 +890,7 @@ def main(argv: list[str] | None = None):
                         help="Client-visible ThorGor UDP port for matchmaking assignments")
     args = parser.parse_args(argv)
 
-    global ACCOUNT_DB_PATH, MATCHMAKING
+    global ACCOUNT_DB_PATH, MATCHMAKING, SOCIAL
     try:
         ACCOUNT_DB_PATH = discover_account_db(args.db)
     except (FileNotFoundError, RuntimeError) as exc:
@@ -843,6 +907,7 @@ def main(argv: list[str] | None = None):
         return bool(status in (0, 1) and (manager_ready or chat_ready))
 
     store = AccountStore(ACCOUNT_DB_PATH)
+    SOCIAL = SocialService(store, send_to_account, account_is_online)
     MATCHMAKING = MatchmakingChatGateway(
         MatchmakingEndpoint(
             store,

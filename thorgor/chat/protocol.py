@@ -20,6 +20,13 @@ def encode_packet(command: int, payload: bytes = b"") -> bytes:
     return struct.pack("<H", len(body)) + body
 
 
+def encode_player_count(count: int, detail: str = "") -> bytes:
+    """Encode protocol-47 HON_SC_PLAYER_COUNT (0x0068)."""
+    if count < 0:
+        raise ValueError("player count cannot be negative")
+    return struct.pack("<I", count) + cstr(detail)
+
+
 def extract_packet(buffer: bytes):
     if len(buffer) < 2:
         return None

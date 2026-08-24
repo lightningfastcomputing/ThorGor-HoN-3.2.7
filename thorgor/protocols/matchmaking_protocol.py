@@ -133,6 +133,31 @@ def queue_time(seconds: int = 0) -> bytes:
     return struct.pack("<BI", TMM_UPDATE_QUEUE_TIME, max(0, seconds))
 
 
+def popularity_update() -> bytes:
+    """Advertise the deliberately small ThorGor 3.2.7 LAN queue catalog."""
+    maps = ("caldavar",)
+    game_types = (1, 2)  # normal and casual
+    modes = ("ap", "bm")
+    regions = ("USE",)
+    data = bytearray(b"\x01")
+    for value in (
+        "|".join(maps), "|".join(str(item) for item in game_types),
+        "|".join(modes), "|".join(regions), "", "", "", "", "",
+        "maps:caldavar-0|modes:ap-0|bm-11|regions:USE-0|",
+    ):
+        data += cstr(value)
+    rank_types = 2
+    popularity_count = (
+        len(maps) * len(game_types) * rank_types
+        + len(game_types) * len(maps) * rank_types
+        + len(modes) * len(maps) * len(game_types) * rank_types
+        + len(regions) * len(maps) * len(game_types) * rank_types
+    )
+    data += bytes((10,)) * popularity_count
+    data += struct.pack("<i", 0)
+    return bytes(data)
+
+
 def match_found(group: GroupState, match_id: int) -> bytes:
     request = group.request
     mode = "botmatch" if request.is_coop else request.game_modes[0]

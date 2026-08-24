@@ -69,9 +69,8 @@ class MatchmakingChatGateway:
                 self.groups.pop(account_id, None)
             self._send(account_id, wire.TMM_LEFT_QUEUE)
         elif command == wire.TMM_POPULARITY:
-            # The stock panel tolerates an absent popularity update. Its
-            # availability gate is supplied by the deterministic UI overlay.
-            self.logger(f"TMM_POPULARITY account_id={account_id}")
+            self._send(account_id, wire.TMM_POPULARITY, wire.popularity_update())
+            self.logger(f"TMM_POPULARITY_SENT account_id={account_id}")
 
     def _create(self, account_id: int, payload: bytes) -> None:
         request = wire.GroupRequest.decode(payload)

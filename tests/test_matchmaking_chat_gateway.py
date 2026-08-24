@@ -60,6 +60,17 @@ class MatchmakingChatGatewayTests(unittest.TestCase):
         self.assertEqual(struct.unpack_from("<I", connect, 1)[0], 71)
         self.assertIn(b"192.168.1.154\0", connect)
 
+    def test_popularity_request_returns_catalog_required_before_group_create(self):
+        self.gateway.process(1, wire.TMM_POPULARITY, b"")
+
+        command, payload = self.sent[1][-1]
+        self.assertEqual(command, wire.TMM_POPULARITY)
+        self.assertEqual(payload[0], 1)
+        self.assertIn(b"caldavar\0", payload)
+        self.assertIn(b"ap|bm\0", payload)
+        self.assertIn(b"USE\0", payload)
+        self.assertTrue(payload.endswith(struct.pack("<i", 0)))
+
     def test_two_pvp_clients_are_assigned_together(self):
         for account_id in (1, 2):
             self.gateway.process(
