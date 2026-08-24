@@ -22,7 +22,7 @@ class Peer:
     account_id: int
     name: str
     status: int = STATUS_CONNECTED
-    flags: int = 0
+    flags: int = FLAGS_PREMIUM
     name_colour: str = ""
     icon: str = ""
     ascension_level: int = 0
