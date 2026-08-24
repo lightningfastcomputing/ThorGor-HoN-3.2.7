@@ -50,7 +50,9 @@ the supported patches locally, resets volatile state, and starts the dashboard.
 
 1. Clone or download this repository.
 2. Run `thorgor\START_STACK.bat` on the stack/host PC.
-3. On another PC with its own HoN 3.2.7.1 installation, run `remote-client\START_REMOTE_PLAYER.bat SERVER_LAN_IP` from a complete copy of this repository.
+3. On another PC with its own HoN 3.2.7.1 installation, copy the `thorgor`
+   folder and run `START_REMOTE_CLIENT.bat SERVER_LAN_IP` beside
+   `START_STACK.bat`.
 4. Use the milestone's disposable local test accounts: `pwnrbwnr / pwnrbwnr` and `player / player`.
 
 The stable launcher verifies and installs the supported named patches, resets

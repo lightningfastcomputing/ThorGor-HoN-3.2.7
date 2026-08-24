@@ -7,7 +7,7 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(prog="thorgor")
     sub = parser.add_subparsers(dest="command", required=True)
-    for service in ("master", "chat", "game-manager", "native-match-id", "manager-process", "udp-shim", "dashboard", "accounts", "cleanup", "reset-state"):
+    for service in ("master", "chat", "game-manager", "native-match-id", "manager-process", "udp-shim", "dashboard", "accounts", "cleanup", "reset-state", "remote-setup", "remote-client"):
         sub.add_parser(service, help=f"run the {service} service")
     patches = sub.add_parser("patches", help="inspect or apply named binary patches")
     patches.add_argument("action", choices=("list", "show", "apply", "install"))
@@ -41,6 +41,10 @@ def main() -> int:
             from thorgor.game_manager.runtime_state import main as entry
         elif args.command == "cleanup":
             from thorgor.game_manager.process_cleanup import main as entry
+        elif args.command == "remote-setup":
+            from thorgor.tools.remote_client import setup_main as entry
+        elif args.command == "remote-client":
+            from thorgor.tools.remote_client import main as entry
         else:
             from thorgor.tools.dashboard import main as entry
         return int(entry(passthrough) or 0)
