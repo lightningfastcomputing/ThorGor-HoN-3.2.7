@@ -488,6 +488,11 @@ class Dashboard(tk.Tk):
             "--client-route-timeout", "600", "--stats-interval", "1",
             "--route-trace-seconds", "300", "--route-trace-packets", "40000",
             "--route-trace-checkpoint-seconds", "1",
+            # Stable v65 emits the complete picking snapshot to the creator but
+            # can emit only its header to a later joiner.  The UDP bridge repairs
+            # only that exact validated truncation using the creator's blocks
+            # 3..8; every other packet remains byte-for-byte untouched.
+            "--repair-joiner-hero-blocks",
         ], PACKAGE_PARENT)
         self.after(1000, self._start_backend)
 
