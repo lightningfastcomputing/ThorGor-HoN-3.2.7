@@ -51,7 +51,7 @@ set "THORGOR_REMOTE_PARENT=!THORGOR_PARENT!"
 set "THORGOR_REMOTE_HON_HOME=!HON_HOME!"
 set "THORGOR_REMOTE_LOG=!THORGOR_PACKAGE!\var\remote_client_setup.log"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$helper=Join-Path $env:THORGOR_PACKAGE 'REMOTE_SETUP_ADMIN.ps1'; $q='"'; $a='-NoProfile -ExecutionPolicy Bypass -File '+$q+$helper+$q+' -PythonPath '+$q+$env:THORGOR_REMOTE_PYTHON+$q+' -ProjectRoot '+$q+$env:THORGOR_REMOTE_PARENT+$q+' -HonHome '+$q+$env:THORGOR_REMOTE_HON_HOME+$q+' -ServerIP '+$q+$env:THORGOR_REMOTE_SERVER_IP+$q+' -LogPath '+$q+$env:THORGOR_REMOTE_LOG+$q; try {$p=Start-Process -FilePath 'powershell.exe' -Verb RunAs -Wait -PassThru -ArgumentList $a; exit $p.ExitCode} catch {New-Item -ItemType Directory -Path (Split-Path -Parent $env:THORGOR_REMOTE_LOG) -Force ^| Out-Null; ($_ ^| Out-String) ^| Set-Content -LiteralPath $env:THORGOR_REMOTE_LOG -Encoding utf8; exit 1}"
+  "$p=Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','""!THORGOR_PACKAGE!\REMOTE_SETUP_ADMIN.ps1""','-PythonPath','""!THORGOR_REMOTE_PYTHON!""','-ProjectRoot','""!THORGOR_REMOTE_PARENT!""','-HonHome','""!THORGOR_REMOTE_HON_HOME!""','-ServerIP','!THORGOR_REMOTE_SERVER_IP!','-LogPath','""!THORGOR_REMOTE_LOG!""'; exit $p.ExitCode"
 if errorlevel 1 (
     popd
     echo.

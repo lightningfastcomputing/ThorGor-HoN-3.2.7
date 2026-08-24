@@ -33,6 +33,8 @@ class RemoteClientLauncherTests(unittest.TestCase):
         self.assertIn("[Parameter(Mandatory = $true)][string]$ServerIP", helper_source)
         self.assertIn("-PythonPath", source)
         self.assertIn("-ProjectRoot", source)
+        self.assertIn("Start-Process powershell.exe -Verb RunAs", source)
+        self.assertNotIn("$q=", source)
 
     def test_hosts_rewrite_replaces_only_prior_chat_mapping(self):
         source = (
