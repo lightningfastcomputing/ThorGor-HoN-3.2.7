@@ -16,14 +16,21 @@ The repository intentionally distributes patch logic, hashes, and documentationâ
 - K2 v65 authoritative linked-client broadcasts: `82D0363C0BC853ECD60A3AD8A62E01E2BF0897EB1644364FBAC82C7E2B48ECAB`
 - cgame v61: `88C4ACA3C31AF8948E1C2A33EEA2F6EE83888FA46A1DE8BE678DF32A958DF988`
 
-`INSTALL_V61_PATCHES.ps1` preserves verified stock backups and installs only outputs matching these hashes. The first K2 builder accepts either verified stock input above, normalizes the retired auto-patcher URL to localhost, and produces the v57 baseline. The v65 builder walks every linked client for state strings and blocks, and uses authoritative linked-list membership for dynamic block broadcasts while leaving the original queue filters intact for admission and targeted sends. If an earlier test changed a target DLL but its verified stock backup remains, the installer safely regenerates the current patch from that backup. Unknown versions without a verified stock backup are rejected.
+`python -m thorgor patches install --hon-home PATH` preserves verified stock
+and linked-delivery backups and installs only complete outputs matching the
+catalog hashes. The first K2 builder accepts either verified stock input above,
+normalizes the retired auto-patcher URL to localhost, and produces the redirect
+baseline. The linked-delivery builder walks every linked client while retaining
+the established queue filters. The final recipient fix is declarative. Unknown
+versions without a verified backup are rejected.
 
 The builders can also be invoked directly:
 
 ```text
-python patches\build_k2_v57.py INPUT_K2_DLL OUTPUT_K2_DLL
-python patches\build_k2_v65_state_delivery.py INPUT_K2_V57_DLL OUTPUT_K2_DLL
-python patches\build_cgame_v61_complete_registry_guard.py INPUT_CGAME_DLL OUTPUT_CGAME_DLL
+python -m thorgor patches apply client.server_redirects INPUT_K2_DLL OUTPUT_K2_DLL
+python -m thorgor patches apply dedicated.state_delivery_linked INPUT_K2_BASELINE_DLL OUTPUT_K2_DLL
+python -m thorgor patches apply dedicated.hero_state_recipient_fix INPUT_LINKED_K2_DLL OUTPUT_K2_DLL
+python -m thorgor patches apply dedicated.complete_registry_guard INPUT_CGAME_DLL OUTPUT_CGAME_DLL
 ```
 
 Generated DLLs, backups, candidates, and original game files are excluded by `.gitignore` and must never be committed.

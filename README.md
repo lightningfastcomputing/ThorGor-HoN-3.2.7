@@ -1,15 +1,18 @@
-# ThorGor HoN 3.2.7.1 LAN interoperability experiment
+# ThorGor HoN 3.2.7 LAN Sandbox
 
 ThorGor is an independently written, local/LAN authentication, chat, server-browser, and dedicated-server interoperability experiment for the obsolete Heroes of Newerth 3.2.7.1 client. The project is intended for protocol research, preservation, and private LAN testing.
 
-The project is now migrating toward stable subsystem boundaries under the
-`thorgor/` package. The frozen v77 launch path remains intact while the
-milestone-numbered implementations are moved behind named master, chat,
-matchmaking, game-manager, protocol, patch, and tool APIs. See
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the migration rules and
-[`docs/MATCHMAKING.md`](docs/MATCHMAKING.md) for the first two-player LAN target.
+The operational stack is self-contained under the `thorgor/` package. Master,
+chat, UDP discovery/routing, manager bridges, native match ID synchronization,
+dashboard, tools, and patch installation run from stable package modules. There
+is no compatibility loader or live legacy runtime. See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
+[`docs/MATCHMAKING.md`](docs/MATCHMAKING.md).
 
-The current frozen working milestone is **v77**. It keeps the verified cgame v61 patch and adds the K2 v77 tail-recipient state-delivery fix that restores hero portraits and hero selection for joined clients. See [the frozen-build manifest](FROZEN_WORKING_BUILD_2026-08-21.txt) and [v77 test notes](V77_TAIL_RECIPIENT_HERO_FIX_README.txt).
+The supported patch set retains the verified historical cgame v61 and K2 v77
+behavior, but those revisions are patch metadata rather than the application
+identity. See [the frozen-build manifest](FROZEN_WORKING_BUILD_2026-08-21.txt)
+and [patch catalog](docs/PATCH_CATALOG.md).
 
 ## No game files are included
 
@@ -28,39 +31,43 @@ Python 3.10 or newer is required on the stack/host PC by the frozen v77 launcher
 
 ## One-command acquire, install, and run
 
-After the requirements above are installed, paste this single line into PowerShell on the stack/host PC. It clones the current `main` branch into `%USERPROFILE%\ThorGor-HoN-3.2.7`, safely fast-forwards a clean existing clone, then installs K2 v77 plus cgame v61 and launches the LAN stack with the required administrator prompt:
+After cloning the refactored branch, launch the stable package entrypoint:
 
 ```powershell
-$branch='main'; $dir=Join-Path $env:USERPROFILE 'ThorGor-HoN-3.2.7'; if(Test-Path (Join-Path $dir '.git')){if(git -C $dir status --porcelain){throw "Existing ThorGor clone has local changes: $dir"}; git -C $dir fetch origin "refs/heads/${branch}:refs/remotes/origin/${branch}"; if($LASTEXITCODE -ne 0){throw 'Git fetch failed'}; git -C $dir show-ref --verify --quiet "refs/heads/$branch"; if($LASTEXITCODE -eq 0){git -C $dir switch $branch}else{git -C $dir switch -c $branch "refs/remotes/origin/$branch"}; if($LASTEXITCODE -ne 0){throw 'Could not switch to main'}; git -C $dir pull --ff-only origin $branch}else{git clone --branch $branch --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git $dir}; if($LASTEXITCODE -ne 0){throw 'Git acquire/update failed'}; Start-Process -FilePath (Join-Path $dir 'START_V77_TAIL_RECIPIENT_HERO_FIX.bat') -Verb RunAs -WorkingDirectory $dir
+thorgor\START_STACK.bat
 ```
 
-This one-liner is verified on a clean Windows machine with HoN installed at `C:\Program Files (x86)\Heroes of Newerth`. The installer automatically advances the verified K2 v57 baseline (`6F5F...`) through v65 (`82D0...`) to v77 (`25B1...`), verifies cgame v61 (`88C4...`), and then starts the dashboard. Do not manually replace the DLLs between stages.
+Set `HON_HOME` first to use an installation other than
+`C:\intelprop\Heroes of Newerth`. The package installer advances a verified
+stock K2 through the required baseline chain, verifies cgame, preserves
+hash-checked backups, and rejects unknown inputs.
 
-The repository supplies independently built ThorGor executables, but no HoN binaries or assets. During startup, the installers verify the user-supplied 3.2.7.1 DLL hashes, generate the K2 v77 and cgame v61 interoperability patches locally, preserve verified backups, reset volatile test state, provision the disposable test accounts, and start the dashboard.
+The repository supplies ThorGor source but no HoN binaries or assets. During
+startup, the installer verifies the user-supplied 3.2.7.1 DLL hashes, generates
+the supported patches locally, resets volatile state, and starts the dashboard.
 
 ## First run
 
 1. Clone or download this repository.
-2. Run `START_V77_TAIL_RECIPIENT_HERO_FIX.bat` on the stack/host PC.
+2. Run `thorgor\START_STACK.bat` on the stack/host PC.
 3. On another PC with its own HoN 3.2.7.1 installation, run `remote-client\START_REMOTE_PLAYER.bat SERVER_LAN_IP` from a complete copy of this repository.
 4. Use the milestone's disposable local test accounts: `pwnrbwnr / pwnrbwnr` and `player / player`.
 
-The v77 launcher verifies and installs K2 v77 plus cgame v61, resets volatile runtime state, preserves the proven startup order, and automatically provisions the two disposable test accounts. `MANAGE_ACCOUNTS.bat` remains available for adding unique accounts.
+The stable launcher verifies and installs the supported named patches, resets
+volatile state, preserves the proven startup order, and opens the dashboard.
+Run `python -m thorgor accounts` to manage local accounts.
 
 ## Main components
 
-- `thorgor_hon_sandboxed_masterserver_v39.py` — local authentication and server-list experiment
-- `chat-server/thorgor_hon_chatserver_v13.py` — LAN chat experiment
-- `hon_udp_shim.py` — multi-client UDP routing and browser bridge
-- `hon_manager_status_bridge_v42.py` — manager/slave status bridge
-- `hon_native_matchid_bridge_v47.py` — native match-ID bridge
-- `hon_v49_dashboard.py` — local stack dashboard
-- `ThorGor*.exe` — PyInstaller one-file launchers for running without Python
-- `BUILD_COMPILED.ps1` — reproducible local build recipe for the launchers
-- `patches/` — source-only, hash-gated binary patch generators
-- `legacy/` — retired launchers, patch experiments, and milestone notes retained for history
-- `REMOTE HOST/` — self-contained copy of the v65/v61 DLL patch installers and builders
-- `tests/` — protocol and patch-manifest regression tests
+- `thorgor/master/` — local authentication, sessions, and server-list service
+- `thorgor/chat/` — LAN chat service and framing
+- `thorgor/protocols/` — master, chat, UDP discovery, and game protocol behavior
+- `thorgor/game_manager/` — authentic manager/slave orchestration and lifecycle
+- `thorgor/patches/` — named, hash-gated patch manifests/builders/installer
+- `thorgor/tools/` — dashboard, accounts, and packet evidence
+- `thorgor/matchmaking/` — tested domain core; live client protocol is explicitly incomplete
+- `legacy/` and root milestone files — historical/reference material, not production execution
+- `tests/` — characterization, parity, architecture, and patch regression tests
 
 ## Stable developer interface
 
@@ -68,13 +75,13 @@ The new package can be used directly from the repository without installation:
 
 ```powershell
 python -m thorgor patches list
+python -m thorgor dashboard
 python -m unittest discover -s tests -v
 ```
 
 New code should import from `thorgor.master`, `thorgor.chat`,
-`thorgor.matchmaking`, `thorgor.game_manager`, or `thorgor.protocols` instead
-of importing version-numbered scripts. The compatibility layer is intentionally
-temporary and is tracked in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+`thorgor.matchmaking`, `thorgor.game_manager`, `thorgor.protocols`, or
+`thorgor.patches`. Numbered root scripts are reference evidence only.
 
 ## Security and privacy
 

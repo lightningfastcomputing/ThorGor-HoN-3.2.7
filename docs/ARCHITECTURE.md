@@ -1,39 +1,51 @@
 # ThorGor architecture
 
-ThorGor is moving from milestone-numbered scripts to stable subsystem names.
-The frozen v77 behavior remains available throughout the migration.
+ThorGor HoN 3.2.7 LAN Sandbox is a self-contained Python package. Production
+execution does not use a compatibility loader or a bundled legacy runtime.
 
 ## Runtime flow
 
 ```text
-client -> master/auth -> chat -> matchmaking or game creation
-       -> game manager -> dedicated slave -> lobby/match -> frontend
+client -> master/auth -> chat -> server discovery
+       -> manager -> logical slave -> sleeping dedicated child
+       -> allocation -> wake/StartGame -> lobby/match
 ```
+
+The stock manager/dedicated relationship is preserved. ThorGor does not replace
+it with a direct dedicated-process shortcut.
 
 ## Package boundaries
 
-- `thorgor.master`: accounts, SRP authentication, sessions, and the master HTTP service.
-- `thorgor.chat`: protocol framing, channel state, and the chat TCP service.
-- `thorgor.matchmaking`: queue policy, match formation, and connection assignments.
-- `thorgor.game_manager`: dedicated-server registry and match lifecycle.
-- `thorgor.protocols`: named master, chat, and game wire formats.
-- `thorgor.patches`: patch identities, manifests, validation, and generation.
-- `thorgor.tools`: packet evidence, account management, and the dashboard.
+- `thorgor.master`: accounts, SRP authentication, sessions, and HTTP service.
+- `thorgor.chat`: chat framing, compatibility responses, channels, and TCP service.
+- `thorgor.protocols`: master, chat, UDP discovery, routing, and game wire behavior.
+- `thorgor.game_manager`: manager process, control bridge, native match ID,
+  runtime state, registry, and lifecycle.
+- `thorgor.matchmaking`: tested queue/assignment domain logic and explicit
+  integration status.
+- `thorgor.patches`: semantic manifests, frozen builders, verification, and install.
+- `thorgor.tools`: dashboard, account manager, and packet evidence.
 
-## Migration rule
+Dependencies point from tools to services and from services to domain/protocol
+modules. Protocol modules do not own GUI or process orchestration.
 
-Stable modules may temporarily delegate to a frozen implementation through
-`thorgor.compat`. No new feature should import a version-numbered script
-directly. Each adapter is removed only after protocol regression tests cover
-the migrated behavior.
+## Runtime data
 
-This creates a one-way migration: launchers stay operational, callers gain
-stable imports immediately, and reverse-engineered behavior moves in small,
-testable slices.
+Mutable databases, logs, captures, and shared compatibility state live under
+`thorgor/var` by default. Set `THORGOR_DATA_HOME` to relocate them. This folder
+is generated and excluded from source control.
 
-## State ownership
+The shared readiness JSON remains a compatibility transport among independently
+running processes. Consolidating its ownership is future work and must be done
+as a separately tested behavior change.
 
-The existing shared JSON readiness file remains a compatibility transport.
-The target owner is `game_manager.ServerRegistry`; the manager bridge will
-publish typed state transitions there before the JSON file is retired.
+## Supported launch path
 
+`thorgor/START_STACK.bat` locates Python, verifies/installs named patches,
+cleans stale stack processes, resets volatile state, and runs:
+
+```powershell
+python -m thorgor dashboard
+```
+
+Every service subprocess is launched with a stable `thorgor.*` module name.

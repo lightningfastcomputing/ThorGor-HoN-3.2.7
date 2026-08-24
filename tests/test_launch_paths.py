@@ -67,7 +67,7 @@ class LaunchPathTests(unittest.TestCase):
         self.assertNotIn("FIND_PYTHON.ps1", server)
         self.assertIn("CHECK_HON_PLAYER_NOT_RUNNING.ps1", remote)
         self.assertIn("_service_command", dashboard)
-        self.assertIn("ThorGor*.exe", self.read("README.md"))
+        self.assertIn("thorgor\\START_STACK.bat", self.read("README.md"))
 
     def test_dashboard_launcher_checks_early_process_exit(self):
         launcher = self.read("START_DASHBOARD.ps1")
