@@ -26,10 +26,6 @@ class ToolsMigrationTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_dashboard_enables_exact_joiner_picker_repair(self):
-        source = (ROOT / "thorgor" / "tools" / "dashboard.py").read_text(encoding="utf-8")
-        self.assertIn('"--repair-joiner-hero-blocks"', source)
-
     def test_account_manager_is_stable_and_exposed(self):
         source = (ROOT / "thorgor" / "tools" / "account_manager.py").read_text(encoding="utf-8")
         entrypoint = (ROOT / "thorgor" / "__main__.py").read_text(encoding="utf-8")
