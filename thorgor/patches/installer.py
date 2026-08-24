@@ -12,6 +12,7 @@ K2_STOCK_BACKUP = "k2.dll.thorgor_stock_3.2.7.1"
 K2_LINKED_BACKUP = "k2.dll.thorgor_linked_delivery_baseline"
 K2_HISTORICAL_LINKED_BACKUP = "k2.dll.thorgor_v65_before_v75"
 K2_PRE_RECIPIENT_BACKUP = "k2.dll.thorgor_before_recipient_fix"
+K2_EXPERIMENTAL_RECIPIENT_BACKUP = "k2.dll.thorgor_experimental_v77"
 CGAME_STOCK_BACKUP = "cgame.dll.thorgor_stock_3.2.7.1"
 
 
@@ -54,8 +55,15 @@ def install_k2(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
         raise FileNotFoundError(f"k2.dll not found: {target}")
 
     current = file_hash(target)
+    if current == linked.output_sha256:
+        return "K2 stable linked-delivery baseline is already installed."
+
     if current == recipient.output_sha256:
-        return "K2 recipient hero-state fix is already installed."
+        _preserve_verified(
+            target,
+            hon_home / K2_EXPERIMENTAL_RECIPIENT_BACKUP,
+            recipient.output_sha256,
+        )
 
     linked_source: Path | None = target if current == linked.output_sha256 else None
     if linked_source is None:
@@ -84,9 +92,11 @@ def install_k2(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
 
     semantic_linked = hon_home / K2_LINKED_BACKUP
     _preserve_verified(linked_source, semantic_linked, linked.output_sha256)
-    shutil.copy2(target, hon_home / K2_PRE_RECIPIENT_BACKUP)
-    _replace_from_patch(recipient, linked_source, target)
-    return "Installed K2 recipient hero-state fix from the verified linked-delivery baseline."
+    if linked_source.resolve() != target.resolve():
+        shutil.copy2(linked_source, target)
+    if file_hash(target) != linked.output_sha256:
+        raise ValueError("could not install the verified K2 linked-delivery baseline")
+    return "Installed K2 stable linked-delivery baseline; experimental v77 is disabled."
 
 
 def install_cgame(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
@@ -119,7 +129,7 @@ def install_supported_patches(hon_home: Path) -> tuple[str, str]:
 def verify_supported_install(hon_home: Path) -> tuple[str, str]:
     catalog = PatchCatalog()
     expected = (
-        (hon_home / "k2.dll", catalog.get("dedicated.hero_state_recipient_fix").output_sha256),
+        (hon_home / "k2.dll", catalog.get("dedicated.state_delivery_linked").output_sha256),
         (hon_home / "game" / "cgame.dll", catalog.get("dedicated.complete_registry_guard").output_sha256),
     )
     verified = []

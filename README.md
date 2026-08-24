@@ -9,7 +9,7 @@ is no compatibility loader or live legacy runtime. See
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
 [`docs/MATCHMAKING.md`](docs/MATCHMAKING.md).
 
-The supported patch set retains the verified historical cgame v61 and K2 v77
+The supported patch set retains the verified historical cgame v61 and stable K2 v65
 behavior, but those revisions are patch metadata rather than the application
 identity. See [the frozen-build manifest](FROZEN_WORKING_BUILD_2026-08-21.txt)
 and [patch catalog](docs/PATCH_CATALOG.md).
@@ -27,7 +27,7 @@ The patch installers verify exact SHA-256 hashes, generate the interoperability 
 - A user-supplied HoN 3.2.7.1 installation at `C:\intelprop\Heroes of Newerth` or `C:\Program Files (x86)\Heroes of Newerth`
 - Administrator approval for hosts-file, firewall, and Program Files changes
 
-Python 3.10 or newer is required on the stack/host PC by the frozen v77 launcher. PyInstaller is needed only when rebuilding the checked-in executables from source.
+Python 3.10 or newer is required on the stack/host PC. PyInstaller is needed only when rebuilding the checked-in executables from source.
 
 ## One-command acquire, install, and run
 

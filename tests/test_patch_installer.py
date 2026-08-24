@@ -5,6 +5,7 @@ from pathlib import Path
 
 from thorgor.patches.installer import (
     CGAME_STOCK_BACKUP,
+    K2_EXPERIMENTAL_RECIPIENT_BACKUP,
     K2_LINKED_BACKUP,
     K2_STOCK_BACKUP,
     install_cgame,
@@ -72,7 +73,7 @@ class PatchInstallerTests(unittest.TestCase):
             target = home / "k2.dll"
             target.write_bytes(b"ABCD")
             install_k2(home, catalog)
-            self.assertEqual(target.read_bytes(), b"AXYZ")
+            self.assertEqual(target.read_bytes(), b"AXYD")
             self.assertEqual((home / K2_STOCK_BACKUP).read_bytes(), b"ABCD")
             self.assertEqual((home / K2_LINKED_BACKUP).read_bytes(), b"AXYD")
             self.assertIn("already installed", install_k2(home, catalog))
@@ -84,7 +85,21 @@ class PatchInstallerTests(unittest.TestCase):
             (home / "k2.dll").write_bytes(b"unsupported")
             (home / K2_LINKED_BACKUP).write_bytes(b"AXYD")
             install_k2(home, catalog)
-            self.assertEqual((home / "k2.dll").read_bytes(), b"AXYZ")
+            self.assertEqual((home / "k2.dll").read_bytes(), b"AXYD")
+
+    def test_k2_rolls_experimental_recipient_build_back_to_linked_baseline(self):
+        catalog = FixtureCatalog()
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            target = home / "k2.dll"
+            target.write_bytes(b"AXYZ")
+            (home / K2_LINKED_BACKUP).write_bytes(b"AXYD")
+            install_k2(home, catalog)
+            self.assertEqual(target.read_bytes(), b"AXYD")
+            self.assertEqual(
+                (home / K2_EXPERIMENTAL_RECIPIENT_BACKUP).read_bytes(),
+                b"AXYZ",
+            )
 
     def test_cgame_clean_install_and_idempotence(self):
         catalog = FixtureCatalog()
