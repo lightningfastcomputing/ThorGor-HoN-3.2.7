@@ -58,6 +58,15 @@ class AccountStore:
                 casual TEXT NOT NULL DEFAULT '', match_mode TEXT NOT NULL DEFAULT '',
                 accounts TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+            db.execute("""CREATE TABLE IF NOT EXISTS friend_requests (
+                requester_id INTEGER NOT NULL, target_id INTEGER NOT NULL,
+                notification_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (requester_id, target_id))""")
+            db.execute("""CREATE TABLE IF NOT EXISTS friends (
+                account_id INTEGER NOT NULL, friend_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (account_id, friend_id))""")
             columns = {row[1] for row in db.execute("PRAGMA table_info(accounts)")}
             if "password" not in columns: db.execute("ALTER TABLE accounts ADD COLUMN password TEXT")
             db.commit()
@@ -118,6 +127,43 @@ class AccountStore:
     def list_accounts(self) -> list[Account]:
         with self.lock, self.connect() as db: rows = db.execute("SELECT account_id,username,password,nickname,enabled FROM accounts ORDER BY account_id").fetchall()
         return [self._account(row) for row in rows]
+
+    def approve_friend_notification(self, target_id: int, notification_id: int) -> Account | None:
+        """Atomically accept the pending request represented by a master notification."""
+        with self.lock, self.connect() as db:
+            row = db.execute("""SELECT a.account_id,a.username,a.password,a.nickname,a.enabled
+                FROM friend_requests r JOIN accounts a ON a.account_id=r.requester_id
+                WHERE r.target_id=? AND r.notification_id=?""",
+                (target_id, notification_id)).fetchone()
+            if row is None:
+                return None
+            requester = self._account(row)
+            db.execute("INSERT OR IGNORE INTO friends (account_id,friend_id) VALUES (?,?)",
+                       (target_id, requester.account_id))
+            db.execute("INSERT OR IGNORE INTO friends (account_id,friend_id) VALUES (?,?)",
+                       (requester.account_id, target_id))
+            db.execute("DELETE FROM friend_requests WHERE target_id=? AND notification_id=?",
+                       (target_id, notification_id))
+            db.commit()
+            return requester
+
+    def list_friends(self, account_id: int) -> list[Account]:
+        with self.lock, self.connect() as db:
+            rows = db.execute("""SELECT a.account_id,a.username,a.password,a.nickname,a.enabled
+                FROM friends f JOIN accounts a ON a.account_id=f.friend_id
+                WHERE f.account_id=? AND a.enabled=1 ORDER BY a.nickname COLLATE NOCASE""",
+                (account_id,)).fetchall()
+        return [self._account(row) for row in rows]
+
+    def pending_friend_notifications(self, target_id: int) -> list[tuple[Account, int, str]]:
+        with self.lock, self.connect() as db:
+            rows = db.execute("""SELECT a.account_id,a.username,a.password,a.nickname,a.enabled,
+                    r.notification_id,r.created_at
+                FROM friend_requests r JOIN accounts a ON a.account_id=r.requester_id
+                WHERE r.target_id=? ORDER BY r.created_at,r.requester_id""",
+                (target_id,)).fetchall()
+        return [(self._account(row), int(row["notification_id"]), str(row["created_at"]))
+                for row in rows]
 
     def set_enabled(self, username: str, enabled: bool) -> bool:
         with self.lock, self.connect() as db:

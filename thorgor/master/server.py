@@ -726,7 +726,8 @@ def preauth_payload(session: Session) -> dict[Any, Any]:
     }
 
 
-def success_payload(session: Session, cookie: str | None = None) -> dict[Any, Any]:
+def success_payload(session: Session, cookie: str | None = None,
+                    store: AccountStore | None = None) -> dict[Any, Any]:
     """
     Minimal typed account payload reconstructed from FUN_15317110.
 
@@ -782,10 +783,43 @@ def success_payload(session: Session, cookie: str | None = None) -> dict[Any, An
             }
         ]
 
+    if store is not None:
+        friends = store.list_friends(session.account_id)
+        payload["buddy_list"] = {
+            session.account_id: {
+                friend.account_id: {
+                    "buddy_id": friend.account_id,
+                    "group": "",
+                    "clan_tag": "",
+                    "status": 2,
+                    "nickname": friend.nickname,
+                    "standing": 3,
+                    "inactive": "0",
+                    "new": "0",
+                }
+                for friend in friends
+            }
+        }
+        notifications = []
+        for requester, notification_id, created_at in store.pending_friend_notifications(
+                session.account_id):
+            try:
+                notification_time = datetime.fromisoformat(created_at).strftime("%d/%m  %H:%M")
+            except ValueError:
+                notification_time = datetime.now().strftime("%d/%m  %H:%M")
+            notifications.append({
+                "notification": (
+                    f"{requester.nickname}||23||||{notification_time}|{notification_id}"
+                ),
+                "notify_id": notification_id,
+            })
+        payload["notifications"] = notifications
+
     return payload
 
 
-def delete_notification_response(params: dict[str, list[str]]) -> dict[str, str]:
+def delete_notification_response(params: dict[str, list[str]],
+                                 store: AccountStore | None = None) -> dict[str, str]:
     """Return the exact HoN client_requester notification acknowledgement.
 
     The client treats a generic success envelope as a failed notification
@@ -793,8 +827,25 @@ def delete_notification_response(params: dict[str, list[str]]) -> dict[str, str]
     intentionally idempotent; the chat social service owns the pending friend
     request until an approval packet is accepted.
     """
+    notify_id = params.get("notify_id", ["0"])[0]
+    if store is not None:
+        cookie = params.get("cookie", [""])[0]
+        authorization = store.get_game_authorization(cookie) if cookie else None
+        try:
+            parsed_notification_id = int(notify_id)
+        except ValueError:
+            parsed_notification_id = 0
+        if authorization is not None and parsed_notification_id:
+            approved = store.approve_friend_notification(
+                authorization.account.account_id, parsed_notification_id,
+            )
+            server_log(
+                f"FRIEND_NOTIFICATION_ACCEPTED target={authorization.account.nickname!r} "
+                f"requester={approved.nickname if approved else None!r} "
+                f"notification_id={parsed_notification_id}"
+            )
     return {
-        "notify_id": params.get("notify_id", ["0"])[0],
+        "notify_id": notify_id,
         "internal_id": params.get("internal_id", ["0"])[0],
         "status": "OK",
     }
@@ -1481,7 +1532,7 @@ class Handler(BaseHTTPRequestHandler):
             )
             self.send_php(response)
         elif function == "delete_notification":
-            self.send_php(delete_notification_response(params))
+            self.send_php(delete_notification_response(params, ACCOUNTS))
         elif function in {"matchmaking_join", "matchmaking_poll", "matchmaking_leave"}:
             if MATCHMAKING is None:
                 self.send_php(error_payload("Matchmaking service unavailable"))
@@ -1633,7 +1684,7 @@ class Handler(BaseHTTPRequestHandler):
             raise RuntimeError("Account database is not initialized")
         authorization = ACCOUNTS.register_game_authorization(session.account_id)
         log(f"***** SRP AUTHENTICATION SUCCESSFUL: {username!r} *****")
-        self.send_php(success_payload(session, authorization.cookie))
+        self.send_php(success_payload(session, authorization.cookie, ACCOUNTS))
 
 
 class Server(ThreadingHTTPServer):

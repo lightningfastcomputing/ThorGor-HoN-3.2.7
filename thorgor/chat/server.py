@@ -543,8 +543,6 @@ class ChatConnection(socketserver.BaseRequestHandler):
         self.send_packet(HON_SC_AUTH_ACCEPTED)
         if not self.state.is_host:
             broadcast_player_count()
-            if SOCIAL is not None:
-                SOCIAL.deliver_pending(self.state.account_id)
         log(f"AUTH ACCEPTED | {self.peer} | account={account.username!r} nickname={account.nickname!r} protocol={info['protocol']}")
         threading.Thread(target=self.heartbeat, daemon=True).start()
 
