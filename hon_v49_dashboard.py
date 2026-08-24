@@ -26,6 +26,7 @@ from tkinter import ttk, messagebox
 
 IS_FROZEN = bool(getattr(sys, "frozen", False))
 ROOT = Path(sys.executable).resolve().parent if IS_FROZEN else Path(__file__).resolve().parent
+PACKAGE_PARENT = ROOT.parents[1] if ROOT.name == "runtime" and ROOT.parent.name == "thorgor" else ROOT
 HON_HOME = Path(os.environ.get("THORGOR_HON_HOME", r"C:\Program Files (x86)\Heroes of Newerth"))
 HON_EXE = HON_HOME / "hon.exe"
 LOG_DIR = ROOT / "dashboard_logs"
@@ -117,6 +118,9 @@ def _native_child_dll_search():
 
 def _service_command(executable: Path, script: Path) -> list[str]:
     return [str(executable)] if IS_FROZEN else [PYTHON, str(script)]
+
+def _module_command(module: str) -> list[str]:
+    return [PYTHON, "-m", module]
 
 def _debug_output_dir() -> Path:
     # Program Files is normally not writable by a non-elevated dashboard.
@@ -463,12 +467,12 @@ class Dashboard(tk.Tk):
 
     def start_stack(self) -> None:
         # Exact v49 LAN command arguments and original startup order.
-        launch("master", _service_command(MASTER_EXE, ROOT / "thorgor_hon_sandboxed_masterserver_v39.py") + [
+        launch("master", _module_command("thorgor.master.server") + [
             "--host", "0.0.0.0", "--port", "80", "--password-chain", "pre-md5",
             "--chat-host", LAN_IP, "--server-list-ip", LAN_IP, "--server-list-port", "11236",
             "--match-server-ip", "127.0.0.1", "--match-server-port", "11235",
             "--match-server-location", "USE",
-        ])
+        ], PACKAGE_PARENT)
         self.after(2000, self._start_chat)
 
     def _start_chat(self) -> None:

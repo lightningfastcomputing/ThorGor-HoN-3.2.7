@@ -11,7 +11,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import thorgor_hon_sandboxed_masterserver_v39 as backend
+from thorgor.master import server as backend
 
 
 class BackendProtocolTests(unittest.TestCase):

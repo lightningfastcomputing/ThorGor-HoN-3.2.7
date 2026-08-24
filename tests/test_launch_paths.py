@@ -86,6 +86,14 @@ class LaunchPathTests(unittest.TestCase):
         self.assertIn(r"THORGOR_PACKAGE!\runtime", launcher)
         self.assertNotIn(r"set \"THORGOR_ROOT=%~dp0..", launcher)
 
+    def test_staged_dashboard_launches_stable_master_module(self):
+        dashboard = self.read("thorgor/runtime/hon_v49_dashboard.py")
+        self.assertIn('_module_command("thorgor.master.server")', dashboard)
+        self.assertNotIn(
+            '_service_command(MASTER_EXE, ROOT / "thorgor_hon_sandboxed_masterserver_v39.py")',
+            dashboard,
+        )
+
     def test_v75_launcher_installs_server_side_fix_without_proxy_injection(self):
         launcher = self.read("legacy/START_V75_SERVER_HERO_STATE_FIX.bat")
         dashboard = self.read("hon_v49_dashboard.py")
