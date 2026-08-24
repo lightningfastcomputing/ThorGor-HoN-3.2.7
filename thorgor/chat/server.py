@@ -44,6 +44,7 @@ from thorgor.matchmaking.chat_gateway import MatchmakingChatGateway
 from thorgor.matchmaking.endpoint import DedicatedServerAllocator, MatchmakingEndpoint
 from thorgor.protocols import matchmaking_protocol as tmm_wire
 from .protocol import cstr, encode_packet, encode_player_count, extract_packet, read_cstr
+from . import presence
 from .social import FRIEND_APPROVE, FRIEND_REQUEST, SocialService
 
 APP_NAME = "ThorGor HoN 3.2.7 LAN Chat Service"
@@ -53,6 +54,7 @@ DEFAULT_NICK = "Guest"
 ACCOUNT_DB_PATH: Path | None = None
 MATCHMAKING: MatchmakingChatGateway | None = None
 SOCIAL: SocialService | None = None
+ACCOUNT_STORE: AccountStore | None = None
 
 # 16-bit special commands
 HON_CS_AUTH_INFO = 0x0C00
@@ -427,6 +429,57 @@ def broadcast_player_count() -> None:
     log(f"PLAYER COUNT | online={count} sessions={len(states)}")
 
 
+def account_for_name(name: str):
+    if ACCOUNT_STORE is None:
+        return None
+    folded = name.casefold()
+    return next((account for account in ACCOUNT_STORE.list_accounts()
+                 if account.username.casefold() == folded
+                 or account.nickname.casefold() == folded), None)
+
+
+def peer_for_account(account_id: int, *, online: bool | None = None) -> presence.Peer | None:
+    if ACCOUNT_STORE is None:
+        return None
+    account = next((candidate for candidate in ACCOUNT_STORE.list_accounts()
+                    if candidate.account_id == account_id), None)
+    if account is None:
+        return None
+    if online is None:
+        online = account_is_online(account_id)
+    return presence.Peer(
+        account.account_id, account.nickname,
+        presence.STATUS_CONNECTED if online else presence.STATUS_DISCONNECTED,
+    )
+
+
+def friend_ids(account_id: int) -> set[int]:
+    if ACCOUNT_STORE is None:
+        return set()
+    return {friend.account_id for friend in ACCOUNT_STORE.list_friends(account_id)}
+
+
+def send_initial_friend_status(state: ClientState) -> None:
+    peers = []
+    for account_id in sorted(friend_ids(state.account_id)):
+        if account_is_online(account_id):
+            peer = peer_for_account(account_id, online=True)
+            if peer is not None:
+                peers.append(peer)
+    state.handler.send_packet(presence.CHAT_CMD_INITIAL_STATUS, presence.initial_status(peers))
+    log(f"FRIEND INITIAL STATUS | account={state.nickname!r} online_peers={len(peers)}")
+
+
+def broadcast_friend_status(state: ClientState, online: bool) -> None:
+    peer = peer_for_account(state.account_id, online=online)
+    if peer is None:
+        return
+    payload = presence.status_update(peer)
+    for friend_id in friend_ids(state.account_id):
+        send_to_account(friend_id, presence.CHAT_CMD_UPDATE_STATUS, payload)
+    log(f"FRIEND STATUS | account={state.nickname!r} online={online}")
+
+
 class ChatConnection(socketserver.BaseRequestHandler):
     def setup(self):
         self.peer = f"{self.client_address[0]}:{self.client_address[1]}"
@@ -449,6 +502,8 @@ class ChatConnection(socketserver.BaseRequestHandler):
             v31_update_state(manager_chat_connected=False)
         WORLD.unregister(self.state)
         if self.authed and not self.state.is_host:
+            if not account_is_online(self.state.account_id):
+                broadcast_friend_status(self.state, False)
             broadcast_player_count()
         if self.state.is_host:
             host_log(f"DISCONNECT account={self.state.username!r} peer={self.peer}")
@@ -543,6 +598,8 @@ class ChatConnection(socketserver.BaseRequestHandler):
         self.send_packet(HON_SC_AUTH_ACCEPTED)
         if not self.state.is_host:
             broadcast_player_count()
+            send_initial_friend_status(self.state)
+            broadcast_friend_status(self.state, True)
         log(f"AUTH ACCEPTED | {self.peer} | account={account.username!r} nickname={account.nickname!r} protocol={info['protocol']}")
         threading.Thread(target=self.heartbeat, daemon=True).start()
 
@@ -781,6 +838,41 @@ class ChatConnection(socketserver.BaseRequestHandler):
             self.channel_message(payload)
         elif command == HON_CS_LEAVE_CHANNEL:
             log(f"LEAVE CHANNEL | {self.peer}")
+        elif command == presence.NET_CHAT_CL_GET_USER_STATUS:
+            try:
+                target_name, _ = read_cstr(payload)
+                target = account_for_name(target_name)
+                if target is not None:
+                    peer = peer_for_account(target.account_id)
+                    if peer is not None:
+                        self.send_packet(presence.CHAT_CMD_UPDATE_STATUS,
+                                         presence.status_update(peer))
+                log(f"FRIEND STATUS QUERY | from={self.state.nickname!r} target={target_name!r}")
+            except ValueError as exc:
+                log(f"FRIEND STATUS QUERY ERROR | account={self.state.username!r} error={exc!r}")
+        elif command == presence.CHAT_CMD_IM:
+            try:
+                message = presence.InstantMessageRequest.decode(payload)
+                target = account_for_name(message.target_name)
+                target_online = target is not None and account_is_online(target.account_id)
+                if not target_online or target is None:
+                    self.send_packet(presence.CHAT_CMD_IM_FAILED,
+                                     presence.failed_message(message.target_name))
+                elif message.send_client_information:
+                    sender_peer = peer_for_account(self.state.account_id, online=True)
+                    target_peer = peer_for_account(target.account_id, online=True)
+                    if sender_peer is None or target_peer is None:
+                        raise ValueError("instant-message account metadata is unavailable")
+                    send_to_account(target.account_id, presence.CHAT_CMD_IM,
+                                    presence.first_contact(1, sender_peer, message.message))
+                    self.send_packet(presence.CHAT_CMD_IM,
+                                     presence.first_contact(2, target_peer, message.message))
+                else:
+                    send_to_account(target.account_id, presence.CHAT_CMD_IM,
+                                    presence.subsequent_message(self.state.nickname, message.message))
+                log(f"IM | from={self.state.nickname!r} to={message.target_name!r} online={target_online}")
+            except (ValueError, struct.error) as exc:
+                log(f"IM ERROR | account={self.state.username!r} error={exc!r} payload={payload.hex()}")
         elif command == FRIEND_REQUEST:
             try:
                 target_name, _ = read_cstr(payload)
@@ -888,7 +980,7 @@ def main(argv: list[str] | None = None):
                         help="Client-visible ThorGor UDP port for matchmaking assignments")
     args = parser.parse_args(argv)
 
-    global ACCOUNT_DB_PATH, MATCHMAKING, SOCIAL
+    global ACCOUNT_DB_PATH, MATCHMAKING, SOCIAL, ACCOUNT_STORE
     try:
         ACCOUNT_DB_PATH = discover_account_db(args.db)
     except (FileNotFoundError, RuntimeError) as exc:
@@ -905,6 +997,7 @@ def main(argv: list[str] | None = None):
         return bool(status in (0, 1) and (manager_ready or chat_ready))
 
     store = AccountStore(ACCOUNT_DB_PATH)
+    ACCOUNT_STORE = store
     SOCIAL = SocialService(store, send_to_account, account_is_online)
     MATCHMAKING = MatchmakingChatGateway(
         MatchmakingEndpoint(
