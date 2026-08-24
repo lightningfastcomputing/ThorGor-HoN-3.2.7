@@ -55,15 +55,8 @@ def install_k2(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
         raise FileNotFoundError(f"k2.dll not found: {target}")
 
     current = file_hash(target)
-    if current == linked.output_sha256:
-        return "K2 stable linked-delivery baseline is already installed."
-
     if current == recipient.output_sha256:
-        _preserve_verified(
-            target,
-            hon_home / K2_EXPERIMENTAL_RECIPIENT_BACKUP,
-            recipient.output_sha256,
-        )
+        return "K2 v77 tail-recipient hero-state fix is already installed."
 
     linked_source: Path | None = target if current == linked.output_sha256 else None
     if linked_source is None:
@@ -96,7 +89,15 @@ def install_k2(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
         shutil.copy2(linked_source, target)
     if file_hash(target) != linked.output_sha256:
         raise ValueError("could not install the verified K2 linked-delivery baseline")
-    return "Installed K2 stable linked-delivery baseline; experimental v77 is disabled."
+    _preserve_verified(
+        target,
+        hon_home / K2_PRE_RECIPIENT_BACKUP,
+        linked.output_sha256,
+    )
+    _replace_from_patch(recipient, target, target)
+    if file_hash(target) != recipient.output_sha256:
+        raise ValueError("could not install the verified K2 v77 recipient fix")
+    return "Installed K2 v77 tail-recipient hero-state delivery from the verified v65 baseline."
 
 
 def install_cgame(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
@@ -129,7 +130,7 @@ def install_supported_patches(hon_home: Path) -> tuple[str, str]:
 def verify_supported_install(hon_home: Path) -> tuple[str, str]:
     catalog = PatchCatalog()
     expected = (
-        (hon_home / "k2.dll", catalog.get("dedicated.state_delivery_linked").output_sha256),
+        (hon_home / "k2.dll", catalog.get("dedicated.hero_state_recipient_fix").output_sha256),
         (hon_home / "game" / "cgame.dll", catalog.get("dedicated.complete_registry_guard").output_sha256),
     )
     verified = []
