@@ -71,20 +71,6 @@ def chat_reachable(server_ip: str, timeout: float = 4.0) -> bool:
         return False
 
 
-def player_is_running() -> bool:
-    if os.name != "nt":
-        return False
-    result = subprocess.run(
-        ["tasklist.exe", "/FI", "IMAGENAME eq hon.exe", "/FO", "CSV", "/NH"],
-        capture_output=True,
-        text=True,
-        errors="replace",
-        timeout=10,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-    )
-    return result.returncode == 0 and '"hon.exe"' in result.stdout.casefold()
-
-
 def setup(hon_home: Path, server_ip: str) -> None:
     for message in install_supported_patches(hon_home):
         print(message)
@@ -96,8 +82,6 @@ def launch(hon_home: Path, server_ip: str) -> int:
     server_ip = ipv4(server_ip)
     if not chat_reachable(server_ip):
         raise ConnectionError(f"ThorGor chat is unreachable at {server_ip}:11031")
-    if player_is_running():
-        raise RuntimeError("A HoN player is already running on this PC")
     command = player_command(hon_home, server_ip)
     subprocess.Popen(command, cwd=hon_home)
     print(f"Started HoN against ThorGor at {server_ip}")

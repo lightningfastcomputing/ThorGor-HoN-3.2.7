@@ -1,11 +1,13 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from thorgor.tools.remote_client import (
     CHAT_HOSTNAME,
     configured_hosts_text,
     ipv4,
+    launch,
     player_command,
 )
 
@@ -61,6 +63,18 @@ class RemoteClientLauncherTests(unittest.TestCase):
                 player_command(home, "192.168.1.50"),
                 [str(home / "hon.exe"), "-masterserver", "192.168.1.50"],
             )
+
+    def test_launcher_allows_multiple_player_instances(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            (home / "hon.exe").touch()
+            with (
+                patch("thorgor.tools.remote_client.chat_reachable", return_value=True),
+                patch("thorgor.tools.remote_client.subprocess.Popen") as popen,
+            ):
+                self.assertEqual(launch(home, "192.168.1.50"), 0)
+                self.assertEqual(launch(home, "192.168.1.50"), 0)
+            self.assertEqual(popen.call_count, 2)
 
 
 if __name__ == "__main__":
