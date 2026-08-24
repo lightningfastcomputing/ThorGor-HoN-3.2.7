@@ -471,13 +471,17 @@ def send_initial_friend_status(state: ClientState) -> None:
 
 
 def broadcast_friend_status(state: ClientState, online: bool) -> None:
-    peer = peer_for_account(state.account_id, online=online)
-    if peer is None:
-        return
-    payload = presence.status_update(peer)
-    for friend_id in friend_ids(state.account_id):
-        send_to_account(friend_id, presence.CHAT_CMD_UPDATE_STATUS, payload)
-    log(f"FRIEND STATUS | account={state.nickname!r} online={online}")
+    # Protocol 47 accepts CHAT_CMD_INITIAL_STATUS as a live snapshot.  The
+    # newer CHAT_CMD_UPDATE_STATUS layout is not wire-compatible with this
+    # 3.2.7 client and causes it to close chat immediately, so refresh each
+    # online friend's snapshot when presence changes.
+    ids = friend_ids(state.account_id)
+    refreshed = 0
+    for friend_state in WORLD.player_states():
+        if friend_state.account_id in ids:
+            send_initial_friend_status(friend_state)
+            refreshed += 1
+    log(f"FRIEND STATUS REFRESH | account={state.nickname!r} online={online} recipients={refreshed}")
 
 
 class ChatConnection(socketserver.BaseRequestHandler):
@@ -841,12 +845,7 @@ class ChatConnection(socketserver.BaseRequestHandler):
         elif command == presence.NET_CHAT_CL_GET_USER_STATUS:
             try:
                 target_name, _ = read_cstr(payload)
-                target = account_for_name(target_name)
-                if target is not None:
-                    peer = peer_for_account(target.account_id)
-                    if peer is not None:
-                        self.send_packet(presence.CHAT_CMD_UPDATE_STATUS,
-                                         presence.status_update(peer))
+                send_initial_friend_status(self.state)
                 log(f"FRIEND STATUS QUERY | from={self.state.nickname!r} target={target_name!r}")
             except ValueError as exc:
                 log(f"FRIEND STATUS QUERY ERROR | account={self.state.username!r} error={exc!r}")

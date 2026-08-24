@@ -13,14 +13,8 @@ class ChatPresenceTests(unittest.TestCase):
         self.assertEqual(payload[8:10], bytes((3, 64)))
         self.assertTrue(payload.endswith(struct.pack("<I", 0)))
 
-    def test_status_update_encodes_connected_and_disconnected(self):
-        online = presence.status_update(presence.Peer(2, "player"))
-        offline = presence.status_update(
-            presence.Peer(2, "player", status=presence.STATUS_DISCONNECTED),
-        )
-        self.assertEqual(online[4], 3)
-        self.assertEqual(offline[4], 0)
-        self.assertEqual(online[5], 64)
+    def test_initial_status_can_encode_an_empty_live_snapshot(self):
+        self.assertEqual(presence.initial_status([]), struct.pack("<I", 0))
 
     def test_instant_message_request_and_first_contact_round_trip_shape(self):
         request = presence.InstantMessageRequest.decode(cstr("player") + cstr("hello") + b"\x01")
