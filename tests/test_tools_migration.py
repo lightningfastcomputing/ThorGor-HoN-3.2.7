@@ -33,6 +33,14 @@ class ToolsMigrationTests(unittest.TestCase):
         self.assertNotIn("load_legacy", source)
         self.assertIn('args.command == "accounts"', entrypoint)
 
+    def test_account_manager_has_portable_launcher(self):
+        launcher = ROOT / "thorgor" / "START_ACCOUNT_MANAGER.bat"
+        self.assertTrue(launcher.is_file())
+        source = launcher.read_text(encoding="utf-8")
+        self.assertIn("-m thorgor accounts", source)
+        self.assertIn("var\\thorgor_accounts.db", source)
+        self.assertNotIn("account_manager_v", source)
+
 
 if __name__ == "__main__":
     unittest.main()
