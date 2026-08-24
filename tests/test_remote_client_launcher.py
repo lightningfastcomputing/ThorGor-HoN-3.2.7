@@ -17,15 +17,22 @@ class RemoteClientLauncherTests(unittest.TestCase):
     def test_starter_is_adjacent_to_stack_launcher_and_uses_package_commands(self):
         stack = ROOT / "thorgor" / "START_STACK.bat"
         remote = ROOT / "thorgor" / "START_REMOTE_CLIENT.bat"
+        helper = ROOT / "thorgor" / "REMOTE_SETUP_ADMIN.ps1"
         self.assertTrue(stack.is_file())
         self.assertTrue(remote.is_file())
+        self.assertTrue(helper.is_file())
         source = remote.read_text(encoding="utf-8")
-        self.assertIn("'remote-setup'", source)
+        self.assertIn("REMOTE_SETUP_ADMIN.ps1", source)
         self.assertIn("-m thorgor remote-client", source)
         self.assertIn("remote_client_setup.log", source)
         self.assertIn(r"C:\intelprop\Heroes of Newerth", source)
         self.assertNotIn("INSTALL_V77_PATCHES.ps1", source)
         self.assertNotIn("SET_CHAT_HOST.ps1", source)
+        helper_source = helper.read_text(encoding="utf-8")
+        self.assertIn("-m thorgor remote-setup", helper_source)
+        self.assertIn("[Parameter(Mandatory = $true)][string]$ServerIP", helper_source)
+        self.assertIn("-PythonPath", source)
+        self.assertIn("-ProjectRoot", source)
 
     def test_hosts_rewrite_replaces_only_prior_chat_mapping(self):
         source = (
