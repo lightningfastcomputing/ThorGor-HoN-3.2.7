@@ -10,6 +10,7 @@ from .queue import MatchQueue, MatchRequest
 
 class ClientProtocolStatus(str, Enum):
     NOT_REVERSED = "not_reversed"
+    MASTER_ENDPOINT = "master_endpoint"
 
 
 @dataclass(frozen=True)
@@ -40,10 +41,10 @@ class MatchmakingService:
         return MatchmakingStatus(
             domain_logic="implemented_and_tested",
             simulation_api=True,
-            live_client_protocol=ClientProtocolStatus.NOT_REVERSED,
+            live_client_protocol=ClientProtocolStatus.MASTER_ENDPOINT,
             detail=(
-                "Queue policy and dedicated assignment boundaries exist, but HoN 3.2.7 "
-                "queue command IDs and client transition packets are not yet verified."
+                "Authenticated master queue/poll/leave operations allocate the proven idle "
+                "dedicated slave. Native HoN 3.2.7 queue command IDs remain unverified."
             ),
         )
 

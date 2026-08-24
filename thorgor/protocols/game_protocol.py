@@ -402,6 +402,34 @@ def describe_special_packet(data: bytes) -> str:
     return ""
 
 
+# Stable compatibility exports. Implementations live behind focused protocol
+# boundaries; the bridge below continues to expose the historical API.
+from thorgor.protocols.admission import (
+    activate_host_lobby,
+    authorize_connect_c0,
+    release_host_reservation,
+    validate_c_conn_response,
+)
+from thorgor.protocols.packet_decoding import (
+    ConnectC0,
+    classify_packet,
+    describe_special_packet,
+    extract_cpacket_strings,
+    format_packet,
+    parse_connect_c0,
+    parse_lobby_create,
+)
+from thorgor.protocols.tracing import (
+    PICKER_HERO_BLOCK_IDS,
+    PICKER_STATE_PREFIX,
+    describe_trace_datagram,
+    extract_picker_hero_block_suffix,
+    repair_truncated_picker_packet,
+)
+from thorgor.protocols.transport import build_proxy_challenge, make_authorized_local_c0
+from thorgor.protocols.routing import ClientRoute, RouteTable
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="UDP shim/logger for HoN browser and server traffic.")
     parser.add_argument(
@@ -652,6 +680,7 @@ def main(argv=None) -> int:
     # makes every local client appear to K2 as the same UDP peer and makes
     # server replies impossible to route deterministically.
     upstream_by_client: dict[tuple[str, int], socket.socket] = {}
+    routes = RouteTable(args.max_client_routes)
     client_by_upstream: dict[socket.socket, tuple[str, int]] = {}
     route_activity: dict[tuple[str, int], float] = {}
     route_connect: dict[tuple[str, int], ConnectC0] = {}
@@ -706,6 +735,7 @@ def main(argv=None) -> int:
         flush_admission_trace(client_addr, f"route_close:{reason}")
         flush_route_trace(client_addr, f"route_close:{reason}")
         upstream = upstream_by_client.pop(client_addr, None)
+        routes.remove(client_addr)
         route_activity.pop(client_addr, None)
         route_connect.pop(client_addr, None)
         route_counters.pop(client_addr, None)
@@ -978,6 +1008,7 @@ def main(argv=None) -> int:
         upstream.bind((source_ip, 0))
         upstream.setblocking(False)
         upstream_by_client[client_addr] = upstream
+        routes.add(ClientRoute(client_addr, upstream, source_ip))
         client_by_upstream[upstream] = client_addr
         route_activity[client_addr] = time.time()
         route_source_ip[client_addr] = source_ip
@@ -1064,6 +1095,7 @@ def main(argv=None) -> int:
             upstream.bind((source_ip, upstream_port))
             upstream.setblocking(False)
             upstream_by_client[client_addr] = upstream
+            routes.add(ClientRoute(client_addr, upstream, source_ip))
             client_by_upstream[upstream] = client_addr
             route_activity[client_addr] = time.time()
             route_source_ip[client_addr] = source_ip
@@ -1216,6 +1248,9 @@ def main(argv=None) -> int:
                     )
                     data = make_authorized_local_c0(data, connect)
                     route_connect[addr] = connect
+                    typed_route = routes.get(addr)
+                    if typed_route is not None:
+                        typed_route.connected = connect
                     begin_admission_trace(addr, connect.username)
                     start_route_trace(addr, connect.username)
                     log(

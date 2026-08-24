@@ -28,8 +28,10 @@ class MigrationInventoryTests(unittest.TestCase):
         self.assertEqual(numbered, [])
 
     def test_dashboard_subprocesses_use_package_modules(self):
-        source = (PACKAGE / "tools" / "dashboard.py").read_text(encoding="utf-8")
+        dashboard = (PACKAGE / "tools" / "dashboard.py").read_text(encoding="utf-8")
+        source = (PACKAGE / "game_manager" / "stack.py").read_text(encoding="utf-8")
         self.assertNotRegex(source, r"ROOT\s*/\s*[\"'][^\"']*_v\d+\.py")
+        self.assertIn("build_stack(", dashboard)
         for module in (
             "thorgor.master.server",
             "thorgor.chat.server",

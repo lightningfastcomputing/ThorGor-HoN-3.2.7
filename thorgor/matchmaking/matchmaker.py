@@ -7,7 +7,10 @@ from .game_assignment import GameAssignment
 from .queue import MatchQueue
 
 
-Allocator = Callable[[int, str, tuple[int, ...]], tuple[str, str, int]]
+Allocator = Callable[
+    [int, str, tuple[int, ...]],
+    tuple[str, str, int] | tuple[int, str, str, int],
+]
 
 
 class Matchmaker:
@@ -25,7 +28,11 @@ class Matchmaker:
         match_id = next(self._match_ids)
         account_ids = tuple(request.account_id for request in requests)
         try:
-            server_id, host, port = self.allocator(match_id, mode, account_ids)
+            allocation = self.allocator(match_id, mode, account_ids)
+            if len(allocation) == 4:
+                match_id, server_id, host, port = allocation
+            else:
+                server_id, host, port = allocation
         except Exception:
             self.queue.restore_front(requests)
             raise

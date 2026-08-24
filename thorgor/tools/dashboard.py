@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import ttk, messagebox
 
+from thorgor.game_manager.stack import ServiceSpec, build_stack
 from thorgor.paths import ROOT, SOURCE_ROOT
 
 
@@ -415,7 +416,7 @@ class Dashboard(tk.Tk):
                   activebackground="#21885f", activeforeground="#ffffff", relief="flat", padx=12, pady=6).pack(side="left", padx=(8,0))
         self.bundle_status = ttk.Label(
             self,
-            text=f"Matchmaking: domain tested; live HoN queue protocol not yet reversed   •   Logs: {LOG_DIR}",
+            text=f"Matchmaking: master endpoint ready; native HoN queue commands unverified   •   Logs: {LOG_DIR}",
             style="Footer.TLabel",
         )
         self.bundle_status.pack(anchor="w", padx=23, pady=(2, 13))
@@ -463,50 +464,29 @@ class Dashboard(tk.Tk):
             messagebox.showerror("ThorGor Debug Bundle Failed", err)
 
     def start_stack(self) -> None:
-        # Exact v49 LAN command arguments and original startup order.
-        launch("master", _module_command("thorgor.master.server") + [
-            "--host", "0.0.0.0", "--port", "80", "--password-chain", "pre-md5",
-            "--chat-host", LAN_IP, "--server-list-ip", LAN_IP, "--server-list-port", "11236",
-            "--match-server-ip", "127.0.0.1", "--match-server-port", "11235",
-            "--match-server-location", "USE",
-        ], PACKAGE_PARENT)
-        self.after(2000, self._start_chat)
+        self._stack_specs: tuple[ServiceSpec, ...] = build_stack(
+            lan_ip=LAN_IP,
+            hon_home=HON_HOME,
+            package_parent=PACKAGE_PARENT,
+            data_root=ROOT,
+        )
+        self._launch_service(0)
 
-    def _start_chat(self) -> None:
-        launch("chat", _module_command("thorgor.chat.server") + [
-            "--host", "0.0.0.0", "--port", "11031",
-            "--db", str(ROOT / "thorgor_accounts.db"),
-        ], PACKAGE_PARENT)
-        self.after(2000, self._start_udp)
-
-    def _start_udp(self) -> None:
-        launch("udp", _module_command("thorgor.protocols.game_protocol") + [
-            "--preset", "thorgor-public-list",
-            "--listen-host", "0.0.0.0", "--listen-port", "11236", "--browser-ip", LAN_IP,
-            "--require-c0-auth", "--master-url", "http://127.0.0.1/server_requester.php",
-            "--manager-start-timeout", "3", "--max-client-routes", "16",
-            "--client-route-timeout", "600", "--stats-interval", "1",
-            "--route-trace-seconds", "300", "--route-trace-packets", "40000",
-            "--route-trace-checkpoint-seconds", "1",
-        ], PACKAGE_PARENT)
-        self.after(1000, self._start_backend)
-
-    def _start_backend(self) -> None:
-        launch("backend", _module_command("thorgor.game_manager.dedicated_slave") + [
-            "--listen-host", "127.0.0.1", "--listen-port", "1135", "--target-port", "1136",
-            "--master-url", "http://127.0.0.1/server_requester.php",
-        ], PACKAGE_PARENT)
-        self.after(1000, self._start_manager)
-
-    def _start_manager(self) -> None:
-        launch("manager", _module_command("thorgor.game_manager.manager_process") + [
-            "--hon-home", str(HON_HOME),
-        ], PACKAGE_PARENT)
-        self.after(15000, self._start_native)
-
-    def _start_native(self) -> None:
-        launch("native", _module_command("thorgor.game_manager.native_match_id"), PACKAGE_PARENT)
-        self.after(1000, self._start_health_check)
+    def _launch_service(self, index: int) -> None:
+        if index >= len(self._stack_specs):
+            self.after(1000, self._start_health_check)
+            return
+        spec = self._stack_specs[index]
+        launch(
+            spec.name,
+            _module_command(spec.module) + list(spec.arguments),
+            spec.working_directory or PACKAGE_PARENT,
+        )
+        if index + 1 < len(self._stack_specs):
+            delay = self._stack_specs[index + 1].start_after_ms
+            self.after(delay, lambda: self._launch_service(index + 1))
+        else:
+            self.after(1000, self._start_health_check)
 
     def _start_health_check(self) -> None:
         # Run off the Tk event loop so the status UI stays responsive.

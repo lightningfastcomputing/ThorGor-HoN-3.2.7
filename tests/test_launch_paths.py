@@ -87,7 +87,9 @@ class LaunchPathTests(unittest.TestCase):
 
     def test_dashboard_launches_stable_master_module(self):
         dashboard = self.read("thorgor/tools/dashboard.py")
-        self.assertIn('_module_command("thorgor.master.server")', dashboard)
+        stack = self.read("thorgor/game_manager/stack.py")
+        self.assertIn('"thorgor.master.server"', stack)
+        self.assertIn("build_stack(", dashboard)
         self.assertNotIn(
             '_service_command(MASTER_EXE, ROOT / "thorgor_hon_sandboxed_masterserver_v39.py")',
             dashboard,
@@ -95,7 +97,8 @@ class LaunchPathTests(unittest.TestCase):
 
     def test_dashboard_launches_stable_chat_module(self):
         dashboard = self.read("thorgor/tools/dashboard.py")
-        self.assertIn('_module_command("thorgor.chat.server")', dashboard)
+        stack = self.read("thorgor/game_manager/stack.py")
+        self.assertIn('"thorgor.chat.server"', stack)
         self.assertNotIn(
             '_service_command(CHAT_EXE, ROOT / "chat-server" / "thorgor_hon_chatserver_v13.py")',
             dashboard,
@@ -103,7 +106,8 @@ class LaunchPathTests(unittest.TestCase):
 
     def test_dashboard_launches_stable_game_protocol_module(self):
         dashboard = self.read("thorgor/tools/dashboard.py")
-        self.assertIn('_module_command("thorgor.protocols.game_protocol")', dashboard)
+        stack = self.read("thorgor/game_manager/stack.py")
+        self.assertIn('"thorgor.protocols.game_protocol"', stack)
         self.assertNotIn(
             '_service_command(UDP_EXE, ROOT / "hon_udp_shim.py")',
             dashboard,
@@ -111,8 +115,9 @@ class LaunchPathTests(unittest.TestCase):
 
     def test_dashboard_launches_stable_game_manager_modules(self):
         dashboard = self.read("thorgor/tools/dashboard.py")
-        self.assertIn('_module_command("thorgor.game_manager.dedicated_slave")', dashboard)
-        self.assertIn('_module_command("thorgor.game_manager.native_match_id")', dashboard)
+        stack = self.read("thorgor/game_manager/stack.py")
+        self.assertIn('"thorgor.game_manager.dedicated_slave"', stack)
+        self.assertIn('"thorgor.game_manager.native_match_id"', stack)
         self.assertNotIn(
             '_service_command(MANAGER_BRIDGE_EXE, ROOT / "hon_manager_status_bridge_v42.py")',
             dashboard,

@@ -24,8 +24,8 @@ class ManagerProcessTests(unittest.TestCase):
 
     def test_dashboard_launches_stable_manager_process_module(self):
         root = Path(__file__).resolve().parents[1]
-        source = (root / "thorgor" / "tools" / "dashboard.py").read_text(encoding="utf-8")
-        self.assertIn('_module_command("thorgor.game_manager.manager_process")', source)
+        source = (root / "thorgor" / "game_manager" / "stack.py").read_text(encoding="utf-8")
+        self.assertIn('"thorgor.game_manager.manager_process"', source)
         self.assertNotIn("start_manager_v39.ps1", source)
 
     def test_cleanup_targets_only_stack_services_and_manager_children(self):

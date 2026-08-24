@@ -42,6 +42,17 @@ from typing import Any, Iterator
 from urllib.parse import parse_qs, urlparse
 
 from thorgor.paths import ROOT
+from thorgor.master.game_authorization import GAME_AUTHORIZATION
+from thorgor.master.products import CATALOG as PRODUCT_CATALOG
+from thorgor.master.accounts import (
+    Account as PersistentAccount,
+    AccountStore as PersistentAccountStore,
+    GameAuthorization as PersistentGameAuthorization,
+)
+from thorgor.matchmaking.endpoint import DedicatedServerAllocator, MatchmakingEndpoint
+from thorgor.master import auth as auth_primitives
+from thorgor.master.sessions import Runtime as SessionRuntime, Session as AuthenticationSession
+from thorgor.master.server_list import ServerListService
 
 APP_NAME = "ThorGor HoN 3.2.7 LAN Master Service"
 DEFAULT_HOST = "0.0.0.0"
@@ -98,6 +109,7 @@ class Config:
 
 
 CONFIG = Config()
+MATCHMAKING: MatchmakingEndpoint | None = None
 
 # The private ThorGor service has no cash shop or per-account catalog.  HoN's
 # non-host client still runs the legacy ownership gate while it constructs the
@@ -412,7 +424,12 @@ class AccountStore:
             return int(db.execute("SELECT COUNT(*) FROM accounts").fetchone()[0])
 
 
-ACCOUNTS: AccountStore | None = None
+# Compatibility names remain importable from this module while production
+# ownership lives in thorgor.master.accounts.
+Account = PersistentAccount
+GameAuthorization = PersistentGameAuthorization
+AccountStore = PersistentAccountStore
+ACCOUNTS: PersistentAccountStore | None = None
 
 
 def php_serialize(value: Any) -> bytes:
@@ -489,6 +506,21 @@ def hon_password(password: str, salt2: str, chain: str) -> str:
     return hashlib.sha256((stage1 + MAGIC2).encode("utf-8")).hexdigest()
 
 
+# Authentication math is service-owned. Keep these names as the compatibility
+# surface consumed by existing tests and older tools.
+S2_N_HEX = auth_primitives.S2_N_HEX
+N = auth_primitives.N
+G = auth_primitives.G
+WIDTH = auth_primitives.WIDTH
+H = auth_primitives.H
+xor_bytes = auth_primitives.xor_bytes
+encoded_num = auth_primitives.encoded_num
+int_bytes = auth_primitives.int_bytes
+pad_num = auth_primitives.pad_num
+hon_password = auth_primitives.hon_password
+CHAT_SERVER_AUTHENTICATION_SALT = auth_primitives.CHAT_SERVER_AUTHENTICATION_SALT
+
+
 @dataclass
 class Session:
     account_id: int
@@ -552,7 +584,9 @@ class Runtime:
             }
 
 
-RUNTIME = Runtime()
+Session = AuthenticationSession
+Runtime = SessionRuntime
+RUNTIME = Runtime(lambda: CONFIG.session_ttl)
 
 
 def log(message: str) -> None:
@@ -880,6 +914,13 @@ def get_products_response(store: AccountStore, params: dict[str, list[str]]) -> 
     return {"products": products, "crc": crc}
 
 
+# HTTP routing consumes service-owned implementations. These aliases preserve
+# the historical import API while removing state ownership from the handler.
+client_auth_response = GAME_AUTHORIZATION.authorize
+diagnostic_request_identity = GAME_AUTHORIZATION.identity
+get_products_response = PRODUCT_CATALOG.response
+
+
 def match_server_list_payload(cookie: str, game_type: str) -> dict[Any, Any]:
     """Build the legacy response for ``f=server_list``.
 
@@ -979,6 +1020,12 @@ def match_server_list_payload(cookie: str, game_type: str) -> dict[Any, Any]:
 def error_payload(message: str) -> dict[Any, Any]:
     # Client handlers inspect "auth" when expected SRP fields are absent.
     return {"auth": message, "error": [message], "vested_threshold": 5, 0: True}
+
+
+# The HTTP handler consumes the server-list service, while this name remains a
+# compatibility function for older callers and tests.
+_SERVER_LIST = ServerListService(CONFIG, v31_read_state, v31_update_state, v39_vessel_ready, server_log)
+match_server_list_payload = _SERVER_LIST.response
 
 
 def capture(
@@ -1418,6 +1465,19 @@ class Handler(BaseHTTPRequestHandler):
                 f"crc={response.get('crc')!r}"
             )
             self.send_php(response)
+        elif function in {"matchmaking_join", "matchmaking_poll", "matchmaking_leave"}:
+            if MATCHMAKING is None:
+                self.send_php(error_payload("Matchmaking service unavailable"))
+                return
+            try:
+                operation = {
+                    "matchmaking_join": MATCHMAKING.join,
+                    "matchmaking_poll": MATCHMAKING.poll,
+                    "matchmaking_leave": MATCHMAKING.leave,
+                }[function]
+                self.send_php(operation(params))
+            except ValueError as error:
+                self.send_php(error_payload(str(error)))
         elif function == "server_list":
             cookie = params.get("cookie", [""])[0]
             game_type = params.get("gametype", [""])[0]
@@ -1677,7 +1737,7 @@ def main(argv: list[str] | None = None) -> int:
     if not 1 <= args.match_server_port <= 65535:
         parser.error("--match-server-port must be between 1 and 65535")
 
-    global ACCOUNTS
+    global ACCOUNTS, MATCHMAKING
     CONFIG.salt2 = args.salt2
     CONFIG.password_chain = args.password_chain
     CONFIG.session_ttl = max(30, args.session_ttl)
@@ -1691,6 +1751,15 @@ def main(argv: list[str] | None = None) -> int:
     CONFIG.match_server_port = args.match_server_port
     CONFIG.match_server_location = args.match_server_location
     ACCOUNTS = AccountStore(CONFIG.database_path)
+    MATCHMAKING = MatchmakingEndpoint(
+        ACCOUNTS,
+        DedicatedServerAllocator(
+            ACCOUNTS, v31_read_state, v31_update_state, v39_vessel_ready,
+            server_id=CONFIG.match_server_id,
+            host=CONFIG.server_list_ip or CONFIG.match_server_ip,
+            port=CONFIG.server_list_port,
+        ),
+    )
 
     if args.add_account:
         account = ACCOUNTS.add_or_update(args.add_account[0], args.add_account[1], args.nickname)
