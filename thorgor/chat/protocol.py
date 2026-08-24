@@ -5,14 +5,14 @@ import struct
 
 
 def cstr(text: str) -> bytes:
-    return text.encode("utf-8") + b"\0"
+    return text.encode("utf-8", errors="replace") + b"\x00"
 
 
 def read_cstr(data: bytes, offset: int = 0) -> tuple[str, int]:
-    end = data.find(b"\0", offset)
+    end = data.find(b"\x00", offset)
     if end < 0:
-        raise ValueError("unterminated chat string")
-    return data[offset:end].decode("utf-8"), end + 1
+        raise ValueError("unterminated string")
+    return data[offset:end].decode("utf-8", errors="replace"), end + 1
 
 
 def encode_packet(command: int, payload: bytes = b"") -> bytes:
@@ -20,14 +20,15 @@ def encode_packet(command: int, payload: bytes = b"") -> bytes:
     return struct.pack("<H", len(body)) + body
 
 
-def extract_packet(buffer: bytes) -> tuple[tuple[int, bytes] | None, bytes]:
+def extract_packet(buffer: bytes):
     if len(buffer) < 2:
-        return None, buffer
-    size = struct.unpack_from("<H", buffer)[0]
-    if size < 2:
-        raise ValueError("invalid chat packet length")
-    if len(buffer) < size + 2:
-        return None, buffer
+        return None
+    following = struct.unpack_from("<H", buffer, 0)[0]
+    total = 2 + following
+    if following < 2 or total > 1024 * 1024:
+        raise ValueError(f"invalid packet length {following}")
+    if len(buffer) < total:
+        return None
     command = struct.unpack_from("<H", buffer, 2)[0]
-    return (command, buffer[4:size + 2]), buffer[size + 2:]
-
+    payload = buffer[4:total]
+    return total, command, payload, buffer[:total]

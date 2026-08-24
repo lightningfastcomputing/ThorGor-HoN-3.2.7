@@ -11,12 +11,9 @@ from thorgor.matchmaking.queue import MatchQueue, MatchRequest
 class ChatBoundaryTests(unittest.TestCase):
     def test_chat_packet_round_trip_and_partial_buffer(self):
         wire = encode_packet(0x1E, b"General\0")
-        packet, remainder = extract_packet(wire[:-1])
-        self.assertIsNone(packet)
-        self.assertEqual(remainder, wire[:-1])
-        packet, remainder = extract_packet(wire + b"tail")
-        self.assertEqual(packet, (0x1E, b"General\0"))
-        self.assertEqual(remainder, b"tail")
+        self.assertIsNone(extract_packet(wire[:-1]))
+        total, command, payload, raw = extract_packet(wire + b"tail")
+        self.assertEqual((total, command, payload, raw), (len(wire), 0x1E, b"General\0", wire))
 
     def test_channel_members_are_case_insensitive_and_deterministic(self):
         channels = ChannelDirectory()

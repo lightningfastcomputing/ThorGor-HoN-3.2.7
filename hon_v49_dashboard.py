@@ -476,10 +476,10 @@ class Dashboard(tk.Tk):
         self.after(2000, self._start_chat)
 
     def _start_chat(self) -> None:
-        launch("chat", _service_command(CHAT_EXE, ROOT / "chat-server" / "thorgor_hon_chatserver_v13.py") + [
+        launch("chat", _module_command("thorgor.chat.server") + [
             "--host", "0.0.0.0", "--port", "11031",
             "--db", str(ROOT / "thorgor_accounts.db"),
-        ], ROOT / "chat-server")
+        ], PACKAGE_PARENT)
         self.after(2000, self._start_udp)
 
     def _start_udp(self) -> None:
