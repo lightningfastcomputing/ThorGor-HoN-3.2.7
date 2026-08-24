@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .catalog import PatchCatalog
 from .engine import apply_patch, sha256
+from .client.matchmaking_ui import install_matchmaking_overlay, verify_matchmaking_overlay
 
 
 K2_STOCK_BACKUP = "k2.dll.thorgor_stock_3.2.7.1"
@@ -122,12 +123,12 @@ def install_cgame(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
     return "Installed cgame complete-registry guard from the verified stock binary."
 
 
-def install_supported_patches(hon_home: Path) -> tuple[str, str]:
+def install_supported_patches(hon_home: Path) -> tuple[str, ...]:
     hon_home = hon_home.expanduser().resolve()
-    return install_k2(hon_home), install_cgame(hon_home)
+    return install_k2(hon_home), install_cgame(hon_home), install_matchmaking_overlay(hon_home)
 
 
-def verify_supported_install(hon_home: Path) -> tuple[str, str]:
+def verify_supported_install(hon_home: Path) -> tuple[str, ...]:
     catalog = PatchCatalog()
     expected = (
         (hon_home / "k2.dll", catalog.get("dedicated.hero_state_recipient_fix").output_sha256),
@@ -141,4 +142,5 @@ def verify_supported_install(hon_home: Path) -> tuple[str, str]:
         if actual != wanted:
             raise ValueError(f"installed binary hash mismatch: {path} ({actual})")
         verified.append(f"{path.name} {actual}")
+    verified.append(verify_matchmaking_overlay(hon_home))
     return tuple(verified)

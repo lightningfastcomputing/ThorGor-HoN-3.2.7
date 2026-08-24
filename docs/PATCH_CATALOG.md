@@ -26,3 +26,8 @@ stable builders have also been compared against verified HoN binaries, yielding:
 - linked-delivery K2: `82D0363C...48ECAB`
 - recipient-fixed K2: `25B1BB06...CE7026`
 - guarded cgame: `88C4ACA3...DF988`
+
+The client matchmaking gate is a resource patch rather than an executable-byte
+patch. `client.matchmaking_ui_enable` verifies the three stock resource-entry
+hashes and exact replacement anchors, then generates deterministic
+`game/resources999.s2z`. Removing that one overlay archive reverses the UI patch.

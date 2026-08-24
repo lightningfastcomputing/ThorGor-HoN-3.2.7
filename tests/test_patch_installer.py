@@ -1,6 +1,7 @@
 import hashlib
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 from thorgor.patches.installer import (
@@ -12,6 +13,12 @@ from thorgor.patches.installer import (
     install_k2,
 )
 from thorgor.patches.models import PatchManifest, WriteOperation
+from thorgor.patches.client.matchmaking_ui import (
+    MARKER_ENTRY,
+    ResourceReplacement,
+    install_matchmaking_overlay,
+    verify_matchmaking_overlay,
+)
 
 
 def digest(data: bytes) -> str:
@@ -110,6 +117,27 @@ class PatchInstallerTests(unittest.TestCase):
             self.assertEqual(target.read_bytes(), b"1A34")
             self.assertEqual((game / CGAME_STOCK_BACKUP).read_bytes(), b"1234")
             self.assertIn("already installed", install_cgame(home, catalog))
+
+    def test_matchmaking_resource_overlay_is_verified_reversible_and_idempotent(self):
+        source = b"before DISABLED after"
+        patch = ResourceReplacement(
+            "ui/test.lua", digest(source), b"DISABLED", b"ENABLED", "fixture"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            game = home / "game"
+            game.mkdir()
+            with zipfile.ZipFile(game / "resources0.s2z", "w") as archive:
+                archive.writestr("ui/test.lua", source)
+            self.assertIn("Installed", install_matchmaking_overlay(home, (patch,)))
+            with zipfile.ZipFile(game / "resources999.s2z") as archive:
+                self.assertEqual(archive.read("ui/test.lua"), b"before ENABLED after")
+                self.assertEqual(__import__("json").loads(archive.read(MARKER_ENTRY))["id"],
+                                 "client.matchmaking_ui_enable")
+            self.assertIn("resources999.s2z", verify_matchmaking_overlay(home, (patch,)))
+            self.assertIn("already installed", install_matchmaking_overlay(home, (patch,)))
+            (game / "resources999.s2z").unlink()
+            self.assertFalse((game / "resources999.s2z").exists())
 
 
 if __name__ == "__main__":
