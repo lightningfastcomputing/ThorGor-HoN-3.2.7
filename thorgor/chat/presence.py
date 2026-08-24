@@ -22,7 +22,7 @@ class Peer:
     account_id: int
     name: str
     status: int = STATUS_CONNECTED
-    flags: int = FLAGS_PREMIUM
+    flags: int = 0
     name_colour: str = ""
     icon: str = ""
     ascension_level: int = 0
@@ -38,10 +38,11 @@ def initial_status(peers: list[Peer]) -> bytes:
 
 
 def status_update(peer: Peer) -> bytes:
+    # HoN 3.2.7's FUN_1535e020 consumes no trailing ascension integer for
+    # CHAT_CMD_UPDATE_STATUS.  Later protocol implementations append one.
     return (
         struct.pack("<IBBI", peer.account_id, peer.status, peer.flags, 0)
         + cstr("") + cstr("") + cstr(peer.name_colour) + cstr(peer.icon)
-        + struct.pack("<I", peer.ascension_level)
     )
 
 
