@@ -11,6 +11,7 @@ from .queue import MatchQueue, MatchRequest
 class ClientProtocolStatus(str, Enum):
     NOT_REVERSED = "not_reversed"
     MASTER_ENDPOINT = "master_endpoint"
+    CHAT_PROTOCOL_47 = "chat_protocol_47"
 
 
 @dataclass(frozen=True)
@@ -22,7 +23,7 @@ class MatchmakingStatus:
 
 
 class MatchmakingService:
-    """Application boundary for tested matchmaking logic, not a live HoN wire service."""
+    """Application boundary for the queue shared by HTTP and chat adapters."""
 
     def __init__(self, matchmaker: Matchmaker) -> None:
         self.matchmaker = matchmaker
@@ -41,10 +42,10 @@ class MatchmakingService:
         return MatchmakingStatus(
             domain_logic="implemented_and_tested",
             simulation_api=True,
-            live_client_protocol=ClientProtocolStatus.MASTER_ENDPOINT,
+            live_client_protocol=ClientProtocolStatus.CHAT_PROTOCOL_47,
             detail=(
-                "Authenticated master queue/poll/leave operations allocate the proven idle "
-                "dedicated slave. Native HoN 3.2.7 queue command IDs remain unverified."
+                "HoN 3.2.7 chat protocol 47 group, loading, queue, assignment, and "
+                "auto-connect messages allocate the proven dedicated slave."
             ),
         )
 

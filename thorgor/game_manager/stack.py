@@ -42,7 +42,11 @@ def build_stack(
         ServiceSpec(
             "chat",
             "thorgor.chat.server",
-            ("--host", "0.0.0.0", "--port", "11031", "--db", str(data_root / "thorgor_accounts.db")),
+            (
+                "--host", "0.0.0.0", "--port", "11031",
+                "--db", str(data_root / "thorgor_accounts.db"),
+                "--match-host", lan_ip, "--match-port", "11236",
+            ),
             package_parent,
             2000,
         ),

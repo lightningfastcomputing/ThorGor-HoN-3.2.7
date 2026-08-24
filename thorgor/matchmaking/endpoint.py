@@ -36,16 +36,25 @@ class DedicatedServerAllocator:
             raise RuntimeError("no idle dedicated server is available")
         if int(state.get("match_id", 0) or 0) > 0:
             raise RuntimeError("dedicated server already owns a match")
+        is_botmatch = mode.casefold() == "botmatch"
+        match_mode = "botmatch" if is_botmatch else "normal"
+        match_options = (
+            "map:caldavar teamsize:5 mode:botmatch casual:true allheroes:true "
+            "noleaver:false spectators:1 randombots:4|5 allowduplicate:true "
+            "noagility:false nostrength:false nointelligence:false"
+            if is_botmatch else
+            "map:caldavar teamsize:1 mode:normal allheroes:true noleaver:false spectators:2"
+        )
         params = {
             "map": ["caldavar"], "version": ["3.2.7.1"],
-            "mname": [f"ThorGor Matchmaking {mode}"], "match_mode": [mode],
+            "mname": [f"ThorGor Matchmaking {mode}"], "match_mode": [match_mode],
             "accounts": [",".join(str(value) for value in account_ids)],
         }
         match_id = self.store.create_match(self.server_id, f"matchmaking:{mode}", params)
         self.update_state(
             lifecycle="allocated", idle_confirmed=False, match_id=match_id,
             match_name=params["mname"][0], match_map="caldavar", match_version="3.2.7.1",
-            match_options=f"mode:{mode}", matchmaking_accounts=list(account_ids),
+            match_options=match_options, matchmaking_accounts=list(account_ids),
         )
         return match_id, str(self.server_id), self.host, self.port
 
@@ -80,24 +89,52 @@ class MatchmakingEndpoint:
         return result
 
     def join(self, params: dict[str, list[str]]) -> dict[str, object]:
+        account = self._identity(params)
+        mode = params.get("mode", ["allpick"])[0].casefold() or "allpick"
+        return self.join_account(account.account_id, account.nickname, mode)
+
+    def join_account(self, account_id: int, nickname: str, mode: str,
+                     *, players_per_match: int | None = None) -> dict[str, object]:
+        """Queue an identity already authenticated by the chat or master boundary."""
         with self._lock:
-            account = self._identity(params)
-            existing = self.assignments.get(account.account_id)
+            existing = self.assignments.get(account_id)
             if existing is not None:
                 return self._payload("assigned", existing)
-            mode = params.get("mode", ["allpick"])[0].casefold() or "allpick"
-            joined = self.queue.join(MatchRequest(account.account_id, account.nickname, mode))
-            try:
-                assignment = self.matchmaker.form_match(mode, self.players_per_match)
-            except RuntimeError as exc:
-                return self._payload("queued", position=self._position(account.account_id), detail=str(exc))
-            if assignment is not None:
-                for account_id in assignment.account_ids:
-                    self.assignments[account_id] = assignment
-            assignment = self.assignments.get(account.account_id)
-            return self._payload("assigned", assignment) if assignment else self._payload(
-                "queued", position=self._position(account.account_id), duplicate=not joined
+            joined = self.queue.join(MatchRequest(account_id, nickname, mode))
+            assignment = self._try_assign_locked(
+                mode, players_per_match or self.players_per_match
             )
+            assignment = self.assignments.get(account_id) or assignment
+            return self._payload("assigned", assignment) if assignment else self._payload(
+                "queued", position=self._position(account_id), duplicate=not joined
+            )
+
+    def try_assign(self, mode: str, players_per_match: int | None = None) -> GameAssignment | None:
+        with self._lock:
+            return self._try_assign_locked(mode, players_per_match or self.players_per_match)
+
+    def _try_assign_locked(self, mode: str, players: int) -> GameAssignment | None:
+        try:
+            assignment = self.matchmaker.form_match(mode, players)
+        except RuntimeError:
+            return None
+        if assignment is not None:
+            for account_id in assignment.account_ids:
+                self.assignments[account_id] = assignment
+        return assignment
+
+    def assignment_for(self, account_id: int) -> GameAssignment | None:
+        with self._lock:
+            return self.assignments.get(account_id)
+
+    def leave_account(self, account_id: int) -> bool:
+        with self._lock:
+            return self.queue.leave(account_id)
+
+    def reset_account(self, account_id: int) -> None:
+        with self._lock:
+            self.queue.leave(account_id)
+            self.assignments.pop(account_id, None)
 
     def poll(self, params: dict[str, list[str]]) -> dict[str, object]:
         with self._lock:
@@ -111,7 +148,7 @@ class MatchmakingEndpoint:
     def leave(self, params: dict[str, list[str]]) -> dict[str, object]:
         with self._lock:
             account = self._identity(params)
-            removed = self.queue.leave(account.account_id)
+            removed = self.leave_account(account.account_id)
             return self._payload("left", removed=removed)
 
     def _position(self, account_id: int) -> int:

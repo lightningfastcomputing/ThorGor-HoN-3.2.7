@@ -416,7 +416,7 @@ class Dashboard(tk.Tk):
                   activebackground="#21885f", activeforeground="#ffffff", relief="flat", padx=12, pady=6).pack(side="left", padx=(8,0))
         self.bundle_status = ttk.Label(
             self,
-            text=f"Matchmaking: master endpoint ready; native HoN queue commands unverified   •   Logs: {LOG_DIR}",
+            text=f"Matchmaking: HoN protocol-47 queue and dedicated allocation enabled   •   Logs: {LOG_DIR}",
             style="Footer.TLabel",
         )
         self.bundle_status.pack(anchor="w", padx=23, pady=(2, 13))

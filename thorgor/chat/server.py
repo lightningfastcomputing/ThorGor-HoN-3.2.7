@@ -39,6 +39,10 @@ from pathlib import Path
 from typing import Optional
 
 from thorgor.paths import ROOT
+from thorgor.master.accounts import AccountStore
+from thorgor.matchmaking.chat_gateway import MatchmakingChatGateway
+from thorgor.matchmaking.endpoint import DedicatedServerAllocator, MatchmakingEndpoint
+from thorgor.protocols import matchmaking_protocol as tmm_wire
 from .protocol import cstr, encode_packet, extract_packet, read_cstr
 
 APP_NAME = "ThorGor HoN 3.2.7 LAN Chat Service"
@@ -46,6 +50,7 @@ DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 11031
 DEFAULT_NICK = "Guest"
 ACCOUNT_DB_PATH: Path | None = None
+MATCHMAKING: MatchmakingChatGateway | None = None
 
 # 16-bit special commands
 HON_CS_AUTH_INFO = 0x0C00
@@ -396,6 +401,8 @@ class ChatConnection(socketserver.BaseRequestHandler):
 
     def finish(self):
         self.stop.set()
+        if MATCHMAKING is not None and self.state.account_id:
+            MATCHMAKING.unbind(self.state.account_id, self.send_packet)
         if self.control_role == "game_server":
             v31_update_state(chat_server_connected=False, idle_confirmed=False, lifecycle="chat_disconnected")
         elif self.control_role == "manager":
@@ -470,6 +477,8 @@ class ChatConnection(socketserver.BaseRequestHandler):
         self.state.is_host = is_host_username(account.username)
         self.authed = True
         WORLD.register(self.state)
+        if MATCHMAKING is not None and not self.state.is_host:
+            MATCHMAKING.bind(self.state.account_id, self.state.nickname, self.send_packet)
 
         if self.state.is_host:
             save_capture(
@@ -724,6 +733,14 @@ class ChatConnection(socketserver.BaseRequestHandler):
             self.channel_message(payload)
         elif command == HON_CS_LEAVE_CHANNEL:
             log(f"LEAVE CHANNEL | {self.peer}")
+        elif MATCHMAKING is not None and MATCHMAKING.handles(command):
+            try:
+                MATCHMAKING.process(self.state.account_id, command, payload)
+            except (ValueError, struct.error) as exc:
+                log(
+                    f"TMM PROTOCOL ERROR | account={self.state.username!r} "
+                    f"cmd=0x{command:04X} error={exc!r} payload={payload.hex()}"
+                )
         elif command in {0x0D07, 0x000F, 0x0011}:
             # Diagnostic-only observation of the recurring post-auth/game-transition
             # commands.  Do not send a guessed reply until we know their semantics.
@@ -803,14 +820,40 @@ def main(argv: list[str] | None = None):
                         help="0.0.0.0 permits LAN clients; default: %(default)s")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--db", help="Path to the v24 master server thorgor_accounts.db")
+    parser.add_argument("--match-host", default="127.0.0.1",
+                        help="Client-visible ThorGor UDP address for matchmaking assignments")
+    parser.add_argument("--match-port", type=int, default=11236,
+                        help="Client-visible ThorGor UDP port for matchmaking assignments")
     args = parser.parse_args(argv)
 
-    global ACCOUNT_DB_PATH
+    global ACCOUNT_DB_PATH, MATCHMAKING
     try:
         ACCOUNT_DB_PATH = discover_account_db(args.db)
     except (FileNotFoundError, RuntimeError) as exc:
         print(f"Account database error: {exc}")
         return 2
+
+    def dedicated_ready() -> bool:
+        state = v31_read_state()
+        status = state.get("server_status")
+        manager_ready = bool(
+            state.get("manager_control_connected") and state.get("manager_associated")
+        )
+        chat_ready = bool(state.get("registered") and state.get("chat_server_connected"))
+        return bool(status in (0, 1) and (manager_ready or chat_ready))
+
+    store = AccountStore(ACCOUNT_DB_PATH)
+    MATCHMAKING = MatchmakingChatGateway(
+        MatchmakingEndpoint(
+            store,
+            DedicatedServerAllocator(
+                store, v31_read_state, v31_update_state, dedicated_ready,
+                server_id=1, host=args.match_host, port=args.match_port,
+            ),
+        ),
+        v31_read_state,
+        logger=log,
+    )
 
     try:
         server = ThreadedTCPServer((args.host, args.port), ChatConnection)
@@ -824,6 +867,7 @@ def main(argv: list[str] | None = None):
     print(f"Listening: TCP {args.host}:{args.port}")
     print(f"Account database: {ACCOUNT_DB_PATH}")
     print("Observed client: HoN 3.2.7.1, protocol 47")
+    print(f"Matchmaking assignment: {args.match_host}:{args.match_port}")
     print("Expected auth accepted bytes: 02 00 00 1c")
     print(f"Log: {LOG_PATH}")
     print(f"Host/slave raw log: {HOST_LOG_PATH}")

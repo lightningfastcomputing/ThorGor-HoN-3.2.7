@@ -7,23 +7,24 @@
 - Dedicated-server registry and explicit match lifecycle domain objects.
 - A stable `MatchmakingService` boundary for simulation and future adapters.
 
-## Not integrated
+## Live client boundary
 
-Live HoN 3.2.7 client matchmaking is not currently implemented. Queue command
-IDs, responses, and the client transition packets have not been verified, so
-ThorGor does not invent them or advertise the domain simulation as a live
-service. `MatchmakingService.status()` reports `not_reversed` explicitly, and
-the dashboard repeats that status.
+HoN 3.2.7 chat protocol 47 is connected to the queue and allocator. ThorGor
+decodes group creation, readiness, and resource-loading messages; reports queue
+state and match discovery; waits for the manager bridge to create the native
+match; then sends the stock auto-match connection packet to every assigned LAN
+client.
 
 ## First live target
 
-After packet evidence establishes the client boundary:
+The first live target is:
 
 ```text
 two LAN clients -> compatible All Pick queue -> one available slave
                 -> one match assignment -> both clients enter the same lobby
 ```
 
-The existing tested queue and allocation interfaces can support that proof.
-The missing work is protocol discovery and connection-transition integration,
-not MMR, regions, parties, seasons, or ranked policy.
+Co-op uses a one-human bot match. PvP initially forms a match from two compatible
+solo players. Parties, rating policy, seasons, leaver enforcement, and regional
+latency selection remain later policy layers rather than requirements for the
+LAN proof.

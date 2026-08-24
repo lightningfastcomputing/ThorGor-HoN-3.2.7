@@ -56,6 +56,17 @@ class MatchmakingEndpointTests(unittest.TestCase):
         self.assertEqual(result["status"], "queued")
         self.assertEqual(len(unavailable.queue.snapshot()), 2)
 
+    def test_authenticated_chat_identity_can_form_a_solo_bot_match(self):
+        result = self.endpoint.join_account(
+            self.accounts[0].account.account_id,
+            self.accounts[0].account.nickname,
+            "botmatch",
+            players_per_match=1,
+        )
+        self.assertEqual(result["status"], "assigned")
+        self.assertEqual(result["assignment"]["account_ids"], [self.accounts[0].account.account_id])
+        self.assertIn("mode:botmatch", self.state["match_options"])
+
 
 if __name__ == "__main__":
     unittest.main()
