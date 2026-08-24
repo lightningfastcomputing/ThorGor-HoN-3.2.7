@@ -11,7 +11,7 @@ class ChatPresenceTests(unittest.TestCase):
         self.assertEqual(struct.unpack_from("<I", payload)[0], 1)
         self.assertEqual(struct.unpack_from("<I", payload, 4)[0], 2)
         self.assertEqual(payload[8:10], bytes((3, 64)))
-        self.assertTrue(payload.endswith(struct.pack("<I", 0)))
+        self.assertEqual(len(payload), 12)
 
     def test_protocol_47_status_update_omits_newer_ascension_tail(self):
         online = presence.status_update(presence.Peer(2, "player"))
@@ -34,6 +34,7 @@ class ChatPresenceTests(unittest.TestCase):
         self.assertIn(cstr("pwnrbwnr"), recipient)
         self.assertEqual(sender[0], 2)
         self.assertIn(cstr("player"), sender)
+        self.assertEqual(recipient[-6:], cstr("hello"))
 
     def test_subsequent_and_failed_message_shapes(self):
         self.assertEqual(

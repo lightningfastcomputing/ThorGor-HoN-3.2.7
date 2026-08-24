@@ -29,11 +29,12 @@ class Peer:
 
 
 def initial_status(peers: list[Peer]) -> bytes:
+    # HoN 3.2.7's FUN_153531a0 does not consume the ascension integer added by
+    # later chat protocols.
     data = bytearray(struct.pack("<I", len(peers)))
     for peer in peers:
         data += struct.pack("<IBB", peer.account_id, peer.status, peer.flags)
         data += cstr(peer.name_colour) + cstr(peer.icon)
-        data += struct.pack("<I", peer.ascension_level)
     return bytes(data)
 
 
@@ -62,10 +63,10 @@ class InstantMessageRequest:
 
 
 def _client_info(peer: Peer) -> bytes:
+    # FUN_15353680 reads name, account ID, state, flags, colour and icon only.
     return (
         cstr(peer.name) + struct.pack("<IBB", peer.account_id, peer.status, peer.flags)
         + cstr(peer.name_colour) + cstr(peer.icon)
-        + struct.pack("<I", peer.ascension_level)
     )
 
 
