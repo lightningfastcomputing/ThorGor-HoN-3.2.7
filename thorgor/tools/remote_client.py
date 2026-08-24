@@ -6,12 +6,15 @@ import os
 import re
 import socket
 import subprocess
+import traceback
 from pathlib import Path
 
+from thorgor.paths import ROOT
 from thorgor.patches.installer import install_supported_patches
 
 
 CHAT_HOSTNAME = "chatserver.heroesofnewerth.com"
+SETUP_LOG = ROOT / "remote_client_setup.log"
 
 
 def ipv4(value: str) -> str:
@@ -106,8 +109,15 @@ def setup_main(argv=None) -> int:
     parser.add_argument("--hon-home", type=Path, required=True)
     parser.add_argument("--server-ip", required=True)
     args = parser.parse_args(argv)
-    setup(args.hon_home.expanduser().resolve(), ipv4(args.server_ip))
-    return 0
+    try:
+        setup(args.hon_home.expanduser().resolve(), ipv4(args.server_ip))
+        SETUP_LOG.unlink(missing_ok=True)
+        return 0
+    except Exception:
+        SETUP_LOG.parent.mkdir(parents=True, exist_ok=True)
+        SETUP_LOG.write_text(traceback.format_exc(), encoding="utf-8")
+        print(f"Remote-client setup failed. Details: {SETUP_LOG}")
+        return 1
 
 
 def main(argv=None) -> int:

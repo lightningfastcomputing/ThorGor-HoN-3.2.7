@@ -44,6 +44,7 @@ echo   HoN:     !HON_HOME!
 echo   Server:  !SERVER_IP!
 echo.
 echo Installing patches and configuring the legacy chat hostname...
+echo Accept the Windows administrator prompt to update the game DLLs and hosts file.
 
 set "THORGOR_REMOTE_PYTHON=!PYEXE!"
 set "THORGOR_REMOTE_PARENT=!THORGOR_PARENT!"
@@ -53,7 +54,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
 if errorlevel 1 (
     popd
     echo.
-    echo ERROR: Remote-client setup failed. Accept the administrator prompt and verify the game files.
+    echo ERROR: Remote-client setup failed.
+    if exist "!THORGOR_PACKAGE!\var\remote_client_setup.log" (
+        echo.
+        echo Setup details:
+        type "!THORGOR_PACKAGE!\var\remote_client_setup.log"
+    ) else (
+        echo The administrator prompt may have been declined or could not open.
+    )
     pause
     exit /b 5
 )

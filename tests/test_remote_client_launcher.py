@@ -22,6 +22,7 @@ class RemoteClientLauncherTests(unittest.TestCase):
         source = remote.read_text(encoding="utf-8")
         self.assertIn("'remote-setup'", source)
         self.assertIn("-m thorgor remote-client", source)
+        self.assertIn("remote_client_setup.log", source)
         self.assertIn(r"C:\intelprop\Heroes of Newerth", source)
         self.assertNotIn("INSTALL_V77_PATCHES.ps1", source)
         self.assertNotIn("SET_CHAT_HOST.ps1", source)
