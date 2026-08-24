@@ -495,10 +495,10 @@ class Dashboard(tk.Tk):
         self.after(1000, self._start_backend)
 
     def _start_backend(self) -> None:
-        launch("backend", _service_command(MANAGER_BRIDGE_EXE, ROOT / "hon_manager_status_bridge_v42.py") + [
+        launch("backend", _module_command("thorgor.game_manager.dedicated_slave") + [
             "--listen-host", "127.0.0.1", "--listen-port", "1135", "--target-port", "1136",
             "--master-url", "http://127.0.0.1/server_requester.php",
-        ])
+        ], PACKAGE_PARENT)
         self.after(1000, self._start_manager)
 
     def _start_manager(self) -> None:
@@ -510,7 +510,7 @@ class Dashboard(tk.Tk):
         self.after(15000, self._start_native)
 
     def _start_native(self) -> None:
-        launch("native", _service_command(NATIVE_BRIDGE_EXE, ROOT / "hon_native_matchid_bridge_v47.py"))
+        launch("native", _module_command("thorgor.game_manager.native_match_id"), PACKAGE_PARENT)
         self.after(1000, self._start_health_check)
 
     def _start_health_check(self) -> None:

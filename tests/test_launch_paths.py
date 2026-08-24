@@ -110,6 +110,19 @@ class LaunchPathTests(unittest.TestCase):
             dashboard,
         )
 
+    def test_staged_dashboard_launches_stable_game_manager_modules(self):
+        dashboard = self.read("thorgor/runtime/hon_v49_dashboard.py")
+        self.assertIn('_module_command("thorgor.game_manager.dedicated_slave")', dashboard)
+        self.assertIn('_module_command("thorgor.game_manager.native_match_id")', dashboard)
+        self.assertNotIn(
+            '_service_command(MANAGER_BRIDGE_EXE, ROOT / "hon_manager_status_bridge_v42.py")',
+            dashboard,
+        )
+        self.assertNotIn(
+            '_service_command(NATIVE_BRIDGE_EXE, ROOT / "hon_native_matchid_bridge_v47.py")',
+            dashboard,
+        )
+
     def test_v75_launcher_installs_server_side_fix_without_proxy_injection(self):
         launcher = self.read("legacy/START_V75_SERVER_HERO_STATE_FIX.bat")
         dashboard = self.read("hon_v49_dashboard.py")
