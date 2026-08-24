@@ -1,0 +1,12 @@
+{
+  "id": "dedicated.roster_reconciliation_v68",
+  "binary": "k2.dll",
+  "version": "3.2.7.1-v57",
+  "source_sha256": "6F5FC1F7BF4E01CDEB0360A6F703299F5422F2C06A104FADCB24FD96A546B8DF",
+  "output_sha256": "142FCDB10AA866D28100090B3C68597D3C35651230FB40EEFD3C51242F3E1E89",
+  "reason": "Limit reconciliation to the roster-related block range.",
+  "observed_failure": "Broad revision reconciliation touched state unrelated to the joined-player roster.",
+  "discovered": "2026-08-21",
+  "evidence": ["patches/build_k2_v68_roster_only_reconciliation.py", "docs/MILESTONE_V68.md"],
+  "implementation": {"kind": "legacy_builder", "path": "patches/build_k2_v68_roster_only_reconciliation.py"}
+}

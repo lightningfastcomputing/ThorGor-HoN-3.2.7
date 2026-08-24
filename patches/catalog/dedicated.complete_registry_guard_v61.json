@@ -1,0 +1,12 @@
+{
+  "id": "dedicated.complete_registry_guard_v61",
+  "binary": "cgame.dll",
+  "version": "3.2.7.1",
+  "source_sha256": "45B3CE39214EFD82D12DA8B01E73494CEE983D6DB4891C7D95DF10B2EAA70B02",
+  "output_sha256": "88C4ACA3C31AF8948E1C2A33EEA2F6EE83888FA46A1DE8BE678DF32A958DF988",
+  "reason": "Guard entity registry finalization and fallback lookups against invalid objects.",
+  "observed_failure": "A remote player's registry entry can resolve to an invalid object during lobby synchronization.",
+  "discovered": "2026-08-11",
+  "evidence": ["patches/build_cgame_v61_complete_registry_guard.py", "docs/MILESTONE_V61.md", "tests/test_patch_builders.py"],
+  "implementation": {"kind": "legacy_builder", "path": "patches/build_cgame_v61_complete_registry_guard.py"}
+}

@@ -55,5 +55,12 @@ if errorlevel 1 (
 
 echo Starting HoN against ThorGor LAN backend at %SERVER_IP%
 echo Login with: player / player
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\CHECK_HON_PLAYER_NOT_RUNNING.ps1"
+if errorlevel 1 (
+  echo.
+  echo Close the existing HoN player before starting another remote client.
+  pause
+  exit /b 7
+)
 start "HoN Remote Player - ThorGor v77 LAN" /D "%HON_HOME%" hon.exe -masterserver %SERVER_IP%
 exit /b 0

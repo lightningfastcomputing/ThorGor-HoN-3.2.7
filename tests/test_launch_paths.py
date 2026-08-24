@@ -75,6 +75,17 @@ class LaunchPathTests(unittest.TestCase):
         self.assertIn("if ($process.HasExited)", launcher)
         self.assertIn("dashboard-startup.stderr.log", launcher)
 
+    def test_refactored_stack_launcher_uses_stable_package_entrypoint(self):
+        launcher = self.read("thorgor/START_STACK.bat")
+        self.assertIn(r"C:\intelprop\Heroes of Newerth", launcher)
+        self.assertIn(r"System32\WindowsPowerShell\v1.0\powershell.exe", launcher)
+        self.assertIn(r"PSModulePath=%SystemRoot%\System32\WindowsPowerShell\v1.0\Modules", launcher)
+        self.assertIn("INSTALL_V77_PATCHES.ps1", launcher)
+        self.assertIn("RESET_V42.ps1", launcher)
+        self.assertIn("-m thorgor dashboard", launcher)
+        self.assertIn(r"THORGOR_PACKAGE!\runtime", launcher)
+        self.assertNotIn(r"set \"THORGOR_ROOT=%~dp0..", launcher)
+
     def test_v75_launcher_installs_server_side_fix_without_proxy_injection(self):
         launcher = self.read("legacy/START_V75_SERVER_HERO_STATE_FIX.bat")
         dashboard = self.read("hon_v49_dashboard.py")

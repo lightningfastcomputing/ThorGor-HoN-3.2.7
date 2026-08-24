@@ -1,0 +1,12 @@
+{
+  "id": "dedicated.hero_state_world_ready_v76",
+  "binary": "k2.dll",
+  "version": "3.2.7.1-v65",
+  "source_sha256": "82D0363C0BC853ECD60A3AD8A62E01E2BF0897EB1644364FBAC82C7E2B48ECAB",
+  "output_sha256": "FF25B3EF1D3CCB5F8EE765A036AD6EF6DB984096AAE1E0E97594EDF51A3A3AC0",
+  "reason": "Gate hero-state reconciliation on the recipient's loaded-world state.",
+  "observed_failure": "Hero blocks could be reconciled before a joined client's world was ready.",
+  "discovered": "2026-08-21",
+  "evidence": ["patches/build_k2_v76_world_ready_hero_state_reconciliation.py", "legacy/V76_WORLD_READY_HERO_STATE_FIX_README.txt"],
+  "implementation": {"kind": "legacy_builder", "path": "patches/build_k2_v76_world_ready_hero_state_reconciliation.py"}
+}

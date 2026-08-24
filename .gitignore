@@ -30,6 +30,13 @@ credentials/
 *.sqlite3
 work/
 runtime/
+!/thorgor/runtime/
+!/thorgor/runtime/chat-server/
+!/thorgor/runtime/patches/
+!/thorgor/runtime/**/*.py
+!/thorgor/runtime/**/*.ps1
+!/thorgor/runtime/**/*.bat
+!/thorgor/runtime/**/*.md
 state/
 dashboard_logs/
 

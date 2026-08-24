@@ -2,6 +2,13 @@
 
 ThorGor is an independently written, local/LAN authentication, chat, server-browser, and dedicated-server interoperability experiment for the obsolete Heroes of Newerth 3.2.7.1 client. The project is intended for protocol research, preservation, and private LAN testing.
 
+The project is now migrating toward stable subsystem boundaries under the
+`thorgor/` package. The frozen v77 launch path remains intact while the
+milestone-numbered implementations are moved behind named master, chat,
+matchmaking, game-manager, protocol, patch, and tool APIs. See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the migration rules and
+[`docs/MATCHMAKING.md`](docs/MATCHMAKING.md) for the first two-player LAN target.
+
 The current frozen working milestone is **v77**. It keeps the verified cgame v61 patch and adds the K2 v77 tail-recipient state-delivery fix that restores hero portraits and hero selection for joined clients. See [the frozen-build manifest](FROZEN_WORKING_BUILD_2026-08-21.txt) and [v77 test notes](V77_TAIL_RECIPIENT_HERO_FIX_README.txt).
 
 ## No game files are included
@@ -54,6 +61,20 @@ The v77 launcher verifies and installs K2 v77 plus cgame v61, resets volatile ru
 - `legacy/` — retired launchers, patch experiments, and milestone notes retained for history
 - `REMOTE HOST/` — self-contained copy of the v65/v61 DLL patch installers and builders
 - `tests/` — protocol and patch-manifest regression tests
+
+## Stable developer interface
+
+The new package can be used directly from the repository without installation:
+
+```powershell
+python -m thorgor patches list
+python -m unittest discover -s tests -v
+```
+
+New code should import from `thorgor.master`, `thorgor.chat`,
+`thorgor.matchmaking`, `thorgor.game_manager`, or `thorgor.protocols` instead
+of importing version-numbered scripts. The compatibility layer is intentionally
+temporary and is tracked in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Security and privacy
 
