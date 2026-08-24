@@ -7,7 +7,7 @@ from thorgor.chat import server as migrated
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LEGACY_PATH = ROOT / "thorgor" / "runtime" / "chat-server" / "thorgor_hon_chatserver_v13.py"
+LEGACY_PATH = ROOT / "chat-server" / "thorgor_hon_chatserver_v13.py"
 
 
 def load_reference():

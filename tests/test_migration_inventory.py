@@ -1,46 +1,44 @@
+import re
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNTIME = ROOT / "thorgor" / "runtime"
+PACKAGE = ROOT / "thorgor"
 
 
 class MigrationInventoryTests(unittest.TestCase):
-    """Freeze the compatibility payload so migrations are explicit."""
+    def test_compatibility_payload_is_absent(self):
+        self.assertFalse((PACKAGE / "compat.py").exists())
+        self.assertFalse((PACKAGE / "runtime").exists())
 
-    def test_live_python_entrypoint_inventory_is_complete(self):
-        expected = {
-            "thorgor_hon_sandboxed_masterserver_v39.py",
-            "chat-server/thorgor_hon_chatserver_v13.py",
-            "hon_udp_shim.py",
-            "hon_manager_status_bridge_v42.py",
-            "hon_native_matchid_bridge_v47.py",
-            "hon_v49_dashboard.py",
-            "manage_accounts_v43.py",
-        }
-        actual = {
-            path.relative_to(RUNTIME).as_posix()
-            for path in RUNTIME.rglob("*.py")
-            if "patches" not in path.parts
-        }
-        self.assertEqual(actual, expected)
+    def test_production_python_has_no_legacy_dynamic_imports(self):
+        for path in PACKAGE.rglob("*.py"):
+            source = path.read_text(encoding="utf-8")
+            self.assertNotIn("load_legacy", source, path)
+            self.assertNotIn("spec_from_file_location", source, path)
+            self.assertNotRegex(source, r"runtime[/\\].*\.py", str(path))
 
-    def test_live_process_orchestration_inventory_is_complete(self):
-        expected = {
-            "start_manager_v39.ps1",
-            "RESET_V42.ps1",
-            "CLEANUP_OLD_TESTS.ps1",
-            "CHECK_RUNTIME.ps1",
-            "2_CHECK_V45.bat",
-        }
-        actual = {
-            path.name
-            for path in RUNTIME.iterdir()
-            if path.suffix.lower() in {".ps1", ".bat"}
-            and not path.name.startswith(("PATCH_", "INSTALL_", "FIND_"))
-        }
-        self.assertEqual(actual, expected)
+    def test_no_production_python_filename_is_a_historical_revision(self):
+        numbered = [
+            path.relative_to(PACKAGE).as_posix()
+            for path in PACKAGE.rglob("*.py")
+            if re.search(r"(?:^|_)v\d+(?:_|\.|$)", path.name, re.IGNORECASE)
+        ]
+        self.assertEqual(numbered, [])
+
+    def test_dashboard_subprocesses_use_package_modules(self):
+        source = (PACKAGE / "tools" / "dashboard.py").read_text(encoding="utf-8")
+        self.assertNotRegex(source, r"ROOT\s*/\s*[\"'][^\"']*_v\d+\.py")
+        for module in (
+            "thorgor.master.server",
+            "thorgor.chat.server",
+            "thorgor.protocols.game_protocol",
+            "thorgor.game_manager.dedicated_slave",
+            "thorgor.game_manager.manager_process",
+            "thorgor.game_manager.native_match_id",
+        ):
+            self.assertIn(module, source)
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def load_reference():
     name = "thorgor_udp_migration_reference"
     spec = importlib.util.spec_from_file_location(
-        name, ROOT / "thorgor" / "runtime" / "hon_udp_shim.py"
+        name, ROOT / "hon_udp_shim.py"
     )
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module

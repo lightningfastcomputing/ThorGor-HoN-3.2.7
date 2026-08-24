@@ -9,66 +9,48 @@ from pathlib import Path
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = SOURCE_ROOT / "thorgor"
-RUNTIME = PACKAGE / "runtime"
 
 
 class PortableStackTests(unittest.TestCase):
-    def test_runtime_payload_matches_verified_source_files(self):
-        root_files = (
-            "thorgor_hon_sandboxed_masterserver_v39.py",
-            "hon_udp_shim.py",
-            "hon_manager_status_bridge_v42.py",
-            "hon_native_matchid_bridge_v47.py",
-            "hon_v49_dashboard.py",
-            "manage_accounts_v43.py",
-            "INSTALL_V77_PATCHES.ps1",
-            "PATCH_K2_V77.ps1",
-            "PATCH_K2_V65.ps1",
-            "PATCH_K2_V57.ps1",
-            "PATCH_CGAME_V61.ps1",
-            "FIND_PYTHON.ps1",
-            "RESET_V42.ps1",
-            "start_manager_v39.ps1",
-            "CLEANUP_OLD_TESTS.ps1",
-            "2_CHECK_V45.bat",
-            "CHECK_RUNTIME.ps1",
+    def test_package_owns_every_production_entrypoint(self):
+        required = (
+            "master/server.py",
+            "chat/server.py",
+            "protocols/game_protocol.py",
+            "game_manager/dedicated_slave.py",
+            "game_manager/native_match_id.py",
+            "game_manager/manager_process.py",
+            "tools/dashboard.py",
+            "tools/account_manager.py",
+            "patches/installer.py",
+            "START_STACK.bat",
         )
-        for relative in root_files:
-            self.assertEqual(
-                (RUNTIME / relative).read_bytes(),
-                (SOURCE_ROOT / relative).read_bytes(),
-                relative,
-            )
-        self.assertEqual(
-            (RUNTIME / "chat-server" / "thorgor_hon_chatserver_v13.py").read_bytes(),
-            (SOURCE_ROOT / "chat-server" / "thorgor_hon_chatserver_v13.py").read_bytes(),
-        )
-        for source in (SOURCE_ROOT / "patches").glob("build_*.py"):
-            self.assertEqual((RUNTIME / "patches" / source.name).read_bytes(), source.read_bytes(), source.name)
-        for source in (SOURCE_ROOT / "patches" / "catalog").glob("*.json"):
-            self.assertEqual(
-                (PACKAGE / "patches" / "catalog_data" / source.name).read_bytes(),
-                source.read_bytes(),
-                source.name,
-            )
+        for relative in required:
+            self.assertTrue((PACKAGE / relative).is_file(), relative)
 
-    def test_copied_package_loads_legacy_runtime_from_inside_itself(self):
+    def test_copied_package_runs_without_runtime_or_compatibility_layer(self):
         with tempfile.TemporaryDirectory() as directory:
             parent = Path(directory)
             shutil.copytree(
                 PACKAGE,
                 parent / "thorgor",
-                ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "work", "dashboard_logs"),
+                ignore=shutil.ignore_patterns(
+                    "__pycache__", "*.pyc", "runtime", "var", "dashboard_logs"
+                ),
             )
             environment = os.environ.copy()
             environment.pop("PYTHONPATH", None)
             code = (
                 "from pathlib import Path; "
                 "from thorgor.paths import ROOT; "
-                "assert ROOT == Path.cwd() / 'thorgor' / 'runtime', ROOT; "
-                "from thorgor.compat import load_legacy; "
-                "module=load_legacy('portable_udp', 'hon_udp_shim.py'); "
-                "assert Path(module.__file__).resolve().parent == ROOT.resolve()"
+                "assert ROOT == Path.cwd() / 'thorgor' / 'var', ROOT; "
+                "from thorgor.master.server import main as master; "
+                "from thorgor.chat.server import main as chat; "
+                "from thorgor.protocols.game_protocol import main as game; "
+                "from thorgor.game_manager.dedicated_slave import main as manager; "
+                "from thorgor.tools.dashboard import main as dashboard; "
+                "from thorgor.patches.catalog import PatchCatalog; "
+                "assert len(PatchCatalog().all()) == 11"
             )
             result = subprocess.run(
                 [sys.executable, "-c", code],
