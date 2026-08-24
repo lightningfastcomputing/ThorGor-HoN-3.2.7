@@ -13,30 +13,33 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PatchCatalogTests(unittest.TestCase):
-    def test_every_checked_in_builder_has_one_named_manifest(self):
+    def test_every_stable_builder_has_one_named_manifest(self):
         manifests = PatchCatalog().all()
         builders = {
-            evidence.replace("\\", "/")
+            manifest.builder.as_posix()
             for manifest in manifests
-            for evidence in manifest.evidence
-            if evidence.startswith("patches/build_")
+            if manifest.builder is not None
         }
         expected = {
-            path.relative_to(ROOT).as_posix()
-            for path in (ROOT / "patches").glob("build_*.py")
+            path.relative_to(ROOT / "thorgor").as_posix()
+            for path in (ROOT / "thorgor" / "patches" / "builders").glob("*.py")
+            if path.name != "__init__.py"
         }
         self.assertEqual(builders, expected)
         self.assertEqual(len(manifests), 11)
 
     def test_production_v77_patch_is_fully_declarative(self):
-        manifest = PatchCatalog().get("dedicated.hero_state_recipient_fix_v77")
-        self.assertIsNone(manifest.legacy_builder)
+        manifest = PatchCatalog().get("dedicated.hero_state_recipient_fix")
+        self.assertEqual(manifest.legacy_revision, "v77")
+        self.assertIsNone(manifest.builder)
         self.assertEqual(len(manifest.operations), 2)
         self.assertEqual(manifest.operations[0].offset, 0x2F3E02)
         self.assertEqual(manifest.operations[1].offset, 0x70D6C0)
 
     def test_manifest_has_maintenance_evidence(self):
         for manifest in PatchCatalog().all():
+            self.assertNotRegex(manifest.patch_id, r"_v\d+$")
+            self.assertRegex(manifest.legacy_revision or "", r"^v\d+$")
             self.assertTrue(manifest.reason, manifest.patch_id)
             self.assertTrue(manifest.observed_failure, manifest.patch_id)
             self.assertRegex(manifest.discovered, r"^20\d\d-\d\d-\d\d$")

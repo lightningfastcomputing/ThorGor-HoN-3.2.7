@@ -1,36 +1,21 @@
-import importlib.util
 import unittest
 from pathlib import Path
 
+from thorgor.patches.builders import (
+    client_redirects as k2,
+    complete_registry_guard as cgame,
+    hero_state_reconciliation as k2_v75,
+    hero_state_world_ready as k2_v76,
+    roster_reconciliation as k2_v68,
+    safe_reconciliation as k2_v67,
+    state_delivery_guarded as k2_v64,
+    state_delivery_initial as k2_v63,
+    state_delivery_linked as k2_v65,
+    state_revision_reconciliation as k2_v66,
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def load(name: str, relative: str):
-    spec = importlib.util.spec_from_file_location(name, ROOT / relative)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
-
-
-k2 = load("build_k2_v57", "patches/build_k2_v57.py")
-k2_v63 = load("build_k2_v63", "patches/build_k2_v63_state_delivery.py")
-k2_v64 = load("build_k2_v64", "patches/build_k2_v64_state_delivery.py")
-k2_v65 = load("build_k2_v65", "patches/build_k2_v65_state_delivery.py")
-k2_v66 = load("build_k2_v66", "patches/build_k2_v66_state_delivery.py")
-k2_v67 = load("build_k2_v67", "patches/build_k2_v67_safe_reconciliation.py")
-k2_v68 = load("build_k2_v68", "patches/build_k2_v68_roster_only_reconciliation.py")
-k2_v75 = load(
-    "build_k2_v75", "patches/build_k2_v75_hero_state_reconciliation.py"
-)
-k2_v76 = load(
-    "build_k2_v76", "patches/build_k2_v76_world_ready_hero_state_reconciliation.py"
-)
-k2_v77 = load(
-    "build_k2_v77", "patches/build_k2_v77_tail_recipient_hero_fix.py"
-)
-cgame = load("build_cgame_v61", "patches/build_cgame_v61_complete_registry_guard.py")
 
 
 class PatchBuilderTests(unittest.TestCase):
@@ -168,17 +153,6 @@ class PatchBuilderTests(unittest.TestCase):
         guarded = k2_v76.call(0x2000, k2_v76.QUEUE_BLOCK)
         displacement = int.from_bytes(guarded[1:], "little", signed=True)
         self.assertEqual(0x2005 + displacement, k2_v76.QUEUE_BLOCK)
-
-    def test_k2_v77_preserves_original_periodic_body_and_hooks_only_loop_tail(self):
-        self.assertEqual(k2_v77.SOURCE_SHA256, k2_v65.OUTPUT_SHA256)
-        self.assertRegex(k2_v77.OUTPUT_SHA256, r"^[0-9A-F]{64}$")
-        self.assertNotEqual(k2_v77.OUTPUT_SHA256, k2_v76.OUTPUT_SHA256)
-        self.assertEqual(k2_v77.QUEUE_BLOCK, k2_v75.QUEUE_BLOCK)
-        self.assertEqual(k2_v77.TAIL_HOOK, k2_v75.PERIODIC_BLOCK_RETURN)
-
-        tail_jump = k2_v77.jump(k2_v77.TAIL_HOOK, k2_v77.TAIL_WRAPPER)
-        displacement = int.from_bytes(tail_jump[1:], "little", signed=True)
-        self.assertEqual(k2_v77.TAIL_HOOK + 5 + displacement, k2_v77.TAIL_WRAPPER)
 
     def test_cgame_call_patch_shape(self):
         patch = cgame.call_patch(0x1000, 0x2000, 8)

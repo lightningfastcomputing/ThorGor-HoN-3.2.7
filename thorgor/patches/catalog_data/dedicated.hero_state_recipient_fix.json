@@ -1,5 +1,6 @@
 {
-  "id": "dedicated.hero_state_recipient_fix_v77",
+  "id": "dedicated.hero_state_recipient_fix",
+  "legacy_revision": "v77",
   "binary": "k2.dll",
   "version": "3.2.7.1-v65",
   "source_sha256": "82D0363C0BC853ECD60A3AD8A62E01E2BF0897EB1644364FBAC82C7E2B48ECAB",

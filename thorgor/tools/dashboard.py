@@ -227,16 +227,11 @@ def run_validation() -> None:
     global VALIDATION_OK, VALIDATION_DONE
     try:
         out = _log_handle("health_check")
-        result = subprocess.run(
-            ["cmd.exe", "/d", "/c", str(ROOT / "2_CHECK_V45.bat")],
-            cwd=str(ROOT),
-            stdout=out,
-            stderr=subprocess.STDOUT,
-            stdin=subprocess.DEVNULL,
-            creationflags=CREATE_NO_WINDOW,
-            timeout=45,
-        )
-        VALIDATION_OK = result.returncode == 0
+        from thorgor.patches.installer import verify_supported_install
+
+        for result in verify_supported_install(HON_HOME):
+            print(result, file=out)
+        VALIDATION_OK = True
     except Exception as exc:
         START_ERRORS["health_check"] = str(exc)
         VALIDATION_OK = False
@@ -396,7 +391,7 @@ class Dashboard(tk.Tk):
             ("dedicated", "Original Dedicated Slave", "UDP 11235"),
             ("publish", "Public Server Ready", "manager association / idle state"),
             ("native", "Native MatchID Bridge", "process"),
-            ("health_check", "Startup Health Check", "2_CHECK_V45.bat"),
+            ("health_check", "Startup Health Check", "package and binary verification"),
         ]
         for i, (key, label, detail) in enumerate(items):
             row = ttk.Frame(outer, style="Panel.TFrame")
@@ -418,7 +413,11 @@ class Dashboard(tk.Tk):
                   activebackground="#34414c", activeforeground="#ffffff", relief="flat", padx=12, pady=6).pack(side="left")
         tk.Button(buttons, text="Create Debug ZIP", command=self.make_debug_zip, bg="#176b49", fg="#ffffff",
                   activebackground="#21885f", activeforeground="#ffffff", relief="flat", padx=12, pady=6).pack(side="left", padx=(8,0))
-        self.bundle_status = ttk.Label(self, text=f"Logs: dashboard_logs\\   •   Debug ZIPs: {DEBUG_DIR}", style="Footer.TLabel")
+        self.bundle_status = ttk.Label(
+            self,
+            text=f"Matchmaking: domain tested; live HoN queue protocol not yet reversed   •   Logs: {LOG_DIR}",
+            style="Footer.TLabel",
+        )
         self.bundle_status.pack(anchor="w", padx=23, pady=(2, 13))
 
         self.last_statuses = {}
@@ -500,11 +499,9 @@ class Dashboard(tk.Tk):
         self.after(1000, self._start_manager)
 
     def _start_manager(self) -> None:
-        launch("manager", [
-            "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
-            "-File", str(ROOT / "start_manager_v39.ps1"),
-            "-HonHome", str(HON_HOME),
-        ], HON_HOME)
+        launch("manager", _module_command("thorgor.game_manager.manager_process") + [
+            "--hon-home", str(HON_HOME),
+        ], PACKAGE_PARENT)
         self.after(15000, self._start_native)
 
     def _start_native(self) -> None:
@@ -540,9 +537,9 @@ class Dashboard(tk.Tk):
             "manager": "TCP 1136" + (f"  •  {START_ERRORS['manager']}" if "manager" in START_ERRORS else ""),
             "publish": publish_detail,
             "native": "process" + (f"  •  {START_ERRORS['native']}" if "native" in START_ERRORS else ""),
-            "health_check": ("2_CHECK_V45.bat  •  passed" if VALIDATION_DONE and VALIDATION_OK else
-                             "2_CHECK_V45.bat  •  failed (see log)" if VALIDATION_DONE else
-                             "2_CHECK_V45.bat  •  pending"),
+            "health_check": ("package and binary verification  •  passed" if VALIDATION_DONE and VALIDATION_OK else
+                             "package and binary verification  •  failed (see log)" if VALIDATION_DONE else
+                             "package and binary verification  •  pending"),
         }
         for key, ok in statuses.items():
             self.set_row(key, ok, detail_overrides.get(key))
@@ -581,12 +578,9 @@ class Dashboard(tk.Tk):
             except Exception:
                 pass
         try:
-            subprocess.run(
-                ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
-                 "-File", str(ROOT / "CLEANUP_OLD_TESTS.ps1")],
-                cwd=str(ROOT), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                creationflags=CREATE_NO_WINDOW, timeout=8,
-            )
+            from thorgor.game_manager.process_cleanup import cleanup_stale_processes
+
+            cleanup_stale_processes(exclude={os.getpid()})
         except Exception:
             pass
         for h in list(LOG_HANDLES):

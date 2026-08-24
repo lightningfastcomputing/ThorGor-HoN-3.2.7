@@ -1,5 +1,6 @@
 {
-  "id": "dedicated.hero_state_reconciliation_v75",
+  "id": "dedicated.hero_state_reconciliation",
+  "legacy_revision": "v75",
   "binary": "k2.dll",
   "version": "3.2.7.1-v65",
   "source_sha256": "82D0363C0BC853ECD60A3AD8A62E01E2BF0897EB1644364FBAC82C7E2B48ECAB",
@@ -8,5 +9,5 @@
   "observed_failure": "A joined LAN client receives incomplete hero availability state.",
   "discovered": "2026-08-21",
   "evidence": ["patches/build_k2_v75_hero_state_reconciliation.py", "legacy/V75_SERVER_HERO_STATE_FIX_README.txt"],
-  "implementation": {"kind": "legacy_builder", "path": "patches/build_k2_v75_hero_state_reconciliation.py"}
+  "implementation": {"kind": "stable_builder", "path": "patches/builders/hero_state_reconciliation.py"}
 }

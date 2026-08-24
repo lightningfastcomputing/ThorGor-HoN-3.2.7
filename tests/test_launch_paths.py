@@ -78,40 +78,39 @@ class LaunchPathTests(unittest.TestCase):
     def test_refactored_stack_launcher_uses_stable_package_entrypoint(self):
         launcher = self.read("thorgor/START_STACK.bat")
         self.assertIn(r"C:\intelprop\Heroes of Newerth", launcher)
-        self.assertIn(r"System32\WindowsPowerShell\v1.0\powershell.exe", launcher)
-        self.assertIn(r"PSModulePath=%SystemRoot%\System32\WindowsPowerShell\v1.0\Modules", launcher)
-        self.assertIn("INSTALL_V77_PATCHES.ps1", launcher)
-        self.assertIn("RESET_V42.ps1", launcher)
+        self.assertIn("-m thorgor patches install", launcher)
+        self.assertIn("-m thorgor reset-state", launcher)
         self.assertIn("-m thorgor dashboard", launcher)
-        self.assertIn(r"THORGOR_PACKAGE!\runtime", launcher)
+        self.assertNotIn(r"\runtime", launcher.lower())
+        self.assertNotIn("powershell", launcher.lower())
         self.assertNotIn(r"set \"THORGOR_ROOT=%~dp0..", launcher)
 
-    def test_staged_dashboard_launches_stable_master_module(self):
-        dashboard = self.read("thorgor/runtime/hon_v49_dashboard.py")
+    def test_dashboard_launches_stable_master_module(self):
+        dashboard = self.read("thorgor/tools/dashboard.py")
         self.assertIn('_module_command("thorgor.master.server")', dashboard)
         self.assertNotIn(
             '_service_command(MASTER_EXE, ROOT / "thorgor_hon_sandboxed_masterserver_v39.py")',
             dashboard,
         )
 
-    def test_staged_dashboard_launches_stable_chat_module(self):
-        dashboard = self.read("thorgor/runtime/hon_v49_dashboard.py")
+    def test_dashboard_launches_stable_chat_module(self):
+        dashboard = self.read("thorgor/tools/dashboard.py")
         self.assertIn('_module_command("thorgor.chat.server")', dashboard)
         self.assertNotIn(
             '_service_command(CHAT_EXE, ROOT / "chat-server" / "thorgor_hon_chatserver_v13.py")',
             dashboard,
         )
 
-    def test_staged_dashboard_launches_stable_game_protocol_module(self):
-        dashboard = self.read("thorgor/runtime/hon_v49_dashboard.py")
+    def test_dashboard_launches_stable_game_protocol_module(self):
+        dashboard = self.read("thorgor/tools/dashboard.py")
         self.assertIn('_module_command("thorgor.protocols.game_protocol")', dashboard)
         self.assertNotIn(
             '_service_command(UDP_EXE, ROOT / "hon_udp_shim.py")',
             dashboard,
         )
 
-    def test_staged_dashboard_launches_stable_game_manager_modules(self):
-        dashboard = self.read("thorgor/runtime/hon_v49_dashboard.py")
+    def test_dashboard_launches_stable_game_manager_modules(self):
+        dashboard = self.read("thorgor/tools/dashboard.py")
         self.assertIn('_module_command("thorgor.game_manager.dedicated_slave")', dashboard)
         self.assertIn('_module_command("thorgor.game_manager.native_match_id")', dashboard)
         self.assertNotIn(

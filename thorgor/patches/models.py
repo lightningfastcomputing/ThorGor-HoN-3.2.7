@@ -48,9 +48,10 @@ class PatchManifest:
     reason: str
     observed_failure: str
     discovered: str
+    legacy_revision: str | None
     evidence: tuple[str, ...]
     operations: tuple[WriteOperation, ...]
-    legacy_builder: Path | None
+    builder: Path | None
     manifest_path: Path
 
     @classmethod
@@ -61,9 +62,9 @@ class PatchManifest:
         source = data["source_sha256"]
         source_hashes = (source,) if isinstance(source, str) else tuple(source)
         implementation = data.get("implementation", {})
-        legacy = implementation.get("path") if implementation.get("kind") == "legacy_builder" else None
+        builder = implementation.get("path") if implementation.get("kind") == "stable_builder" else None
         operations = tuple(WriteOperation.from_dict(item) for item in data.get("operations", ()))
-        if not operations and not legacy:
+        if not operations and not builder:
             raise ValueError(f"{patch_id} has no patch implementation")
         return cls(
             patch_id=patch_id,
@@ -74,8 +75,9 @@ class PatchManifest:
             reason=data["reason"],
             observed_failure=data["observed_failure"],
             discovered=data["discovered"],
+            legacy_revision=data.get("legacy_revision"),
             evidence=tuple(data.get("evidence", ())),
             operations=operations,
-            legacy_builder=Path(legacy) if legacy else None,
+            builder=Path(builder) if builder else None,
             manifest_path=path,
         )

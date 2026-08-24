@@ -1,5 +1,6 @@
 {
-  "id": "dedicated.hero_state_world_ready_v76",
+  "id": "dedicated.hero_state_world_ready",
+  "legacy_revision": "v76",
   "binary": "k2.dll",
   "version": "3.2.7.1-v65",
   "source_sha256": "82D0363C0BC853ECD60A3AD8A62E01E2BF0897EB1644364FBAC82C7E2B48ECAB",
@@ -8,5 +9,5 @@
   "observed_failure": "Hero blocks could be reconciled before a joined client's world was ready.",
   "discovered": "2026-08-21",
   "evidence": ["patches/build_k2_v76_world_ready_hero_state_reconciliation.py", "legacy/V76_WORLD_READY_HERO_STATE_FIX_README.txt"],
-  "implementation": {"kind": "legacy_builder", "path": "patches/build_k2_v76_world_ready_hero_state_reconciliation.py"}
+  "implementation": {"kind": "stable_builder", "path": "patches/builders/hero_state_world_ready.py"}
 }

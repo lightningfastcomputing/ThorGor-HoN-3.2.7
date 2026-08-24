@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.util
+import importlib
 import struct
-import sys
 from pathlib import Path
 
-from thorgor.paths import ROOT
+from thorgor.paths import PACKAGE_ROOT
 from .models import PatchManifest
 
 
@@ -53,18 +52,13 @@ def _apply_operations(manifest: PatchManifest, source: Path, target: Path) -> st
     return result
 
 
-def _apply_legacy(manifest: PatchManifest, source: Path, target: Path) -> str:
-    assert manifest.legacy_builder is not None
-    builder = (ROOT / manifest.legacy_builder).resolve()
-    if ROOT.resolve() not in builder.parents or not builder.is_file():
-        raise ValueError(f"invalid legacy builder path: {manifest.legacy_builder}")
-    name = f"thorgor._patch_builder.{manifest.patch_id.replace('.', '_')}"
-    spec = importlib.util.spec_from_file_location(name, builder)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"cannot load patch builder: {builder}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
+def _apply_builder(manifest: PatchManifest, source: Path, target: Path) -> str:
+    assert manifest.builder is not None
+    builder = (PACKAGE_ROOT / manifest.builder).resolve()
+    if PACKAGE_ROOT.resolve() not in builder.parents or not builder.is_file():
+        raise ValueError(f"invalid patch builder path: {manifest.builder}")
+    module_name = "thorgor." + manifest.builder.with_suffix("").as_posix().replace("/", ".")
+    module = importlib.import_module(module_name)
     result = str(module.build(source, target)).upper()
     if result != manifest.output_sha256:
         target.unlink(missing_ok=True)
@@ -78,5 +72,4 @@ def apply_patch(manifest: PatchManifest, source: Path, target: Path) -> str:
     target.parent.mkdir(parents=True, exist_ok=True)
     if manifest.operations:
         return _apply_operations(manifest, source, target)
-    return _apply_legacy(manifest, source, target)
-
+    return _apply_builder(manifest, source, target)
