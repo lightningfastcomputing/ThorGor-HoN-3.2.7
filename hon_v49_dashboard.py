@@ -483,7 +483,7 @@ class Dashboard(tk.Tk):
         self.after(2000, self._start_udp)
 
     def _start_udp(self) -> None:
-        launch("udp", _service_command(UDP_EXE, ROOT / "hon_udp_shim.py") + [
+        launch("udp", _module_command("thorgor.protocols.game_protocol") + [
             "--preset", "thorgor-public-list",
             "--listen-host", "0.0.0.0", "--listen-port", "11236", "--browser-ip", LAN_IP,
             "--require-c0-auth", "--master-url", "http://127.0.0.1/server_requester.php",
@@ -491,7 +491,7 @@ class Dashboard(tk.Tk):
             "--client-route-timeout", "600", "--stats-interval", "1",
             "--route-trace-seconds", "300", "--route-trace-packets", "40000",
             "--route-trace-checkpoint-seconds", "1",
-        ])
+        ], PACKAGE_PARENT)
         self.after(1000, self._start_backend)
 
     def _start_backend(self) -> None:

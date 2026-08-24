@@ -7,7 +7,7 @@ import time
 import unittest
 from pathlib import Path
 
-from hon_udp_shim import build_proxy_challenge, parse_lobby_create
+from thorgor.protocols.game_protocol import build_proxy_challenge, parse_lobby_create
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,7 +73,8 @@ class UdpMulticlientRoutingTests(unittest.TestCase):
             process = subprocess.Popen(
                 [
                     sys.executable,
-                    str(ROOT / "hon_udp_shim.py"),
+                    "-m",
+                    "thorgor.protocols.game_protocol",
                     "--listen-host",
                     "127.0.0.1",
                     "--listen-port",

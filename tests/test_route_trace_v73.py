@@ -1,7 +1,7 @@
 import struct
 import unittest
 
-from hon_udp_shim import (
+from thorgor.protocols.game_protocol import (
     PICKER_STATE_PREFIX,
     describe_trace_datagram,
     extract_picker_hero_block_suffix,
