@@ -785,6 +785,21 @@ def success_payload(session: Session, cookie: str | None = None) -> dict[Any, An
     return payload
 
 
+def delete_notification_response(params: dict[str, list[str]]) -> dict[str, str]:
+    """Return the exact HoN client_requester notification acknowledgement.
+
+    The client treats a generic success envelope as a failed notification
+    removal and aborts the subsequent social action.  Notification removal is
+    intentionally idempotent; the chat social service owns the pending friend
+    request until an approval packet is accepted.
+    """
+    return {
+        "notify_id": params.get("notify_id", ["0"])[0],
+        "internal_id": params.get("internal_id", ["0"])[0],
+        "status": "OK",
+    }
+
+
 def start_game_response(
     store: AccountStore,
     params: dict[str, list[str]],
@@ -1465,6 +1480,8 @@ class Handler(BaseHTTPRequestHandler):
                 f"crc={response.get('crc')!r}"
             )
             self.send_php(response)
+        elif function == "delete_notification":
+            self.send_php(delete_notification_response(params))
         elif function in {"matchmaking_join", "matchmaking_poll", "matchmaking_leave"}:
             if MATCHMAKING is None:
                 self.send_php(error_payload("Matchmaking service unavailable"))

@@ -45,6 +45,9 @@ class ChatSocialTests(unittest.TestCase):
                          (self.target.account_id, FRIEND_REQUEST_RESPONSE))
         self.assertEqual(target_packet[2][0], 2)
         self.assertIn(b"pwnrbwnr\0", target_packet[2])
+        name_end = target_packet[2].index(b"\0", 5)
+        connection_status_offset = name_end + 1 + 4
+        self.assertEqual(target_packet[2][connection_status_offset], 3)
         with self.store.lock, self.store.connect() as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM friend_requests").fetchone()[0], 1)
 

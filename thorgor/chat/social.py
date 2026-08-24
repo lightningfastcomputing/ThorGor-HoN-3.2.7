@@ -13,6 +13,9 @@ FRIEND_APPROVE = 0x00B3
 FRIEND_REQUEST_RESPONSE = 0x00B2
 FRIEND_APPROVE_RESPONSE = 0x00B4
 
+CHAT_CLIENT_STATUS_DISCONNECTED = 0
+CHAT_CLIENT_STATUS_CONNECTED = 3
+
 Sender = Callable[[int, int, bytes], bool]
 OnlineCheck = Callable[[int], bool]
 
@@ -48,7 +51,9 @@ class SocialService:
                          online: bool) -> bytes:
         return (
             bytes((status,)) + struct.pack("<i", notification_id) + cstr(account.nickname)
-            + struct.pack("<I", account.account_id) + bytes((0 if online else 1, 0))
+            + struct.pack("<I", account.account_id)
+            + bytes((CHAT_CLIENT_STATUS_CONNECTED if online
+                     else CHAT_CLIENT_STATUS_DISCONNECTED, 0))
             + struct.pack("<I", 0) + cstr("") + cstr("") + cstr("") + cstr("")
             + struct.pack("<I", 0)
         )
