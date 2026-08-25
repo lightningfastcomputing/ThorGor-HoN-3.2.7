@@ -2,7 +2,6 @@
 setlocal EnableExtensions EnableDelayedExpansion
 
 for %%I in ("%~dp0.") do set "THORGOR_PACKAGE=%%~fI"
-for %%I in ("%~dp0..") do set "THORGOR_PARENT=%%~fI"
 
 set "SERVER_IP=%~1"
 if not defined SERVER_IP set /p "SERVER_IP=Enter the ThorGor server LAN IPv4 address: "
@@ -28,7 +27,7 @@ if not defined PYEXE (
     exit /b 6
 )
 
-pushd "!THORGOR_PARENT!"
+pushd "!THORGOR_PACKAGE!"
 set "THORGOR_REMOTE_SERVER_IP=!SERVER_IP!"
 "!PYEXE!" -c "import ipaddress,os; ipaddress.IPv4Address(os.environ['THORGOR_REMOTE_SERVER_IP'])" >nul 2>&1
 if errorlevel 1 (
@@ -47,7 +46,7 @@ echo Installing patches and configuring the legacy chat hostname...
 echo Accept the Windows administrator prompt to update the game DLLs and hosts file.
 
 set "THORGOR_REMOTE_PYTHON=!PYEXE!"
-set "THORGOR_REMOTE_PARENT=!THORGOR_PARENT!"
+set "THORGOR_REMOTE_PARENT=!THORGOR_PACKAGE!"
 set "THORGOR_REMOTE_HON_HOME=!HON_HOME!"
 set "THORGOR_REMOTE_LOG=!THORGOR_PACKAGE!\var\remote_client_setup.log"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^

@@ -2,7 +2,6 @@
 setlocal EnableExtensions EnableDelayedExpansion
 
 for %%I in ("%~dp0.") do set "THORGOR_PACKAGE=%%~fI"
-for %%I in ("%~dp0..") do set "THORGOR_PARENT=%%~fI"
 
 set "PYEXE="
 for /f "delims=" %%P in ('where python.exe 2^>nul') do (
@@ -19,7 +18,7 @@ echo ThorGor HoN 3.2.7 LAN Sandbox account manager
 echo   Package: !THORGOR_PACKAGE!
 echo   Database: !THORGOR_PACKAGE!\var\thorgor_accounts.db
 
-pushd "!THORGOR_PARENT!"
+pushd "!THORGOR_PACKAGE!"
 "!PYEXE!" -m thorgor accounts
 set "ACCOUNT_EXIT=!ERRORLEVEL!"
 popd

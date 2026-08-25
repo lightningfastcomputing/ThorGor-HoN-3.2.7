@@ -2,5 +2,8 @@ __pycache__/
 *.py[cod]
 *.log
 *.db
+*.zip
 *_captures/
 var/
+work/
+dashboard_logs/

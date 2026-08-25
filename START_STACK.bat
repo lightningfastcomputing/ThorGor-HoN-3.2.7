@@ -3,7 +3,6 @@ setlocal EnableExtensions EnableDelayedExpansion
 
 rem The thorgor package is portable and may be moved with no adjacent legacy files.
 for %%I in ("%~dp0.") do set "THORGOR_PACKAGE=%%~fI"
-for %%I in ("%~dp0..") do set "THORGOR_PARENT=%%~fI"
 
 if not defined HON_HOME set "HON_HOME=C:\intelprop\Heroes of Newerth"
 set "THORGOR_HON_HOME=!HON_HOME!"
@@ -32,7 +31,7 @@ echo   Package: !THORGOR_PACKAGE!
 echo   HoN:     !HON_HOME!
 echo.
 
-pushd "!THORGOR_PARENT!"
+pushd "!THORGOR_PACKAGE!"
 
 echo Installing or verifying supported binary patches...
 "!PYEXE!" -m thorgor patches install --hon-home "!HON_HOME!"

@@ -19,11 +19,11 @@ from pathlib import Path
 from tkinter import ttk, messagebox
 
 from thorgor.game_manager.stack import ServiceSpec, build_stack
-from thorgor.paths import ROOT, SOURCE_ROOT
+from thorgor.paths import PACKAGE_ROOT, ROOT, SOURCE_ROOT
 
 
 IS_FROZEN = bool(getattr(sys, "frozen", False))
-PACKAGE_PARENT = SOURCE_ROOT
+PACKAGE_PARENT = PACKAGE_ROOT
 HON_HOME = Path(os.environ.get("THORGOR_HON_HOME", r"C:\Program Files (x86)\Heroes of Newerth"))
 HON_EXE = HON_HOME / "hon.exe"
 LOG_DIR = ROOT / "dashboard_logs"
