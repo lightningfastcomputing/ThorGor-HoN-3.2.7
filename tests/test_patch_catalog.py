@@ -26,7 +26,7 @@ class PatchCatalogTests(unittest.TestCase):
             if path.name != "__init__.py"
         }
         self.assertEqual(builders, expected)
-        self.assertEqual(len(manifests), 12)
+        self.assertEqual(len(manifests), 11)
 
     def test_production_v77_patch_is_fully_declarative(self):
         manifest = PatchCatalog().get("dedicated.hero_state_recipient_fix")

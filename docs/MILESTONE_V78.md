@@ -1,4 +1,4 @@
-# v78 joiner team-chat delivery — 2026-08-24
+# v78 joiner team-chat experiment — REJECTED (2026-08-24)
 
 Two-client route traces proved that the host and joiner both receive the same
 reliable game-chat events. Team messages use payload subtype `0x02`; all-chat
@@ -10,11 +10,17 @@ the event when the local team field differs from the sender's field. A joiner's
 replicated sender-team field can remain stale even though the dedicated server
 has already selected that joiner as a legitimate team-message recipient.
 
-`client.team_chat_delivery` adds a narrow subtype guard. Server-authorized team
-chat (`0x02`) bypasses only the stale local-versus-sender team comparison. The
-existing ignored-player check, mute modes, sender lookup, all-chat path, and all
-other message subtypes retain their original instructions.
+The bounded client experiment bypassed only that comparison for subtype `0x02`.
+A live retest with the exact patched hash still failed. This proves the event is
+discarded earlier, while resolving the sender's missing `CPlayer` record. The
+patch is removed from the supported catalog and retained only in Git history.
 
-Verified cgame SHA-256:
+The same retest exposed the upstream cause: real creators set the C0 external
+identity bit, while joiners do not. ThorGor's compatibility bridge then cleared
+that bit for every connection, selecting K2's local-host path for everyone.
+The supported fix now keeps every backend-approved identity on K2's external
+admission path so the full player record is constructed.
+
+Rejected cgame SHA-256:
 
 `1CFA354C6B1E0DF780D22BF40DAB13E9756472FA13F32A466F461687C472DFDF`

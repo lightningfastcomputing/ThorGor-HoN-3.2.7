@@ -77,6 +77,20 @@ class UdpAuthorizationBridgeTests(unittest.TestCase):
         self.assertEqual(rewritten[packet.flag_offset + 1 :], source[packet.flag_offset + 1 :])
         self.assertFalse(shim.parse_connect_c0(rewritten).external_auth)
 
+    def test_approved_joiner_uses_full_external_identity_admission(self):
+        source = bytearray(synthetic_c0())
+        packet = shim.parse_connect_c0(source)
+        source[packet.flag_offset] &= 0xFE
+        packet = shim.parse_connect_c0(source)
+        self.assertFalse(packet.external_auth)
+
+        rewritten = shim.make_externally_authorized_c0(bytes(source), packet)
+
+        self.assertEqual(rewritten[: packet.flag_offset], source[: packet.flag_offset])
+        self.assertEqual(rewritten[packet.flag_offset], source[packet.flag_offset] | 0x01)
+        self.assertEqual(rewritten[packet.flag_offset + 1 :], source[packet.flag_offset + 1 :])
+        self.assertTrue(shim.parse_connect_c0(rewritten).external_auth)
+
     def test_validator_rejects_cookie_mismatch_and_string_account_id(self):
         mismatch = backend.php_serialize(
             {"cookie": "wrong", "account_id": 7, "game_cookie": "a" * 32}

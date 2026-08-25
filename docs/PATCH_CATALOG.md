@@ -7,7 +7,6 @@ metadata.
 ```powershell
 python -m thorgor patches list
 python -m thorgor patches show dedicated.hero_state_recipient_fix
-python -m thorgor patches show client.team_chat_delivery
 python -m thorgor patches apply PATCH_ID SOURCE_DLL OUTPUT_DLL
 python -m thorgor patches install --hon-home "C:\intelprop\Heroes of Newerth"
 ```
@@ -27,10 +26,6 @@ stable builders have also been compared against verified HoN binaries, yielding:
 - linked-delivery K2: `82D0363C...48ECAB`
 - recipient-fixed K2: `25B1BB06...CE7026`
 
-The supported cgame chain now ends with `client.team_chat_delivery`. It keeps
-the complete-registry guard and bypasses the stale replicated-team comparison
-only for server-authorized game team-chat subtype `2`. All-chat and the client's
-existing ignore/mute paths remain unchanged.
 - guarded cgame: `88C4ACA3...DF988`
 
 The client matchmaking gate is a resource patch rather than an executable-byte
