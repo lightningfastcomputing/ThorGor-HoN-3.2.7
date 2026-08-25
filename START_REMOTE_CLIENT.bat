@@ -7,7 +7,7 @@ set "SERVER_IP=%~1"
 if not defined SERVER_IP set /p "SERVER_IP=Enter the ThorGor server LAN IPv4 address: "
 if not defined SERVER_IP exit /b 3
 
-if not defined HON_HOME set "HON_HOME=C:\intelprop\Heroes of Newerth"
+if not defined HON_HOME set "HON_HOME=C:\Program Files (x86)\Heroes of Newerth"
 if not exist "!HON_HOME!\hon.exe" (
     echo ERROR: hon.exe was not found:
     echo   !HON_HOME!\hon.exe

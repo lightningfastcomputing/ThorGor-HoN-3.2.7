@@ -4,7 +4,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 rem The thorgor package is portable and may be moved with no adjacent legacy files.
 for %%I in ("%~dp0.") do set "THORGOR_PACKAGE=%%~fI"
 
-if not defined HON_HOME set "HON_HOME=C:\intelprop\Heroes of Newerth"
+if not defined HON_HOME set "HON_HOME=C:\Program Files (x86)\Heroes of Newerth"
 set "THORGOR_HON_HOME=!HON_HOME!"
 
 if not exist "!HON_HOME!\hon.exe" (
