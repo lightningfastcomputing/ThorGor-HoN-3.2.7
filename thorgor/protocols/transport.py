@@ -22,17 +22,3 @@ def make_authorized_local_c0(data: bytes, packet: ConnectC0) -> bytes:
     rewritten = bytearray(data)
     rewritten[packet.flag_offset] &= 0xFE
     return bytes(rewritten)
-
-
-def make_externally_authorized_c0(data: bytes, packet: ConnectC0) -> bytes:
-    """Keep an approved client on K2's full identity-admission path.
-
-    Bit zero is set only after ThorGor has validated the cookie against the
-    isolated master service.  K2 then obtains and installs the complete player
-    record instead of treating a LAN joiner as another local host.
-    """
-    if packet.flag_offset >= len(data):
-        raise ValueError("external-auth flag offset is outside packet")
-    rewritten = bytearray(data)
-    rewritten[packet.flag_offset] |= 0x01
-    return bytes(rewritten)

@@ -426,7 +426,7 @@ from thorgor.protocols.tracing import (
     extract_picker_hero_block_suffix,
     repair_truncated_picker_packet,
 )
-from thorgor.protocols.transport import build_proxy_challenge, make_externally_authorized_c0
+from thorgor.protocols.transport import build_proxy_challenge, make_authorized_local_c0
 from thorgor.protocols.routing import ClientRoute, RouteTable
 
 
@@ -1246,7 +1246,7 @@ def main(argv=None) -> int:
                         f"C0_WIRE client={addr[0]}:{addr[1]} user={connect.username!r} "
                         f"bytes={len(data)} flag_offset={connect.flag_offset} hex={data.hex()}"
                     )
-                    data = make_externally_authorized_c0(data, connect)
+                    data = make_authorized_local_c0(data, connect)
                     route_connect[addr] = connect
                     typed_route = routes.get(addr)
                     if typed_route is not None:
@@ -1254,7 +1254,7 @@ def main(argv=None) -> int:
                     begin_admission_trace(addr, connect.username)
                     start_route_trace(addr, connect.username)
                     log(
-                        f"C0_AUTH_EXTERNALIZED client={addr[0]}:{addr[1]} "
+                        f"C0_AUTH_LOCALIZED client={addr[0]}:{addr[1]} "
                         f"flag_offset={connect.flag_offset} host_id_preserved=0x{connect.host_id:08X}"
                     )
                 elif args.require_c0_auth and addr not in upstream_by_client:

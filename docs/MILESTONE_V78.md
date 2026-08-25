@@ -15,11 +15,18 @@ A live retest with the exact patched hash still failed. This proves the event is
 discarded earlier, while resolving the sender's missing `CPlayer` record. The
 patch is removed from the supported catalog and retained only in Git history.
 
-The same retest exposed the upstream cause: real creators set the C0 external
-identity bit, while joiners do not. ThorGor's compatibility bridge then cleared
-that bit for every connection, selecting K2's local-host path for everyone.
-The supported fix now keeps every backend-approved identity on K2's external
-admission path so the full player record is constructed.
+The same retest exposed a correlation: real creators set the C0 external
+identity bit, while joiners do not. An experiment kept every backend-approved
+identity on K2's external path. K2 immediately returned
+`rejected_invalid_request` before making a native master request, including for
+an otherwise valid creator packet. The bit is therefore not a generic switch
+for full player identity; it belongs to an external-authentication contract
+ThorGor has not reconstructed. The supported bridge continues to use K2's
+local-admission path after validating the account with ThorGor's master service.
+
+The incorrect multi-host presentation and missing joiner team chat remain an
+upstream player-registry problem. Neither rejected experiment is shipped as a
+fix.
 
 Rejected cgame SHA-256:
 
