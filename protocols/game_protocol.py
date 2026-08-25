@@ -7,6 +7,7 @@ import socket
 import struct
 import sys
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -183,6 +184,112 @@ def describe_trace_datagram(data: bytes) -> dict[str, object]:
 
 PICKER_STATE_PREFIX = bytes.fromhex("5fb703905f0100ffffffff")
 PICKER_HERO_BLOCK_IDS = tuple(range(3, 9))
+CLIENT_TEAM_CHAT_PREFIX = b"\xc8\x5c"
+SERVER_TEAM_CHAT_PREFIX = b"\x5f\x03"
+SERVER_ALL_CHAT_PREFIX = b"\x5f\x02"
+THORGOR_TEAM_CHAT_MARKER = b"[THORGOR_TEAM]"
+CLIENT_TEAM_SELECTION_PREFIX = b"\xc8\x01"
+
+
+def parse_client_team_chat(data: bytes) -> bytes | None:
+    """Return the text from an exact 3.2.7.1 client team-chat event."""
+    if len(data) < 7 + 5 or data[:3] != b"\x00\x00\x03":
+        return None
+    payload = data[7:]
+    if not payload.startswith(CLIENT_TEAM_CHAT_PREFIX) or not payload.endswith(b"\x00\x01"):
+        return None
+    message = payload[len(CLIENT_TEAM_CHAT_PREFIX):-2]
+    if not message or b"\x00" in message:
+        return None
+    return message
+
+
+def parse_client_team_selection(data: bytes) -> tuple[int, int] | None:
+    """Return the team and slot from an exact 3.2.7.1 lobby selection event."""
+    if len(data) != 7 + 10 or data[:3] != b"\x00\x00\x03":
+        return None
+    payload = data[7:]
+    if not payload.startswith(CLIENT_TEAM_SELECTION_PREFIX):
+        return None
+    team, slot = struct.unpack_from("<II", payload, 2)
+    if team not in (1, 2) or not 0 <= slot <= 4:
+        return None
+    return team, slot
+
+
+def team_chat_recipient_routes(
+    sender_addr: tuple[str, int],
+    team_by_route: dict[tuple[str, int], int],
+    candidate_routes: Iterable[tuple[str, int]],
+) -> tuple[tuple[str, int], ...]:
+    """Select only active routes assigned to the sender's team."""
+    sender_team = team_by_route.get(sender_addr)
+    if sender_team is None:
+        return ()
+    return tuple(
+        route_addr
+        for route_addr in candidate_routes
+        if team_by_route.get(route_addr) == sender_team
+    )
+
+
+def remember_reliable_sequence(
+    observed: dict[int, float], sequence: int, now: float, ttl: float = 30.0
+) -> bool:
+    """Remember a reliable event once while allowing its transport retries."""
+    cutoff = now - ttl
+    expired = [item for item, observed_at in observed.items() if observed_at < cutoff]
+    for item in expired:
+        observed.pop(item, None)
+    if sequence in observed:
+        return False
+    observed[sequence] = now
+    return True
+
+
+def parse_server_team_chat(data: bytes) -> tuple[int, bytes] | None:
+    """Return sender number and text from an exact server team-chat event."""
+    if len(data) < 7 + 5 or data[:3] != b"\x00\x00\x03":
+        return None
+    payload = data[7:]
+    if not payload.startswith(SERVER_TEAM_CHAT_PREFIX) or not payload.endswith(b"\x00"):
+        return None
+    sender = payload[2]
+    message = payload[3:-1]
+    if not message or b"\x00" in message:
+        return None
+    return sender, message
+
+
+def make_visible_team_chat_packet(sequence: int, sender_number: int, message: bytes) -> bytes:
+    """Build one private UI-routed team-chat packet for a recipient."""
+    safe_message = message.replace(b"\x00", b"")[:1024]
+    payload = (
+        SERVER_ALL_CHAT_PREFIX
+        + bytes((sender_number & 0xFF,))
+        + THORGOR_TEAM_CHAT_MARKER
+        + safe_message
+        + b"\x00"
+    )
+    return b"\x00\x00\x03" + struct.pack("<I", sequence & 0xFFFFFFFF) + payload
+
+
+def make_joiner_team_chat_visible(data: bytes) -> bytes | None:
+    """Convert a server-authorized joiner event for the UI team-chat shim."""
+    parsed = parse_server_team_chat(data)
+    if parsed is None:
+        return None
+    sender_number, message = parsed
+    return make_visible_team_chat_packet(
+        struct.unpack_from("<I", data, 3)[0], sender_number, message
+    )
+
+
+def rewrite_reliable_sequence(data: bytes, sequence: int) -> bytes:
+    """Replace the sequence on a reliable data/ack packet without touching its payload."""
+    if len(data) < 7 or data[:3] not in (b"\x00\x00\x03", b"\x00\x00\x05"):
+        return data
+    return data[:3] + struct.pack("<I", sequence & 0xFFFFFFFF) + data[7:]
 
 
 def extract_picker_hero_block_suffix(data: bytes) -> tuple[bytes, tuple[int, ...]] | None:
@@ -510,6 +617,11 @@ def main(argv=None) -> int:
         action="store_true",
         help="Repair only the exact truncated picking packet using validated host blocks 3 through 8.",
     )
+    parser.add_argument(
+        "--joiner-team-chat-fallback",
+        action="store_true",
+        help="Render team chat through the generic message event when a joiner's sender registry is incomplete.",
+    )
     parser.add_argument("--idle-timeout", type=float, default=120.0)
     parser.add_argument(
         "--client-route-timeout",
@@ -652,6 +764,7 @@ def main(argv=None) -> int:
         # COMPEL's proxy challenge is required by newer public-port clients,
         # but the 3.2.7.1 CPacket path rejects that 58-byte frame as fatal.
         args.proxy_challenge = False
+        args.joiner_team_chat_fallback = True
 
     log_path = Path(args.log_file)
     if not log_path.is_absolute():
@@ -695,6 +808,17 @@ def main(argv=None) -> int:
     challenge_sequence = 0
     pending_browser_queries: dict[bytes, dict[str, object]] = {}
     cached_picker_hero_suffix: bytes | None = None
+    pending_team_chat: list[tuple[float, bytes, str, tuple[str, int]]] = []
+    team_chat_sender_names: dict[int, str] = {}
+    route_team: dict[tuple[str, int], int] = {}
+    route_player_number: dict[tuple[str, int], int] = {}
+    handled_team_chat_sequences: dict[tuple[str, int], dict[int, float]] = {}
+    server_sequence_offset: dict[tuple[str, int], int] = {}
+    last_server_sequence: dict[tuple[str, int], int] = {}
+    server_sequence_translation: dict[tuple[str, int], dict[int, int]] = {}
+    # Maps client-visible reliable numbers back to server numbers. None denotes
+    # a shim-generated packet whose acknowledgement must not reach the server.
+    server_ack_translation: dict[tuple[str, int], dict[int, int | None]] = {}
 
     # Keep the forwarding hot path quiet. Full per-packet formatting, console flushes,
     # and opening/closing a log file for every datagram caused visible gameplay jitter.
@@ -712,6 +836,8 @@ def main(argv=None) -> int:
     )
     if args.preset:
         log(f"PRESET {args.preset}")
+    if args.joiner_team_chat_fallback:
+        log("JOINER_TEAM_CHAT_FALLBACK enabled")
     if args.require_c0_auth:
         log(f"C0_AUTH required endpoint={args.master_url!r} timeout={args.auth_timeout:.2f}s")
     if args.answer_browser_f or args.answer_browser_both:
@@ -740,6 +866,13 @@ def main(argv=None) -> int:
         route_connect.pop(client_addr, None)
         route_counters.pop(client_addr, None)
         route_challenge_at.pop(client_addr, None)
+        server_sequence_offset.pop(client_addr, None)
+        last_server_sequence.pop(client_addr, None)
+        server_sequence_translation.pop(client_addr, None)
+        server_ack_translation.pop(client_addr, None)
+        route_team.pop(client_addr, None)
+        route_player_number.pop(client_addr, None)
+        handled_team_chat_sequences.pop(client_addr, None)
         source_ip = route_source_ip.pop(client_addr, "0.0.0.0")
         if upstream is None:
             return
@@ -1026,6 +1159,37 @@ def main(argv=None) -> int:
         send_proxy_challenge(client_addr)
         return upstream
 
+    def inject_visible_team_chat(
+        recipient_addr: tuple[str, int],
+        sender_number: int,
+        message: bytes,
+        sender_name: str,
+        reason: str,
+    ) -> bool:
+        """Insert one private chat event into a recipient's reliable stream."""
+        previous = last_server_sequence.get(recipient_addr)
+        if previous is None:
+            log(
+                f"JOINER_TEAM_CHAT_MIRROR_SKIPPED client={recipient_addr[0]}:{recipient_addr[1]} "
+                "reason=no server reliable sequence"
+            )
+            return False
+        offset = server_sequence_offset.get(recipient_addr, 0) + 1
+        server_sequence_offset[recipient_addr] = offset
+        visible_sequence = (previous + 1) & 0xFFFFFFFF
+        last_server_sequence[recipient_addr] = visible_sequence
+        visible = make_visible_team_chat_packet(visible_sequence, sender_number, message)
+        server_ack_translation.setdefault(recipient_addr, {})[visible_sequence] = None
+        sent_visible = client_sock.sendto(visible, recipient_addr)
+        counters["client_tx"] += 1
+        counters["client_tx_bytes"] += sent_visible
+        log(
+            f"JOINER_TEAM_CHAT_MIRRORED client={recipient_addr[0]}:{recipient_addr[1]} "
+            f"sender={sender_number} name={sender_name!r} team={route_team.get(recipient_addr)} "
+            f"reason={reason} sequence={visible_sequence} bytes={sent_visible}"
+        )
+        return True
+
     def make_browser_o_reply(query: bytes) -> bytes | None:
         if len(query) != 6 or query[:3] != b"\x00\x00\x01" or query[3] != 0xCA:
             return None
@@ -1248,6 +1412,11 @@ def main(argv=None) -> int:
                     )
                     data = make_authorized_local_c0(data, connect)
                     route_connect[addr] = connect
+                    if addr not in route_player_number:
+                        used_player_numbers = set(route_player_number.values())
+                        route_player_number[addr] = next(
+                            number for number in range(256) if number not in used_player_numbers
+                        )
                     typed_route = routes.get(addr)
                     if typed_route is not None:
                         typed_route.connected = connect
@@ -1275,6 +1444,72 @@ def main(argv=None) -> int:
                             f"HOST_RESERVATION_{'RELEASED' if released else 'RELEASE_FAILED'} "
                             f"client={addr[0]}:{addr[1]} {release_reason}"
                         )
+                team_selection = parse_client_team_selection(data)
+                if team_selection is not None:
+                    selected_team, selected_slot = team_selection
+                    route_team[addr] = selected_team
+                    connect = route_connect.get(addr)
+                    selected_user = connect.username if connect is not None else "Player"
+                    log(
+                        f"PLAYER_TEAM client={addr[0]}:{addr[1]} "
+                        f"user={selected_user!r} "
+                        f"team={selected_team} slot={selected_slot}"
+                    )
+                team_message = parse_client_team_chat(data)
+                if team_message is not None:
+                    client_sequence = struct.unpack_from("<I", data, 3)[0]
+                    handled = handled_team_chat_sequences.setdefault(addr, {})
+                    if not remember_reliable_sequence(
+                        handled, client_sequence, time.monotonic()
+                    ):
+                        team_message = None
+                if team_message is not None:
+                    connect = route_connect.get(addr)
+                    sender_name = connect.username if connect is not None else "Player"
+                    cutoff = time.monotonic() - 10.0
+                    pending_team_chat[:] = [
+                        item for item in pending_team_chat if item[0] >= cutoff
+                    ]
+                    pending_team_chat.append((time.monotonic(), team_message, sender_name, addr))
+                    sender_team = route_team.get(addr)
+                    host_team = next(
+                        (
+                            route_team.get(route_addr)
+                            for route_addr, route_identity in route_connect.items()
+                            if route_identity.match_key
+                        ),
+                        None,
+                    )
+                    # The dedicated server only exposes a usable team-chat echo
+                    # through the host's route. When a joiner is on the other
+                    # team, deliver that team's event privately here instead.
+                    if (
+                        args.joiner_team_chat_fallback
+                        and connect is not None
+                        and not connect.match_key
+                        and sender_team is not None
+                        and host_team is not None
+                        and sender_team != host_team
+                    ):
+                        sender_number = route_player_number.get(addr, 0)
+                        candidates = (
+                            teammate_addr
+                            for teammate_addr, teammate_connect in tuple(route_connect.items())
+                            if not teammate_connect.match_key
+                            and teammate_addr in upstream_by_client
+                        )
+                        for teammate_addr in team_chat_recipient_routes(
+                            addr, route_team, candidates
+                        ):
+                            if teammate_addr not in upstream_by_client:
+                                continue
+                            inject_visible_team_chat(
+                                teammate_addr,
+                                sender_number,
+                                team_message,
+                                sender_name,
+                                "opposing_joiner_team",
+                            )
                 lobby = parse_lobby_create(data)
                 host_connect = route_connect.get(addr)
                 if lobby is not None and host_connect is not None and host_connect.match_key:
@@ -1302,6 +1537,18 @@ def main(argv=None) -> int:
                 route_activity[addr] = time.time()
                 capture_admission_packet(addr, "to_server", data)
                 capture_route_packet(addr, "to_server", data)
+                if len(data) >= 7 and data[:3] == b"\x00\x00\x05":
+                    visible_ack = struct.unpack_from("<I", data, 3)[0]
+                    translations = server_ack_translation.get(addr, {})
+                    if visible_ack in translations:
+                        original_ack = translations[visible_ack]
+                        if original_ack is None:
+                            log(
+                                f"JOINER_TEAM_CHAT_ACK client={addr[0]}:{addr[1]} "
+                                f"sequence={visible_ack}"
+                            )
+                            continue
+                        data = rewrite_reliable_sequence(data, original_ack)
                 sent = upstream.sendto(data, target)
                 counters["server_tx"] += 1
                 counters["server_tx_bytes"] += sent
@@ -1355,7 +1602,72 @@ def main(argv=None) -> int:
                     )
                 capture_admission_packet(client_addr, "from_server", data)
                 capture_route_packet(client_addr, "from_server", data)
+                if len(data) >= 7 and data[:3] == b"\x00\x00\x03":
+                    original_sequence = struct.unpack_from("<I", data, 3)[0]
+                    translations = server_sequence_translation.setdefault(client_addr, {})
+                    visible_sequence = translations.get(original_sequence)
+                    if visible_sequence is None:
+                        offset = server_sequence_offset.get(client_addr, 0)
+                        visible_sequence = (original_sequence + offset) & 0xFFFFFFFF
+                        translations[original_sequence] = visible_sequence
+                        last_server_sequence[client_addr] = visible_sequence
+                        server_ack_translation.setdefault(client_addr, {})[visible_sequence] = original_sequence
+                    if visible_sequence != original_sequence:
+                        data = rewrite_reliable_sequence(data, visible_sequence)
                 data = maybe_repair_joiner_picker_packet(client_addr, data)
+                team_event = parse_server_team_chat(data)
+                if team_event is not None:
+                    sender_number, message = team_event
+                    receiving_team = route_team.get(client_addr)
+                    match = next(
+                        (
+                            item
+                            for item in pending_team_chat
+                            if item[1] == message
+                            and receiving_team is not None
+                            and route_team.get(item[3]) == receiving_team
+                        ),
+                        None,
+                    )
+                    if match is not None:
+                        team_chat_sender_names[sender_number] = match[2]
+                        route_player_number[match[3]] = sender_number
+                        pending_team_chat.remove(match)
+                    connect = route_connect.get(client_addr)
+                    if (
+                        args.joiner_team_chat_fallback
+                        and connect is not None
+                        and connect.match_key
+                        and match is not None
+                    ):
+                        candidates = (
+                            joiner_addr
+                            for joiner_addr, joiner_connect in tuple(route_connect.items())
+                            if not joiner_connect.match_key
+                            and joiner_addr in upstream_by_client
+                        )
+                        for joiner_addr in team_chat_recipient_routes(
+                            match[3], route_team, candidates
+                        ):
+                            inject_visible_team_chat(
+                                joiner_addr,
+                                sender_number,
+                                message,
+                                match[2],
+                                "host_native_team_echo",
+                            )
+                    if (
+                        args.joiner_team_chat_fallback
+                        and connect is not None
+                        and not connect.match_key
+                    ):
+                        visible = make_joiner_team_chat_visible(data)
+                        if visible is not None:
+                            data = visible
+                            log(
+                                f"JOINER_TEAM_CHAT_VISIBLE client={client_addr[0]}:{client_addr[1]} "
+                                f"sender={sender_number} bytes={len(data)}"
+                            )
                 special = describe_special_packet(data)
                 if special:
                     log(f"SERVER_RX_DETAIL {addr[0]}:{addr[1]} | {special}")
