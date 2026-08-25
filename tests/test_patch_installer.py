@@ -52,7 +52,8 @@ class FixtureCatalog:
         linked = b"AXYD"
         final = b"AXYZ"
         cgame_stock = b"1234"
-        cgame_final = b"1A34"
+        cgame_guard = b"1A34"
+        cgame_final = b"1A3Z"
         self.manifests = {
             "client.server_redirects": manifest(
                 "client.server_redirects", "k2.dll", stock, redirected, 1
@@ -64,7 +65,10 @@ class FixtureCatalog:
                 "dedicated.hero_state_recipient_fix", "k2.dll", linked, final, 3
             ),
             "dedicated.complete_registry_guard": manifest(
-                "dedicated.complete_registry_guard", "cgame.dll", cgame_stock, cgame_final, 1
+                "dedicated.complete_registry_guard", "cgame.dll", cgame_stock, cgame_guard, 1
+            ),
+            "client.team_chat_delivery": manifest(
+                "client.team_chat_delivery", "cgame.dll", cgame_guard, cgame_final, 3
             ),
         }
 
@@ -114,7 +118,7 @@ class PatchInstallerTests(unittest.TestCase):
             target = game / "cgame.dll"
             target.write_bytes(b"1234")
             install_cgame(home, catalog)
-            self.assertEqual(target.read_bytes(), b"1A34")
+            self.assertEqual(target.read_bytes(), b"1A3Z")
             self.assertEqual((game / CGAME_STOCK_BACKUP).read_bytes(), b"1234")
             self.assertIn("already installed", install_cgame(home, catalog))
 

@@ -104,13 +104,17 @@ def install_k2(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
 def install_cgame(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
     catalog = catalog or PatchCatalog()
     guard = catalog.get("dedicated.complete_registry_guard")
+    team_chat = catalog.get("client.team_chat_delivery")
     target = hon_home / "game" / "cgame.dll"
     backup = hon_home / "game" / CGAME_STOCK_BACKUP
     if not target.is_file():
         raise FileNotFoundError(f"cgame.dll not found: {target}")
     current = file_hash(target)
+    if current == team_chat.output_sha256:
+        return "cgame registry and joiner team-chat fixes are already installed."
     if current == guard.output_sha256:
-        return "cgame registry guard is already installed."
+        _replace_from_patch(team_chat, target, target)
+        return "Installed joiner team-chat delivery on the verified cgame registry baseline."
     stock_hashes = set(guard.source_sha256)
     if current in stock_hashes:
         _preserve_verified(target, backup, current)
@@ -120,7 +124,8 @@ def install_cgame(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
             f"Expected it at {backup}."
         )
     _replace_from_patch(guard, backup, target)
-    return "Installed cgame complete-registry guard from the verified stock binary."
+    _replace_from_patch(team_chat, target, target)
+    return "Installed cgame complete-registry guard and joiner team-chat delivery."
 
 
 def install_supported_patches(hon_home: Path) -> tuple[str, ...]:
@@ -132,7 +137,7 @@ def verify_supported_install(hon_home: Path) -> tuple[str, ...]:
     catalog = PatchCatalog()
     expected = (
         (hon_home / "k2.dll", catalog.get("dedicated.hero_state_recipient_fix").output_sha256),
-        (hon_home / "game" / "cgame.dll", catalog.get("dedicated.complete_registry_guard").output_sha256),
+        (hon_home / "game" / "cgame.dll", catalog.get("client.team_chat_delivery").output_sha256),
     )
     verified = []
     for path, wanted in expected:

@@ -1,0 +1,30 @@
+{
+  "id": "client.team_chat_delivery",
+  "binary": "cgame.dll",
+  "version": "HoN 3.2.7.1 / ThorGor complete-registry baseline",
+  "source_sha256": "88C4ACA3C31AF8948E1C2A33EEA2F6EE83888FA46A1DE8BE678DF32A958DF988",
+  "output_sha256": "1CFA354C6B1E0DF780D22BF40DAB13E9756472FA13F32A466F461687C472DFDF",
+  "reason": "Trust the dedicated server's recipient decision for game team-chat events when a joiner's replicated CPlayer team is stale.",
+  "observed_failure": "The host renders team chat from every teammate, while joiners receive the same reliable 0x5F/0x02 packets but discard both their own and teammate messages.",
+  "discovered": "2026-08-24",
+  "legacy_revision": "v78",
+  "evidence": [
+    "docs/MILESTONE_V78.md",
+    "tests/test_patch_catalog.py",
+    "tests/test_patch_installer.py"
+  ],
+  "operations": [
+    {
+      "address": "rva",
+      "offset": "0x108349",
+      "expected": "83f801750c8b45703946080f8519050000",
+      "replacement": "e9327f0900909090909090909090909090"
+    },
+    {
+      "address": "rva",
+      "offset": "0x1A0280",
+      "expected": "0000000000000000000000000000000000000000000000000000000000000000",
+      "replacement": "80bc24f400000002741183f801750c8b45703946080f85d885f6ffe9ba80f6ff"
+    }
+  ]
+}

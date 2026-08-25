@@ -50,7 +50,7 @@ class PortableStackTests(unittest.TestCase):
                 "from thorgor.game_manager.dedicated_slave import main as manager; "
                 "from thorgor.tools.dashboard import main as dashboard; "
                 "from thorgor.patches.catalog import PatchCatalog; "
-                "assert len(PatchCatalog().all()) == 11"
+                "assert len(PatchCatalog().all()) == 12"
             )
             result = subprocess.run(
                 [sys.executable, "-c", code],
