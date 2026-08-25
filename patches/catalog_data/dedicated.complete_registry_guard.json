@@ -1,13 +1,13 @@
 {
   "id": "dedicated.complete_registry_guard",
-  "legacy_revision": "v61",
+  "legacy_revision": "v79",
   "binary": "cgame.dll",
   "version": "3.2.7.1",
   "source_sha256": "45B3CE39214EFD82D12DA8B01E73494CEE983D6DB4891C7D95DF10B2EAA70B02",
-  "output_sha256": "88C4ACA3C31AF8948E1C2A33EEA2F6EE83888FA46A1DE8BE678DF32A958DF988",
-  "reason": "Guard entity registry finalization and fallback lookups against invalid objects.",
-  "observed_failure": "A remote player's registry entry can resolve to an invalid object during lobby synchronization.",
-  "discovered": "2026-08-11",
-  "evidence": ["patches/build_cgame_v61_complete_registry_guard.py", "docs/MILESTONE_V61.md", "tests/test_patch_builders.py"],
+  "output_sha256": "E4298CF1842D2F3C5C9C86C6AEA450D618B4CE6393BCAAD9008314AE78103DA7",
+  "reason": "Guard entity registry operations and nullable snapshot entity creation results.",
+  "observed_failure": "cgame.dll repeatedly crashes at RVA 0x1057C5 when the snapshot entity factory returns null.",
+  "discovered": "2026-08-24",
+  "evidence": ["crash_3.2.7.1_0005.dmp", "crash_3.2.7.1_0008.dmp", "crash_3.2.7.1_0009.dmp", "crash_3.2.7.1_0010.dmp", "crash_3.2.7.1_0011.dmp"],
   "implementation": {"kind": "stable_builder", "path": "patches/builders/complete_registry_guard.py"}
 }

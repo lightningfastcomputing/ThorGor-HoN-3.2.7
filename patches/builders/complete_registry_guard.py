@@ -11,9 +11,13 @@ LOOKUP_LOAD_RVA = 0x140EFB
 LOOKUP_CAVE_RVA = 0x1A0210
 FALLBACK_TAIL_RVA = 0x140F21
 FALLBACK_CAVE_RVA = 0x1A0240
+SNAPSHOT_CREATE_HOOK_RVA = 0x1057C0
+SNAPSHOT_CREATE_CAVE_RVA = 0x1A0280
+SNAPSHOT_SKIP_RVA = 0x106236
 EXPECTED_FINALIZE_CALL = bytes.fromhex("8b9014020000ffd2")
 EXPECTED_LOOKUP_LOAD = bytes.fromhex("8b80bc050000")
 EXPECTED_FALLBACK_TAIL = bytes.fromhex("8b40105b83c408c20400")
+EXPECTED_SNAPSHOT_CREATE_HOOK = bytes.fromhex("8bd88b475c")
 
 FINALIZE_STUB = bytes.fromhex(
     "3d00101a1972073d00a01e19720e3d00c04523722f"
@@ -67,6 +71,25 @@ FALLBACK_STUB = bytes.fromhex(
 )
 
 
+def snapshot_create_stub() -> bytes:
+    """Guard the snapshot entity factory's nullable return value.
+
+    Non-null results execute the two overwritten instructions and return to the
+    original dereference. A null result discards the hook return address and
+    resumes the function's existing next-snapshot path.
+    """
+    prefix = bytes.fromhex(
+        "8bd8"      # mov ebx,eax
+        "8b475c"    # mov eax,[edi+0x5c]
+        "85db"      # test ebx,ebx
+        "7401"      # jz null_result
+        "c3"        # ret
+        "83c404"    # null_result: discard hook return address
+    )
+    jump_from = SNAPSHOT_CREATE_CAVE_RVA + len(prefix) + 5
+    return prefix + b"\xE9" + struct.pack("<i", SNAPSHOT_SKIP_RVA - jump_from)
+
+
 def sections(data: bytes):
     pe = struct.unpack_from("<I", data, 0x3C)[0]
     count = struct.unpack_from("<H", data, pe + 6)[0]
@@ -92,7 +115,7 @@ def call_patch(source_rva: int, target_rva: int, size: int) -> bytes:
     return b"\xE8" + struct.pack("<i", relative) + b"\x90" * (size - 5)
 
 
-OUTPUT_HASH = "88C4ACA3C31AF8948E1C2A33EEA2F6EE83888FA46A1DE8BE678DF32A958DF988"
+OUTPUT_HASH = "E4298CF1842D2F3C5C9C86C6AEA450D618B4CE6393BCAAD9008314AE78103DA7"
 
 
 def build(source: Path, target: Path) -> str:
@@ -107,6 +130,8 @@ def build(source: Path, target: Path) -> str:
     lookup_cave = rva_to_file(data, LOOKUP_CAVE_RVA)
     fallback_tail = rva_to_file(data, FALLBACK_TAIL_RVA)
     fallback_cave = rva_to_file(data, FALLBACK_CAVE_RVA)
+    snapshot_create_hook = rva_to_file(data, SNAPSHOT_CREATE_HOOK_RVA)
+    snapshot_create_cave = rva_to_file(data, SNAPSHOT_CREATE_CAVE_RVA)
 
     if data[finalize_call : finalize_call + 8] != EXPECTED_FINALIZE_CALL:
         raise ValueError("unexpected finalization call bytes")
@@ -114,8 +139,13 @@ def build(source: Path, target: Path) -> str:
         raise ValueError("unexpected registry lookup bytes")
     if data[fallback_tail : fallback_tail + 10] != EXPECTED_FALLBACK_TAIL:
         raise ValueError("unexpected fallback registry return bytes")
+    if data[snapshot_create_hook : snapshot_create_hook + 5] != EXPECTED_SNAPSHOT_CREATE_HOOK:
+        raise ValueError("unexpected snapshot entity creation bytes")
     if any(data[finalize_cave : fallback_cave + len(FALLBACK_STUB)]):
         raise ValueError("selected code cave is not empty")
+    snapshot_stub = snapshot_create_stub()
+    if any(data[snapshot_create_cave : snapshot_create_cave + len(snapshot_stub)]):
+        raise ValueError("snapshot creation guard cave is not empty")
 
     data[finalize_call : finalize_call + 8] = call_patch(FINALIZE_CALL_RVA, FINALIZE_CAVE_RVA, 8)
     data[finalize_cave : finalize_cave + len(FINALIZE_STUB)] = FINALIZE_STUB
@@ -123,6 +153,10 @@ def build(source: Path, target: Path) -> str:
     data[lookup_cave : lookup_cave + len(LOOKUP_STUB)] = LOOKUP_STUB
     data[fallback_tail : fallback_tail + 10] = call_patch(FALLBACK_TAIL_RVA, FALLBACK_CAVE_RVA, 10)
     data[fallback_cave : fallback_cave + len(FALLBACK_STUB)] = FALLBACK_STUB
+    data[snapshot_create_hook : snapshot_create_hook + 5] = call_patch(
+        SNAPSHOT_CREATE_HOOK_RVA, SNAPSHOT_CREATE_CAVE_RVA, 5
+    )
+    data[snapshot_create_cave : snapshot_create_cave + len(snapshot_stub)] = snapshot_stub
 
     result = hashlib.sha256(data).hexdigest().upper()
     if result != OUTPUT_HASH:
