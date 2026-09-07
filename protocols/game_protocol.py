@@ -31,6 +31,11 @@ def connected_player_count(connections: Iterable[object]) -> int:
     return len(identities)
 
 
+def is_client_disconnect(data: bytes) -> bool:
+    """Recognize the exact 3.2.7.1 client leave-lobby control datagram."""
+    return data == b"\x00\x00\x01\xc3"
+
+
 def browser_player_count(
     connections: Iterable[object], lobby_active: bool, default_count: int, maximum: int
 ) -> int:
@@ -1464,7 +1469,8 @@ def main(argv=None) -> int:
                         "reason=no authenticated C0 route"
                     )
                     continue
-                if data == b"\x00\x00\x01\xc3":
+                disconnect_after_forward = is_client_disconnect(data)
+                if disconnect_after_forward:
                     host_connect = route_connect.get(addr)
                     if host_connect is not None and host_connect.match_key:
                         released, release_reason = release_host_reservation(
@@ -1593,6 +1599,11 @@ def main(argv=None) -> int:
                         f"SERVER_TX {target[0]}:{target[1]} | client={addr[0]}:{addr[1]} "
                         f"upstream_port={upstream.getsockname()[1]} forwarded={sent}"
                     )
+                if disconnect_after_forward:
+                    # Deliver the leave to K2 first, then retire the proxy's
+                    # authenticated identity so the next browser poll drops the
+                    # displayed occupancy immediately instead of after timeout.
+                    close_route(addr, "client_disconnect_c3")
                 if is_browser_query:
                     token = data[4:6]
                     pending_browser_queries[token] = {

@@ -1,7 +1,11 @@
 import unittest
 from types import SimpleNamespace
 
-from thorgor.protocols.game_protocol import browser_player_count, connected_player_count
+from thorgor.protocols.game_protocol import (
+    browser_player_count,
+    connected_player_count,
+    is_client_disconnect,
+)
 
 
 def player(cookie: str):
@@ -28,6 +32,16 @@ class BrowserOccupancyTests(unittest.TestCase):
 
     def test_idle_reply_retains_configured_count(self):
         self.assertEqual(browser_player_count([player("ignored")], False, 1, 10), 1)
+
+    def test_only_exact_c3_datagram_retires_lobby_route(self):
+        self.assertTrue(is_client_disconnect(b"\x00\x00\x01\xc3"))
+        for packet in (
+            b"\x00\x00\x01\xc9",
+            b"\x00\x00\x01\xc3\x00",
+            b"\x00\x00\x03\xc3",
+            b"",
+        ):
+            self.assertFalse(is_client_disconnect(packet))
 
 
 if __name__ == "__main__":
