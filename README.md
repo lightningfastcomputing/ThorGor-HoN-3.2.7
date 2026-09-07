@@ -39,6 +39,9 @@ git clone --branch refactored-architecture-2026-08-24 --single-branch https://gi
 `START_STACK.bat` verifies or installs the supported binary patches, clears
 volatile ThorGor state, and starts the dashboard and backend services.
 
+Use `START_REMOTE_CLIENT_THREE_INSTANCES.bat` to enter the stack IP once,
+perform remote-client setup once, and launch three HoN clients together.
+
 ## Local stack performance
 
 On machines with four or more logical CPUs, the stack automatically reserves

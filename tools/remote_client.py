@@ -84,23 +84,25 @@ def setup(hon_home: Path, server_ip: str) -> None:
     print(f"Configured {CHAT_HOSTNAME} in {configured}")
 
 
-def launch(hon_home: Path, server_ip: str) -> int:
+def launch(hon_home: Path, server_ip: str, instances: int = 1) -> int:
     server_ip = ipv4(server_ip)
+    if not 1 <= instances <= 10:
+        raise ValueError("instances must be between 1 and 10")
     if not chat_reachable(server_ip):
         raise ConnectionError(f"ThorGor chat is unreachable at {server_ip}:11031")
     command = player_command(hon_home, server_ip)
-    process = subprocess.Popen(command, cwd=hon_home)
-    if server_is_local(server_ip):
-        reserved_cpu = resolve_dedicated_cpu()
-        mask = client_affinity_mask(reserved_cpu)
+    reserved_cpu = resolve_dedicated_cpu() if server_is_local(server_ip) else None
+    mask = client_affinity_mask(reserved_cpu)
+    for number in range(1, instances + 1):
+        process = subprocess.Popen(command, cwd=hon_home)
         if mask is not None:
             try:
                 set_process_affinity(process.pid, mask)
-                print(f"Started HoN against ThorGor at {server_ip}; reserved logical CPU {reserved_cpu} for the dedicated server")
             except OSError as exc:
-                print(f"Started HoN against ThorGor at {server_ip}; warning: client CPU isolation failed: {exc}")
-            return 0
-    print(f"Started HoN against ThorGor at {server_ip}")
+                print(f"Warning: CPU isolation failed for HoN instance {number}: {exc}")
+        print(f"Started HoN instance {number}/{instances} against ThorGor at {server_ip}")
+    if reserved_cpu is not None:
+        print(f"Reserved logical CPU {reserved_cpu} for the local dedicated server")
     return 0
 
 
@@ -124,5 +126,6 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Launch a configured ThorGor remote LAN client")
     parser.add_argument("--hon-home", type=Path, required=True)
     parser.add_argument("--server-ip", required=True)
+    parser.add_argument("--instances", type=int, default=1)
     args = parser.parse_args(argv)
-    return launch(args.hon_home.expanduser().resolve(), args.server_ip)
+    return launch(args.hon_home.expanduser().resolve(), args.server_ip, args.instances)

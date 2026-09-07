@@ -6,6 +6,8 @@ for %%I in ("%~dp0.") do set "THORGOR_PACKAGE=%%~fI"
 set "SERVER_IP=%~1"
 if not defined SERVER_IP set /p "SERVER_IP=Enter the ThorGor server LAN IPv4 address: "
 if not defined SERVER_IP exit /b 3
+set "INSTANCES=%~2"
+if not defined INSTANCES set "INSTANCES=1"
 
 if not defined HON_HOME set "HON_HOME=C:\Program Files (x86)\Heroes of Newerth"
 if not exist "!HON_HOME!\hon.exe" (
@@ -41,6 +43,7 @@ echo ThorGor HoN 3.2.7 LAN Sandbox remote client
 echo   Package: !THORGOR_PACKAGE!
 echo   HoN:     !HON_HOME!
 echo   Server:  !SERVER_IP!
+echo   Clients: !INSTANCES!
 echo.
 echo Installing patches and configuring the legacy chat hostname...
 echo Accept the Windows administrator prompt to update the game DLLs and hosts file.
@@ -67,7 +70,7 @@ if errorlevel 1 (
 )
 
 echo Testing the ThorGor server and launching HoN...
-"!PYEXE!" -m thorgor remote-client --hon-home "!HON_HOME!" --server-ip "!SERVER_IP!"
+"!PYEXE!" -m thorgor remote-client --hon-home "!HON_HOME!" --server-ip "!SERVER_IP!" --instances "!INSTANCES!"
 set "CLIENT_EXIT=!ERRORLEVEL!"
 popd
 
