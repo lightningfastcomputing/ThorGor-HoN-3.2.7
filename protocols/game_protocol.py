@@ -1394,7 +1394,7 @@ def main(argv=None) -> int:
                     except ValueError as exc:
                         log(f"C0_AUTH_REJECT client={addr[0]}:{addr[1]} reason={exc}")
                         continue
-                    approved, reason = authorize_connect_c0(connect, args.master_url, args.auth_timeout)
+                    approved, reason, is_match_host = authorize_connect_c0(connect, args.master_url, args.auth_timeout)
                     if not approved:
                         log(
                             f"C0_AUTH_REJECT client={addr[0]}:{addr[1]} "
@@ -1410,7 +1410,7 @@ def main(argv=None) -> int:
                         f"C0_WIRE client={addr[0]}:{addr[1]} user={connect.username!r} "
                         f"bytes={len(data)} flag_offset={connect.flag_offset} hex={data.hex()}"
                     )
-                    data = make_authorized_local_c0(data, connect)
+                    data = make_authorized_local_c0(data, connect, is_match_host=is_match_host)
                     route_connect[addr] = connect
                     if addr not in route_player_number:
                         used_player_numbers = set(route_player_number.values())

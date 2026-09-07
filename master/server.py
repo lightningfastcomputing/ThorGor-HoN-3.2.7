@@ -53,6 +53,7 @@ from thorgor.matchmaking.endpoint import DedicatedServerAllocator, MatchmakingEn
 from thorgor.master import auth as auth_primitives
 from thorgor.master.sessions import Runtime as SessionRuntime, Session as AuthenticationSession
 from thorgor.master.server_list import ServerListService
+from thorgor.master.host_authority import RESERVATION_LOCK, classify_match_host
 
 APP_NAME = "ThorGor HoN 3.2.7 LAN Master Service"
 DEFAULT_HOST = "0.0.0.0"
@@ -1340,7 +1341,7 @@ class Handler(BaseHTTPRequestHandler):
                 existing_match_id = int(state.get("match_id", 0))
             except (TypeError, ValueError):
                 existing_match_id = 0
-            if existing_match_id > 0 and hmac.compare_digest(
+            if existing_match_id > 0 and host_key and identity["account_id"] == int(state.get("match_host_account_id") or 0) and hmac.compare_digest(
                 str(state.get("match_host_key") or ""), host_key
             ):
                 self.send_php({"match_id": existing_match_id, "success": 1})
@@ -1429,19 +1430,20 @@ class Handler(BaseHTTPRequestHandler):
                 "last_client_auth_function": function,
             }
             host_key = params.get("host_key", [""])[0]
-            if function == "c_conn" and host_key:
-                state_updates.update(
-                    lifecycle="reserved",
-                    pending_host_account_id=response["account_id"],
-                    pending_host_nickname=response["nickname"],
-                    pending_host_key=host_key,
-                    pending_host_reserved_at=time.time(),
-                )
-                server_log(
-                    "C0_HOST_RESERVED "
-                    f"host_account_id={response['account_id']} nickname={response['nickname']!r}"
-                )
-            v31_update_state(**state_updates)
+            with RESERVATION_LOCK:
+                if function == "c_conn":
+                    is_creator, reserve = classify_match_host(response["account_id"], host_key, v31_read_state())
+                    response["is_match_host"] = int(is_creator)
+                    if reserve:
+                        state_updates.update(
+                            lifecycle="reserved",
+                            pending_host_account_id=response["account_id"],
+                            pending_host_nickname=response["nickname"],
+                            pending_host_key=host_key,
+                            pending_host_reserved_at=time.time(),
+                        )
+                    server_log(f"C0_AUTHORITY account_id={response['account_id']} creator={int(is_creator)} reserved={int(reserve)}")
+                v31_update_state(**state_updates)
             server_log(
                 f"CLIENT_AUTH_ACCEPTED function={function!r} account_id={response['account_id']} "
                 f"nickname={response['nickname']!r}"

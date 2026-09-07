@@ -1,0 +1,15 @@
+{
+  "id": "dedicated.server_capacity",
+  "binary": "game.dll",
+  "version": "3.2.7.1-ten-client-capacity",
+  "source_sha256": "D345F8537ED9FD5C6705F8F1A9FA6663C5F4AE4476CD328B2D8F1074C044CF99",
+  "output_sha256": "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B",
+  "reason": "Permit ten native clients after removing the host-only capacity bypass from joiners.",
+  "observed_failure": "Ordinary joiners hit the retail one-client capacity check and receive disconnect_server_full.",
+  "discovered": "2026-09-07",
+  "evidence": ["docs/LOBBY_AUTHORITY.md", "tests/test_native_lobby_authority.py"],
+  "operations": [
+    {"address": "rva", "offset": "0x337EC", "expected": "83F801", "replacement": "83F80A"},
+    {"address": "rva", "offset": "0x529E5", "expected": "B801000000", "replacement": "B80A000000"}
+  ]
+}

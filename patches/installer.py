@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import tempfile
 from pathlib import Path
 
 from .catalog import PatchCatalog
@@ -47,7 +48,7 @@ def _preserve_verified(source: Path, backup: Path, expected_hash: str) -> None:
         raise ValueError(f"could not verify new ThorGor backup: {backup}")
 
 
-def install_k2(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
+def _install_k2_recipient(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
     catalog = catalog or PatchCatalog()
     redirects = catalog.get("client.server_redirects")
     linked = catalog.get("dedicated.state_delivery_linked")
@@ -102,6 +103,56 @@ def install_k2(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
     return "Installed K2 v77 tail-recipient hero-state delivery from the verified v65 baseline."
 
 
+def install_k2(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
+    """Build the entire milestone chain before replacing any installed DLL."""
+    catalog = catalog or PatchCatalog()
+    authority = catalog.get("dedicated.creator_authority")
+    target = hon_home / "k2.dll"
+    current = file_hash(target)
+    if current == authority.output_sha256:
+        return "K2 creator-only lobby authority is already installed."
+    with tempfile.TemporaryDirectory(prefix="thorgor-k2-") as directory:
+        staged = Path(directory)
+        shutil.copy2(target, staged / target.name)
+        for name in (K2_STOCK_BACKUP, K2_LINKED_BACKUP, K2_HISTORICAL_LINKED_BACKUP):
+            if (hon_home / name).is_file():
+                shutil.copy2(hon_home / name, staged / name)
+        _install_k2_recipient(staged, catalog)
+        # Validate the final output before preserving/installing anything.
+        apply_patch(authority, staged / "k2.dll", staged / "candidate.dll")
+        _preserve_verified(target, hon_home / f"k2.dll.thorgor_before_{current.lower()}", current)
+        for name in (K2_STOCK_BACKUP, K2_LINKED_BACKUP):
+            if (staged / name).is_file():
+                _preserve_verified(staged / name, hon_home / name, file_hash(staged / name))
+        _preserve_verified(
+            staged / "k2.dll", hon_home / "k2.dll.thorgor_v77_baseline",
+            authority.source_sha256[0],
+        )
+        _replace_from_patch(authority, staged / "k2.dll", target)
+    return "Installed creator-only lobby authority on the verified K2 v77 milestone."
+
+
+def install_game_capacity(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
+    catalog = catalog or PatchCatalog()
+    capacity = catalog.get("dedicated.server_capacity")
+    target = hon_home / "game" / "game.dll"
+    backup = target.with_name("game.dll.thorgor_stock_3.2.7.1")
+    current = file_hash(target)
+    if current == capacity.output_sha256:
+        return "Native ten-client capacity is already installed."
+    source = target if current in capacity.source_sha256 else backup
+    if not _verified(source, set(capacity.source_sha256)):
+        raise ValueError("A verified stock game.dll is required for native multiplayer capacity")
+    # Build before replacing and preserve the previous installation verbatim.
+    with tempfile.TemporaryDirectory(prefix="thorgor-capacity-") as directory:
+        candidate = Path(directory) / "game.dll"
+        apply_patch(capacity, source, candidate)
+        _preserve_verified(target, target.with_name(f"game.dll.thorgor_before_{current.lower()}"), current)
+        _preserve_verified(source, backup, capacity.source_sha256[0])
+        _replace_from_patch(capacity, backup, target)
+    return "Installed native ten-client capacity for ordinary joiners."
+
+
 def install_cgame(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
     catalog = catalog or PatchCatalog()
     guard = catalog.get("dedicated.complete_registry_guard")
@@ -128,13 +179,14 @@ def install_cgame(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
 
 def install_supported_patches(hon_home: Path) -> tuple[str, ...]:
     hon_home = hon_home.expanduser().resolve()
-    return install_k2(hon_home), install_cgame(hon_home), install_matchmaking_overlay(hon_home)
+    return install_game_capacity(hon_home), install_k2(hon_home), install_cgame(hon_home), install_matchmaking_overlay(hon_home)
 
 
 def verify_supported_install(hon_home: Path) -> tuple[str, ...]:
     catalog = PatchCatalog()
     expected = (
-        (hon_home / "k2.dll", catalog.get("dedicated.hero_state_recipient_fix").output_sha256),
+        (hon_home / "k2.dll", catalog.get("dedicated.creator_authority").output_sha256),
+        (hon_home / "game" / "game.dll", catalog.get("dedicated.server_capacity").output_sha256),
         (hon_home / "game" / "cgame.dll", catalog.get("dedicated.complete_registry_guard").output_sha256),
     )
     verified = []
