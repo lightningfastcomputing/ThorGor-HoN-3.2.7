@@ -11,6 +11,12 @@ from pathlib import Path
 
 from thorgor.paths import ROOT
 from thorgor.patches.installer import install_supported_patches
+from thorgor.game_manager.performance import (
+    client_affinity_mask,
+    resolve_dedicated_cpu,
+    server_is_local,
+    set_process_affinity,
+)
 
 
 CHAT_HOSTNAME = "chatserver.heroesofnewerth.com"
@@ -83,7 +89,17 @@ def launch(hon_home: Path, server_ip: str) -> int:
     if not chat_reachable(server_ip):
         raise ConnectionError(f"ThorGor chat is unreachable at {server_ip}:11031")
     command = player_command(hon_home, server_ip)
-    subprocess.Popen(command, cwd=hon_home)
+    process = subprocess.Popen(command, cwd=hon_home)
+    if server_is_local(server_ip):
+        reserved_cpu = resolve_dedicated_cpu()
+        mask = client_affinity_mask(reserved_cpu)
+        if mask is not None:
+            try:
+                set_process_affinity(process.pid, mask)
+                print(f"Started HoN against ThorGor at {server_ip}; reserved logical CPU {reserved_cpu} for the dedicated server")
+            except OSError as exc:
+                print(f"Started HoN against ThorGor at {server_ip}; warning: client CPU isolation failed: {exc}")
+            return 0
     print(f"Started HoN against ThorGor at {server_ip}")
     return 0
 

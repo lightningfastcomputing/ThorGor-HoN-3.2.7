@@ -19,6 +19,11 @@ from pathlib import Path
 from tkinter import ttk, messagebox
 
 from thorgor.game_manager.stack import ServiceSpec, build_stack
+from thorgor.game_manager.performance import (
+    client_affinity_mask,
+    resolve_dedicated_cpu,
+    set_process_affinity,
+)
 from thorgor.paths import PACKAGE_ROOT, ROOT, SOURCE_ROOT
 
 
@@ -32,6 +37,8 @@ LOG_DIR.mkdir(exist_ok=True)
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
 CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
 FLAGS = CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
+DEDICATED_CPU = resolve_dedicated_cpu()
+STACK_AFFINITY_MASK = client_affinity_mask(DEDICATED_CPU)
 
 def _valid_ipv4(value: str) -> str | None:
     value = (value or "").strip()
@@ -159,6 +166,15 @@ def launch(name: str, args: list[str], cwd: Path = ROOT) -> None:
                 stdin=subprocess.DEVNULL,
                 creationflags=FLAGS,
             )
+        # Keep proxy/backend work away from the logical CPU reserved for the
+        # latency-sensitive dedicated simulation. The manager is exempt because
+        # it must create the slave on that reserved CPU through man_allowCPUs.
+        if name != "manager" and STACK_AFFINITY_MASK is not None:
+            try:
+                set_process_affinity(PROCS[name].pid, STACK_AFFINITY_MASK)
+                out.write(f"CPU ISOLATION: reserved logical CPU {DEDICATED_CPU} for dedicated server\n")
+            except OSError as exc:
+                out.write(f"CPU ISOLATION WARNING: {exc}\n")
     except Exception as exc:
         START_ERRORS[name] = str(exc)
 
