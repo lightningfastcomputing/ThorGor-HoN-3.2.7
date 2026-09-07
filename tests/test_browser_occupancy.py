@@ -1,0 +1,34 @@
+import unittest
+from types import SimpleNamespace
+
+from thorgor.protocols.game_protocol import browser_player_count, connected_player_count
+
+
+def player(cookie: str):
+    return SimpleNamespace(cookie=cookie)
+
+
+class BrowserOccupancyTests(unittest.TestCase):
+    def test_live_lobby_tracks_authenticated_players(self):
+        for count in range(1, 11):
+            connections = [player(f"cookie-{index}") for index in range(count)]
+            self.assertEqual(browser_player_count(connections, True, 1, 10), count)
+
+    def test_reconnect_does_not_double_count_same_identity(self):
+        connections = [player("host"), player("joiner"), player("joiner")]
+        self.assertEqual(connected_player_count(connections), 2)
+        self.assertEqual(browser_player_count(connections, True, 1, 10), 2)
+
+    def test_live_lobby_has_creator_fallback_and_clamps_to_capacity(self):
+        self.assertEqual(browser_player_count([], True, 1, 10), 1)
+        self.assertEqual(
+            browser_player_count([player(str(index)) for index in range(12)], True, 1, 10),
+            10,
+        )
+
+    def test_idle_reply_retains_configured_count(self):
+        self.assertEqual(browser_player_count([player("ignored")], False, 1, 10), 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -21,6 +21,30 @@ BASE_DIR = ROOT
 STATE_FILE = BASE_DIR / "work" / "v31_registration_state.json"
 
 
+def connected_player_count(connections: Iterable[object]) -> int:
+    """Count authenticated players once, even if a client has reconnected."""
+    identities = {
+        str(getattr(connection, "cookie", ""))
+        for connection in connections
+        if str(getattr(connection, "cookie", ""))
+    }
+    return len(identities)
+
+
+def browser_player_count(
+    connections: Iterable[object], lobby_active: bool, default_count: int, maximum: int
+) -> int:
+    """Return the current-player byte used by the legacy browser reply."""
+    maximum = max(1, min(int(maximum), 0xFF))
+    if lobby_active:
+        # A live lobby always contains its creator. Retain the configured value
+        # only as a startup fallback before the creator's route is observable.
+        current = max(1, connected_player_count(connections))
+    else:
+        current = int(default_count)
+    return max(0, min(current, maximum))
+
+
 @dataclass(frozen=True)
 class ConnectC0:
     product: str
@@ -881,7 +905,8 @@ def main(argv=None) -> int:
         upstream.close()
         log(
             f"ROUTE_CLOSE client={client_addr[0]}:{client_addr[1]} "
-            f"upstream={source_ip}:{local_port} reason={reason} routes={len(upstream_by_client)}"
+            f"upstream={source_ip}:{local_port} reason={reason} routes={len(upstream_by_client)} "
+            f"players={connected_player_count(route_connect.values())}"
         )
 
     def begin_admission_trace(client_addr: tuple[str, int], username: str) -> None:
@@ -1220,11 +1245,14 @@ def main(argv=None) -> int:
         # join browser uses this field both as the idle/lobby discriminator and
         # as its pre-query map filter.
         browser_local_60c = browser_map if lobby_active else ""
+        current_players = browser_player_count(
+            route_connect.values(), lobby_active, args.browser_local_654, args.browser_bvar2
+        )
 
         payload = bytearray()
         payload += token
         payload += encode_cpacket_wstring(browser_name)
-        payload += bytes([args.browser_local_654 & 0xFF])
+        payload += bytes([current_players])
         payload += bytes([args.browser_bvar2 & 0xFF])
         payload += encode_cpacket_wstring(browser_local_60c)
         # Ghidra shows this field is tokenized into three numeric components on the client,
@@ -1412,6 +1440,10 @@ def main(argv=None) -> int:
                     )
                     data = make_authorized_local_c0(data, connect, is_match_host=is_match_host)
                     route_connect[addr] = connect
+                    log(
+                        f"LOBBY_OCCUPANCY players={connected_player_count(route_connect.values())} "
+                        f"latest={connect.username!r}"
+                    )
                     if addr not in route_player_number:
                         used_player_numbers = set(route_player_number.values())
                         route_player_number[addr] = next(
