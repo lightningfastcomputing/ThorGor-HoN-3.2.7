@@ -52,18 +52,20 @@ PATCHES = (
         b"\tmessageType, channel, message, entity, premessage = messageType or '', channel or '', message or '', entity or '', ''\r\n",
         b"\tmessageType, channel, message, entity, premessage = messageType or '', channel or '', message or '', entity or '', ''\r\n"
         b"\tlocal thorgorTeamMarker = '[THORGOR_TEAM]'\r\n"
-        b"\tlocal thorgorNameHex = string.match(message, '%[THORGOR_TEAM:([0-9A-F]+)%]')\r\n"
+        b"\tlocal thorgorNameHex, thorgorWireColor = string.match(message, '%[THORGOR_TEAM:([0-9A-F]+):([!btyopivlgn]+)%]')\r\n"
+        b"\tif (not thorgorNameHex) then thorgorNameHex = string.match(message, '%[THORGOR_TEAM:([0-9A-F]+)%]') end\r\n"
         b"\tlocal thorgorTeamMessage = thorgorNameHex ~= nil or string.find(message, thorgorTeamMarker, 1, true)\r\n"
         b"\tif (thorgorNameHex) then\r\n"
         b"\t\tlocal thorgorName = string.gsub(thorgorNameHex, '(%x%x)', function(value) return string.char(tonumber(value, 16)) end)\r\n"
-        b"\t\tlocal markerStart, markerEnd = string.find(message, '[THORGOR_TEAM:' .. thorgorNameHex .. ']', 1, true)\r\n"
+        b"\t\tlocal wireMarker = '[THORGOR_TEAM:' .. thorgorNameHex .. (thorgorWireColor and ':' .. thorgorWireColor or '') .. ']'\r\n"
+        b"\t\tlocal markerStart, markerEnd = string.find(message, wireMarker, 1, true)\r\n"
         b"\t\tlocal labelEnd = string.find(message, ']', 1, true)\r\n"
         b"\t\tlocal thorgorVisual = GameChat.thorgorPlayerVisuals and GameChat.thorgorPlayerVisuals[StripClanTag(thorgorName)]\r\n"
-        b"\t\tlocal thorgorColor = '^*'\r\n"
+        b"\t\tlocal thorgorColor = thorgorWireColor and '^' .. thorgorWireColor or '^w'\r\n"
+        b"\t\tentity = 'THORGOR_PLAYER:' .. StripClanTag(thorgorName)\r\n"
         b"\t\tif (thorgorVisual) then\r\n"
         b"\t\t\tlocal red, green, blue = string.match(thorgorVisual.color or '', '([%d%.]+)%s+([%d%.]+)%s+([%d%.]+)')\r\n"
-        b"\t\t\tif (red) then thorgorColor = '^' .. floor(tonumber(red) * 9 + 0.5) .. floor(tonumber(green) * 9 + 0.5) .. floor(tonumber(blue) * 9 + 0.5) end\r\n"
-        b"\t\t\tif (thorgorVisual.icon and string.len(thorgorVisual.icon) > 0) then entity = 'THORGOR_ICON:' .. thorgorVisual.icon end\r\n"
+        b"\t\t\tif (not thorgorWireColor and red) then thorgorColor = '^' .. floor(tonumber(red) * 9 + 0.5) .. floor(tonumber(green) * 9 + 0.5) .. floor(tonumber(blue) * 9 + 0.5) end\r\n"
         b"\t\tend\r\n"
         b"\t\tif (labelEnd and markerStart) then message = string.sub(message, 1, labelEnd) .. ' ' .. thorgorColor .. thorgorName .. ': ^*' .. string.sub(message, markerEnd + 1) end\r\n"
         b"\telseif (thorgorTeamMessage) then\r\n"
@@ -107,6 +109,17 @@ PATCHES = (
         b"\t\t\t\t\t\t\t\t\t\timagewidget:UICmd(\"SetTexture(GetEntityIconPath('\"..entity..\"'))\")\r\n"
         b"\t\t\t\t\t\t\t\t\tend\r\n",
         "Render the sender's cached scoreboard portrait for private chat mirrors.",
+    ),
+    ResourceReplacement(
+        "ui/scripts/chat.lua",
+        "23BEA7B8A49D064F19F470C3F42DEC7BF69EFE2DAB25D3D41D025DDB38EFB520",
+        b"\t\t\t\t\t\t\t\tlocal entity = chatTable[chatLineIndex].entity\r\n",
+        b"\t\t\t\t\t\t\t\tlocal entity = chatTable[chatLineIndex].entity\r\n"
+        b"\t\t\t\t\t\t\t\tif (entity and string.sub(entity, 1, 15) == 'THORGOR_PLAYER:') then\r\n"
+        b"\t\t\t\t\t\t\t\t\tlocal visual = GameChat.thorgorPlayerVisuals and GameChat.thorgorPlayerVisuals[string.sub(entity, 16)]\r\n"
+        b"\t\t\t\t\t\t\t\t\tif (visual and visual.icon and string.len(visual.icon) > 0) then entity = 'THORGOR_ICON:' .. visual.icon else entity = '' end\r\n"
+        b"\t\t\t\t\t\t\t\tend\r\n",
+        "Resolve mirrored chat portraits from the live scoreboard at render time.",
     ),
     ResourceReplacement(
         "ui/scripts/game_new.lua",
@@ -154,15 +167,38 @@ PATCHES = (
         "ui/scripts/communicator.lua",
         "E74B9A6B271C876A7C87CE9F70A04C2F00C7101EFC6D03B024CD7827E34FE1AF",
         b"function HoN_Communicator:AllChatMessages(widget, msgType, channelName, text, entity, noFormatting, isSelf)\r\n"
-        b"\tif (GameChat and UIGamePhase() > 0 and UIGamePhase() <= 4) then\r\n",
+        b"\tif (GameChat and UIGamePhase() > 0 and UIGamePhase() <= 4) then\r\n"
+        b"\t\tGameChat:AllChatMessages(msgType, channelName, text, entity, noFormatting, isSelf)\r\n"
+        b"\tend\r\n",
         b"function HoN_Communicator:AllChatMessages(widget, msgType, channelName, text, entity, noFormatting, isSelf)\r\n"
+        b"\tlocal thorgorGameChatText = text\r\n"
         b"\tlocal thorgorTeamMarker = '[THORGOR_TEAM]'\r\n"
-        b"\tif (text and string.find(text, thorgorTeamMarker, 1, true)) then\r\n"
+        b"\tlocal thorgorNameHex, thorgorWireColor\r\n"
+        b"\tif (text) then thorgorNameHex, thorgorWireColor = string.match(text, '%[THORGOR_TEAM:([0-9A-F]+):([!btyopivlgn]+)%]') end\r\n"
+        b"\tif (text and not thorgorNameHex) then thorgorNameHex = string.match(text, '%[THORGOR_TEAM:([0-9A-F]+)%]') end\r\n"
+        b"\tlocal thorgorTeamMessage = text and (thorgorNameHex ~= nil or string.find(text, thorgorTeamMarker, 1, true))\r\n"
+        b"\tif (thorgorNameHex) then\r\n"
+        b"\t\tlocal thorgorName = string.gsub(thorgorNameHex, '(%x%x)', function(value) return string.char(tonumber(value, 16)) end)\r\n"
+        b"\t\tlocal wireMarker = '[THORGOR_TEAM:' .. thorgorNameHex .. (thorgorWireColor and ':' .. thorgorWireColor or '') .. ']'\r\n"
+        b"\t\tlocal markerStart, markerEnd = string.find(text, wireMarker, 1, true)\r\n"
+        b"\t\tlocal labelEnd = string.find(text, ']', 1, true)\r\n"
+        b"\t\tlocal thorgorVisual = GameChat and GameChat.thorgorPlayerVisuals and GameChat.thorgorPlayerVisuals[thorgorName]\r\n"
+        b"\t\tlocal thorgorColor = thorgorWireColor and '^' .. thorgorWireColor or '^w'\r\n"
+        b"\t\tif (thorgorVisual) then\r\n"
+        b"\t\t\tlocal red, green, blue = string.match(thorgorVisual.color or '', '([%d%.]+)%s+([%d%.]+)%s+([%d%.]+)')\r\n"
+        b"\t\t\tif (not thorgorWireColor and red) then thorgorColor = '^' .. math.floor(tonumber(red) * 9 + 0.5) .. math.floor(tonumber(green) * 9 + 0.5) .. math.floor(tonumber(blue) * 9 + 0.5) end\r\n"
+        b"\t\tend\r\n"
+        b"\t\tif (labelEnd and markerStart) then text = string.sub(text, 1, labelEnd) .. ' ' .. thorgorColor .. thorgorName .. ': ^*' .. string.sub(text, markerEnd + 1) end\r\n"
+        b"\telseif (thorgorTeamMessage) then\r\n"
         b"\t\ttext = string.gsub(text, '%[THORGOR_TEAM%]', '', 1)\r\n"
+        b"\tend\r\n"
+        b"\tif (thorgorTeamMessage) then\r\n"
         b"\t\ttext = string.gsub(text, '%[ALL%]', '^y[TEAM]', 1)\r\n"
         b"\t\tmsgType = '5'\r\n"
         b"\tend\r\n"
-        b"\tif (GameChat and UIGamePhase() > 0 and UIGamePhase() <= 4) then\r\n",
+        b"\tif (GameChat and UIGamePhase() > 0 and UIGamePhase() <= 4) then\r\n"
+        b"\t\tGameChat:AllChatMessages(msgType, channelName, thorgorGameChatText, entity, noFormatting, isSelf)\r\n"
+        b"\tend\r\n",
         "Normalize ThorGor team-chat mirrors at the pre-game lobby communicator boundary.",
     ),
 )

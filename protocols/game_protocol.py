@@ -251,6 +251,7 @@ SERVER_TEAM_CHAT_PREFIX = b"\x5f\x03"
 SERVER_ALL_CHAT_PREFIX = b"\x5f\x02"
 THORGOR_TEAM_CHAT_MARKER = b"[THORGOR_TEAM]"
 CLIENT_TEAM_SELECTION_PREFIX = b"\xc8\x01"
+PLAYER_SLOT_COLOR_CODES = ("!b", "!t", "!p", "!y", "!o", "!i", "!v", "!l", "!g", "!n")
 
 
 def parse_client_team_chat(data: bytes) -> bytes | None:
@@ -295,6 +296,13 @@ def team_chat_recipient_routes(
     )
 
 
+def player_slot_inline_color(team: int | None, slot: int | None) -> str | None:
+    """Return HoN's exact inline player-color token for a lobby team slot."""
+    if team not in (1, 2) or slot is None or not 0 <= slot <= 4:
+        return None
+    return PLAYER_SLOT_COLOR_CODES[(team - 1) * 5 + slot]
+
+
 def remember_reliable_sequence(
     observed: dict[int, float], sequence: int, now: float, ttl: float = 30.0
 ) -> bool:
@@ -324,7 +332,11 @@ def parse_server_team_chat(data: bytes) -> tuple[int, bytes] | None:
 
 
 def make_visible_team_chat_packet(
-    sequence: int, sender_number: int, message: bytes, sender_name: str | None = None
+    sequence: int,
+    sender_number: int,
+    message: bytes,
+    sender_name: str | None = None,
+    sender_color: str | None = None,
 ) -> bytes:
     """Build one private UI-routed team-chat packet for a recipient."""
     safe_message = message.replace(b"\x00", b"")[:1024]
@@ -334,7 +346,10 @@ def make_visible_team_chat_packet(
         # be reused around bots/reconnects.  Carry the authenticated name in
         # the private marker so the UI does not display the transport entity.
         safe_name = sender_name.encode("utf-8", errors="replace").replace(b"\x00", b"")[:96]
-        marker = b"[THORGOR_TEAM:" + safe_name.hex().upper().encode("ascii") + b"]"
+        marker = b"[THORGOR_TEAM:" + safe_name.hex().upper().encode("ascii")
+        if sender_color in PLAYER_SLOT_COLOR_CODES:
+            marker += b":" + sender_color.encode("ascii")
+        marker += b"]"
     payload = (
         SERVER_ALL_CHAT_PREFIX
         + bytes((sender_number & 0xFF,))
@@ -884,6 +899,7 @@ def main(argv=None) -> int:
     pending_team_chat: list[tuple[float, bytes, str, tuple[str, int]]] = []
     team_chat_sender_names: dict[int, str] = {}
     route_team: dict[tuple[str, int], int] = {}
+    route_slot: dict[tuple[str, int], int] = {}
     route_player_number: dict[tuple[str, int], int] = {}
     handled_team_chat_sequences: dict[tuple[str, int], dict[int, float]] = {}
     server_sequence_offset: dict[tuple[str, int], int] = {}
@@ -945,6 +961,7 @@ def main(argv=None) -> int:
         server_sequence_translation.pop(client_addr, None)
         server_ack_translation.pop(client_addr, None)
         route_team.pop(client_addr, None)
+        route_slot.pop(client_addr, None)
         route_player_number.pop(client_addr, None)
         handled_team_chat_sequences.pop(client_addr, None)
         source_ip = route_source_ip.pop(client_addr, "0.0.0.0")
@@ -963,6 +980,7 @@ def main(argv=None) -> int:
         """Stop counting a leaver while preserving its final K2 handshake."""
         connection = route_connect.pop(client_addr, None)
         route_team.pop(client_addr, None)
+        route_slot.pop(client_addr, None)
         route_player_number.pop(client_addr, None)
         handled_team_chat_sequences.pop(client_addr, None)
         retired_route_deadlines[client_addr] = time.time() + 30.0
@@ -1252,6 +1270,7 @@ def main(argv=None) -> int:
         sender_number: int,
         message: bytes,
         sender_name: str,
+        sender_addr: tuple[str, int],
         reason: str,
     ) -> bool:
         """Insert one private chat event into a recipient's reliable stream."""
@@ -1271,7 +1290,13 @@ def main(argv=None) -> int:
         # its display identity with the authenticated sender name in `marker`.
         envelope_sender = 0
         visible = make_visible_team_chat_packet(
-            visible_sequence, envelope_sender, message, sender_name=sender_name
+            visible_sequence,
+            envelope_sender,
+            message,
+            sender_name=sender_name,
+            sender_color=player_slot_inline_color(
+                route_team.get(sender_addr), route_slot.get(sender_addr)
+            ),
         )
         server_ack_translation.setdefault(recipient_addr, {})[visible_sequence] = None
         sent_visible = client_sock.sendto(visible, recipient_addr)
@@ -1559,6 +1584,7 @@ def main(argv=None) -> int:
                 if team_selection is not None:
                     selected_team, selected_slot = team_selection
                     route_team[addr] = selected_team
+                    route_slot[addr] = selected_slot
                     connect = route_connect.get(addr)
                     selected_user = connect.username if connect is not None else "Player"
                     log(
@@ -1619,6 +1645,7 @@ def main(argv=None) -> int:
                                 sender_number,
                                 team_message,
                                 sender_name,
+                                addr,
                                 "opposing_joiner_team",
                             )
                 lobby = parse_lobby_create(data)
@@ -1770,6 +1797,7 @@ def main(argv=None) -> int:
                                 sender_number,
                                 message,
                                 match[2],
+                                match[3],
                                 "host_native_team_echo",
                             )
                     if (

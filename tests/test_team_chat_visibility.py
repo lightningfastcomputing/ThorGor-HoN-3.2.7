@@ -6,6 +6,7 @@ from thorgor.protocols.game_protocol import (
     parse_client_team_chat,
     parse_client_team_selection,
     parse_server_team_chat,
+    player_slot_inline_color,
     remember_reliable_sequence,
     rewrite_reliable_sequence,
     team_chat_recipient_routes,
@@ -52,6 +53,14 @@ class TeamChatVisibilityTests(unittest.TestCase):
         sender = ("127.0.0.1", 1001)
         self.assertEqual(team_chat_recipient_routes(sender, {}, (sender,)), ())
 
+    def test_player_slot_colors_follow_hons_two_five_player_teams(self):
+        self.assertEqual(player_slot_inline_color(1, 0), "!b")
+        self.assertEqual(player_slot_inline_color(1, 1), "!t")
+        self.assertEqual(player_slot_inline_color(1, 2), "!p")
+        self.assertEqual(player_slot_inline_color(2, 0), "!i")
+        self.assertEqual(player_slot_inline_color(2, 4), "!n")
+        self.assertIsNone(player_slot_inline_color(1, 5))
+
     def test_retransmitted_team_chat_is_mirrored_only_once(self):
         observed = {}
         self.assertTrue(remember_reliable_sequence(observed, 0x373, 100.0))
@@ -76,12 +85,16 @@ class TeamChatVisibilityTests(unittest.TestCase):
 
     def test_authenticated_sender_name_is_carried_without_trusting_entity_number(self):
         packet = make_visible_team_chat_packet(
-            0x12345678, 0, b"hello", sender_name="Pl\u00e4yer Two"
+            0x12345678,
+            0,
+            b"hello",
+            sender_name="Pl\u00e4yer Two",
+            sender_color="!p",
         )
         self.assertEqual(packet[:7], bytes.fromhex("00000378563412"))
         self.assertEqual(
             packet[7:],
-            b"\x5f\x02\x00[THORGOR_TEAM:506CC3A47965722054776F]hello\x00",
+            b"\x5f\x02\x00[THORGOR_TEAM:506CC3A47965722054776F:!p]hello\x00",
         )
 
     def test_rewrites_data_and_ack_sequences(self):

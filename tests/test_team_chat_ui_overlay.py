@@ -34,6 +34,15 @@ class TeamChatUiOverlayTests(unittest.TestCase):
             b"noFormatting, isSelf)",
             replacement,
         )
+        self.assertIn(b"thorgorGameChatText", replacement)
+        self.assertIn(b"GameChat.thorgorPlayerVisuals[thorgorName]", replacement)
+        self.assertNotIn(b"StripClanTag(thorgorName)", replacement)
+        self.assertIn(
+            b"thorgorNameHex, thorgorWireColor = string.match(text", replacement
+        )
+        self.assertNotIn(
+            b"thorgorNameHex, thorgorWireColor = text and string.match", replacement
+        )
 
     def test_every_chat_boundary_normalizes_the_team_marker(self):
         for entry in (
@@ -50,6 +59,8 @@ class TeamChatUiOverlayTests(unittest.TestCase):
     def test_authenticated_sender_replaces_the_borrowed_transport_identity(self):
         replacement = self.replacement("ui/scripts/chat.lua")
         self.assertIn(b"THORGOR_TEAM:([0-9A-F]+)", replacement)
+        self.assertIn(b"thorgorWireColor", replacement)
+        self.assertIn(b"thorgorWireColor and '^' .. thorgorWireColor", replacement)
         self.assertIn(b"tonumber(value, 16)", replacement)
         self.assertIn(b"thorgorColor .. thorgorName .. ': ^*'", replacement)
 
@@ -60,6 +71,9 @@ class TeamChatUiOverlayTests(unittest.TestCase):
         self.assertIn(b"thorgorPlayerVisuals[visualName]", replacements)
         self.assertIn(b"color = playerColor", replacements)
         self.assertIn(b"icon = heroIcon", replacements)
+        self.assertIn(b"entity = 'THORGOR_PLAYER:'", replacements)
+        self.assertIn(b"string.sub(entity, 1, 15) == 'THORGOR_PLAYER:'", replacements)
+        self.assertIn(b"GameChat.thorgorPlayerVisuals[string.sub(entity, 16)]", replacements)
         self.assertIn(b"THORGOR_ICON:", replacements)
         self.assertIn(b"imagewidget:SetTexture(string.sub(entity, 14))", replacements)
 
