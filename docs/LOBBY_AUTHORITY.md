@@ -21,12 +21,21 @@ promotion. The cave clears low bits 0-2 and restores them only when marker bit
 zero is set. Higher connection flags and the existing linked-client hero-state
 code remain intact.
 
+The same cave copies the externally validated C0 account ID into the native
+client object. K2's local path otherwise discards that value and clears the
+account field again immediately before `GenerateClientID`, leaving every
+`PLAYER_CONNECT` record at `id:0`. The paired patch removes that reset so K2
+can resolve a returning account to its disconnected player and enter the stock
+reconnect/countdown path.
+
 ## Backend and proxy
 
-Every `c_conn` response contains a typed `is_match_host` integer. A pending or
+Every `c_conn` response contains typed `account_id` and `is_match_host`
+integers. The proxy overwrites both C0 fields from that validated response; it
+does not trust identity or authority supplied by the client. A pending or
 active owner must match both the authenticated account and key; a normal JOIN
 receives zero. The proxy rejects missing or ambiguous authority responses and
-overwrites only the marker's low bit with the backend decision. Reservation
+overwrites the marker's low bit with the backend decision. Reservation
 updates are serialized so concurrent C0 requests cannot displace an owner.
 
 The master, proxy, and K2 patch are a paired change and must be deployed
@@ -43,7 +52,7 @@ normal five-versus-five lobby.
 ## Reproducibility
 
 - K2 input: `25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026`
-- K2 output: `21AD692656419D6483DE1B93A16DFB7E04BC7C2ACB6EBDA00D6F7A54A13493F0`
+- K2 output: `3F1944986EE403AAEAB8F440AF66E73B3893D1A1898E67C40549ECCBB52D5527`
 - game.dll input: `D345F8537ED9FD5C6705F8F1A9FA6663C5F4AE4476CD328B2D8F1074C044CF99`
 - game.dll output: `929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B`
 

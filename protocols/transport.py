@@ -21,6 +21,7 @@ def make_authorized_local_c0(
     packet: ConnectC0,
     *,
     is_match_host: bool,
+    account_id: int,
     connection_id: int | None = None,
 ) -> bytes:
     """Encode the master decision for the paired K2 creator-authority patch.
@@ -31,9 +32,14 @@ def make_authorized_local_c0(
     """
     if not 0 <= packet.flag_offset < len(data):
         raise ValueError("external-auth flag offset is outside packet")
+    if not 0 < account_id <= 0xFFFFFFFF:
+        raise ValueError("account ID must be a positive uint32")
+    if not 0 <= packet.account_id_offset <= len(data) - 4:
+        raise ValueError("account ID offset is outside packet")
     if connection_id is not None and not 0 < connection_id <= 0xFFFF:
         raise ValueError("connection ID must be a nonzero uint16")
     rewritten = bytearray(data)
+    struct.pack_into("<I", rewritten, packet.account_id_offset, account_id)
     if connection_id is not None:
         connection_id_offset = (
             4

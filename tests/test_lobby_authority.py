@@ -10,10 +10,11 @@ from thorgor.protocols.packet_decoding import parse_connect_c0
 from thorgor.protocols.transport import make_authorized_local_c0
 
 
-def connection(key="", marker=0):
+def connection(key="", marker=0, account_id=7):
     strings = ["", "player", "cookie", "127.0.0.1", key, ""]
     return (b"\0\0\1\xc0Heroes of Newerth\x003.2.7.1\0" + struct.pack("<IH", 123, 0)
-            + b"".join(s.encode() + b"\0" for s in strings) + bytes([marker]) + b"tail")
+            + b"".join(s.encode() + b"\0" for s in strings) + bytes([marker])
+            + struct.pack("<I", account_id) + b"tail")
 
 
 class LobbyAuthorityTests(unittest.TestCase):
@@ -39,19 +40,25 @@ class LobbyAuthorityTests(unittest.TestCase):
             original = connection("creator-key", incoming)
             parsed = parse_connect_c0(original)
             for creator in (False, True):
-                changed = make_authorized_local_c0(original, parsed, is_match_host=creator)
+                changed = make_authorized_local_c0(
+                    original, parsed, is_match_host=creator, account_id=23
+                )
                 self.assertEqual(changed[parsed.flag_offset], incoming & 0xFE | int(creator))
                 self.assertEqual(changed[:parsed.flag_offset], original[:parsed.flag_offset])
-                self.assertEqual(changed[parsed.flag_offset + 1:], original[parsed.flag_offset + 1:])
+                self.assertEqual(struct.unpack_from("<I", changed, parsed.account_id_offset)[0], 23)
+                self.assertEqual(changed[parsed.account_id_offset + 4:], original[parsed.account_id_offset + 4:])
         for offset in (-1, 4):
             with self.assertRaises(ValueError):
-                make_authorized_local_c0(bytes(4), SimpleNamespace(flag_offset=offset), is_match_host=False)
+                make_authorized_local_c0(
+                    bytes(4), SimpleNamespace(flag_offset=offset, account_id_offset=offset + 1),
+                    is_match_host=False, account_id=1
+                )
 
     def test_gateway_can_assign_a_stable_native_connection_id(self):
         original = connection("", marker=0)
         parsed = parse_connect_c0(original)
         changed = make_authorized_local_c0(
-            original, parsed, is_match_host=False, connection_id=0x1234
+            original, parsed, is_match_host=False, account_id=7, connection_id=0x1234
         )
         reparsed = parse_connect_c0(changed)
         self.assertEqual(reparsed.connection_id, 0x1234)
@@ -59,20 +66,22 @@ class LobbyAuthorityTests(unittest.TestCase):
         for invalid in (0, 0x10000):
             with self.assertRaises(ValueError):
                 make_authorized_local_c0(
-                    original, parsed, is_match_host=False, connection_id=invalid
+                    original, parsed, is_match_host=False, account_id=7, connection_id=invalid
                 )
 
     def test_authorization_requires_unique_typed_decision_and_matching_cookie(self):
         response = b's:6:"cookie";s:6:"cookie";s:10:"account_id";i:2;s:11:"game_cookie";s:4:"abcd";'
         for decision in (0, 1):
             wire = response + f's:13:"is_match_host";i:{decision};'.encode()
-            ok, _, creator = validate_c_conn_response(wire, "cookie")
+            ok, _, creator, account_id = validate_c_conn_response(wire, "cookie")
             self.assertTrue(ok)
             self.assertEqual(creator, bool(decision))
+            self.assertEqual(account_id, 2)
             self.assertFalse(validate_c_conn_response(wire, "wrong-cookie")[0])
         for suffix in (b"", b's:13:"is_match_host";s:1:"1";', b's:13:"is_match_host";i:2;',
                        b's:13:"is_match_host";i:0;s:13:"is_match_host";i:1;'):
-            self.assertEqual(validate_c_conn_response(response + suffix, "cookie")[::2], (False, False))
+            result = validate_c_conn_response(response + suffix, "cookie")
+            self.assertEqual((result[0], result[2], result[3]), (False, False, 0))
 
     def test_master_response_to_native_marker_for_creator_and_joiner(self):
         from thorgor.master import server
@@ -101,9 +110,16 @@ class LobbyAuthorityTests(unittest.TestCase):
                 raw = connection(key, marker=0xFF)
                 parsed = parse_connect_c0(raw)
                 with patch("thorgor.protocols.admission._post", return_value=wire):
-                    approved, _, decision = authorize_connect_c0(parsed, "http://localhost", 1)
+                    approved, _, decision, account_id = authorize_connect_c0(
+                        parsed, "http://localhost", 1
+                    )
                 self.assertTrue(approved)
                 self.assertEqual(decision, creator)
-                rewritten = make_authorized_local_c0(raw, parsed, is_match_host=decision)
+                rewritten = make_authorized_local_c0(
+                    raw, parsed, is_match_host=decision, account_id=account_id
+                )
                 self.assertEqual(rewritten[parsed.flag_offset] & 1, int(creator))
+                self.assertEqual(
+                    struct.unpack_from("<I", rewritten, parsed.account_id_offset)[0], account
+                )
                 self.assertEqual(state["pending_host_account_id"], 1)
