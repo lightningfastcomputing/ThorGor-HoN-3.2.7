@@ -36,6 +36,26 @@ def is_client_disconnect(data: bytes) -> bool:
     return data == b"\x00\x00\x01\xc3"
 
 
+@dataclass(frozen=True)
+class ReconnectInfoRequest:
+    match_id: int
+    account_id: int
+    connection_id: int
+
+
+def parse_reconnect_info_request(data: bytes) -> ReconnectInfoRequest | None:
+    """Decode the stock browser-socket reconnect availability probe.
+
+    This request intentionally precedes a new authenticated C0 game route.  It
+    is safe to forward without C0 admission because the native response only
+    contains the remaining reconnect grace time.
+    """
+    if len(data) != 14 or data[:4] != b"\x00\x00\x01\xcc":
+        return None
+    match_id, account_id, connection_id = struct.unpack_from("<IIH", data, 4)
+    return ReconnectInfoRequest(match_id, account_id, connection_id)
+
+
 def reserve_loopback_source(allocated: set[str]) -> str:
     """Reserve a session-unique K2 loopback identity for this proxy run."""
     for final_octet in range(2, 255):
@@ -901,6 +921,9 @@ def main(argv=None) -> int:
     route_team: dict[tuple[str, int], int] = {}
     route_slot: dict[tuple[str, int], int] = {}
     route_player_number: dict[tuple[str, int], int] = {}
+    # Team-chat routing metadata must outlive a UDP endpoint. A reconnect uses
+    # the same authenticated cookie but commonly returns from a new local port.
+    player_metadata_by_cookie: dict[str, dict[str, int]] = {}
     handled_team_chat_sequences: dict[tuple[str, int], dict[int, float]] = {}
     server_sequence_offset: dict[tuple[str, int], int] = {}
     last_server_sequence: dict[tuple[str, int], int] = {}
@@ -946,6 +969,29 @@ def main(argv=None) -> int:
     def encode_cpacket_wstring(text: str) -> bytes:
         return text.encode("utf-8") + b"\x00"
 
+    def remember_player_metadata(client_addr: tuple[str, int]) -> None:
+        connection = route_connect.get(client_addr)
+        if connection is None:
+            return
+        metadata = player_metadata_by_cookie.setdefault(connection.cookie, {})
+        if client_addr in route_team:
+            metadata["team"] = route_team[client_addr]
+        if client_addr in route_slot:
+            metadata["slot"] = route_slot[client_addr]
+        if client_addr in route_player_number:
+            metadata["player_number"] = route_player_number[client_addr]
+
+    def restore_player_metadata(client_addr: tuple[str, int], connection: ConnectC0) -> None:
+        metadata = player_metadata_by_cookie.get(connection.cookie)
+        if metadata is None:
+            return
+        if "team" in metadata:
+            route_team[client_addr] = metadata["team"]
+        if "slot" in metadata:
+            route_slot[client_addr] = metadata["slot"]
+        if "player_number" in metadata:
+            route_player_number[client_addr] = metadata["player_number"]
+
     def close_route(client_addr: tuple[str, int], reason: str) -> None:
         flush_admission_trace(client_addr, f"route_close:{reason}")
         flush_route_trace(client_addr, f"route_close:{reason}")
@@ -978,6 +1024,7 @@ def main(argv=None) -> int:
 
     def retire_player_identity(client_addr: tuple[str, int]) -> None:
         """Stop counting a leaver while preserving its final K2 handshake."""
+        remember_player_metadata(client_addr)
         connection = route_connect.pop(client_addr, None)
         route_team.pop(client_addr, None)
         route_slot.pop(client_addr, None)
@@ -1506,8 +1553,16 @@ def main(argv=None) -> int:
                 is_browser_query = (
                     len(data) == 6 and data[:3] == b"\x00\x00\x01" and data[3] == 0xCA
                 )
+                reconnect_request = parse_reconnect_info_request(data)
                 if is_browser_query:
                     log(f"BROWSER_RX client={addr[0]}:{addr[1]} token={data[4:6].hex()}")
+                if reconnect_request is not None:
+                    log(
+                        f"RECONNECT_PROBE client={addr[0]}:{addr[1]} "
+                        f"match_id={reconnect_request.match_id} "
+                        f"account_id={reconnect_request.account_id} "
+                        f"connection_id=0x{reconnect_request.connection_id:04X}"
+                    )
                 for reply_kind, browser_reply in browser_replies:
                     sent = client_sock.sendto(browser_reply, addr)
                     counters["client_tx"] += 1
@@ -1541,7 +1596,14 @@ def main(argv=None) -> int:
                         f"bytes={len(data)} flag_offset={connect.flag_offset} hex={data.hex()}"
                     )
                     data = make_authorized_local_c0(data, connect, is_match_host=is_match_host)
+                    # Retire any older endpoint for this identity and transfer
+                    # its proxy-only team/chat metadata to the returning route.
+                    for previous_addr, previous_connect in tuple(route_connect.items()):
+                        if previous_addr != addr and previous_connect.cookie == connect.cookie:
+                            remember_player_metadata(previous_addr)
+                            retire_player_identity(previous_addr)
                     route_connect[addr] = connect
+                    restore_player_metadata(addr, connect)
                     retired_route_deadlines.pop(addr, None)
                     log(
                         f"LOBBY_OCCUPANCY players={connected_player_count(route_connect.values())} "
@@ -1552,6 +1614,7 @@ def main(argv=None) -> int:
                         route_player_number[addr] = next(
                             number for number in range(256) if number not in used_player_numbers
                         )
+                    remember_player_metadata(addr)
                     typed_route = routes.get(addr)
                     if typed_route is not None:
                         typed_route.connected = connect
@@ -1561,7 +1624,11 @@ def main(argv=None) -> int:
                         f"C0_AUTH_LOCALIZED client={addr[0]}:{addr[1]} "
                         f"flag_offset={connect.flag_offset} host_id_preserved=0x{connect.host_id:08X}"
                     )
-                elif args.require_c0_auth and addr not in upstream_by_client:
+                elif (
+                    args.require_c0_auth
+                    and addr not in upstream_by_client
+                    and reconnect_request is None
+                ):
                     log(
                         f"ROUTE_REJECT client={addr[0]}:{addr[1]} "
                         "reason=no authenticated C0 route"
@@ -1585,6 +1652,7 @@ def main(argv=None) -> int:
                     selected_team, selected_slot = team_selection
                     route_team[addr] = selected_team
                     route_slot[addr] = selected_slot
+                    remember_player_metadata(addr)
                     connect = route_connect.get(addr)
                     selected_user = connect.username if connect is not None else "Player"
                     log(
@@ -1775,6 +1843,7 @@ def main(argv=None) -> int:
                     if match is not None:
                         team_chat_sender_names[sender_number] = match[2]
                         route_player_number[match[3]] = sender_number
+                        remember_player_metadata(match[3])
                         pending_team_chat.remove(match)
                     connect = route_connect.get(client_addr)
                     if (

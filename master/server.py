@@ -622,6 +622,7 @@ SERVER_REQUEST_HINTS = {
     "client_auth": "candidate game-server client authorization alias",
     "accept_key": "candidate hosting permission/account-key validation",
     "set_online": "candidate server online/status transition",
+    "set_reconnect": "register a player's active-match reconnect endpoint",
     "shutdown": "candidate server shutdown notification",
     "get_upgrades": "candidate server-side upgrade lookup",
 }
@@ -785,6 +786,18 @@ def success_payload(session: Session, cookie: str | None = None,
         ]
 
     if store is not None:
+        reconnect = store.get_reconnect(session.account_id)
+        state = v31_read_state()
+        try:
+            active_match_id = int(state.get("match_id", 0) or 0)
+        except (TypeError, ValueError):
+            active_match_id = 0
+        if reconnect is not None and reconnect["match_id"] == active_match_id and active_match_id > 0:
+            payload["reconnect"] = {
+                "ip": reconnect["ip"],
+                "port": reconnect["port"],
+                "match_id": reconnect["match_id"],
+            }
         friends = store.list_friends(session.account_id)
         payload["buddy_list"] = {
             session.account_id: {
@@ -1229,7 +1242,7 @@ class Handler(BaseHTTPRequestHandler):
         generic_response = {"success": 1, "vested_threshold": 5, 0: True}
         response_policy = (
             "v43 exact KONGOR-compatible response"
-            if function in {"start_game", "host_lobby", "host_release", "c_conn", "client_auth"}
+            if function in {"start_game", "host_lobby", "host_release", "set_reconnect", "c_conn", "client_auth"}
             else "v24-compatible generic success for unknown requests"
         )
 
@@ -1255,6 +1268,8 @@ class Handler(BaseHTTPRequestHandler):
         # server_requester.php into the chat/control plane; a generic success
         # cannot produce a real registered Idle game-server connection.
         if function == "new_session":
+            if ACCOUNTS is not None:
+                ACCOUNTS.clear_reconnects()
             session = uuid.uuid4().hex
             state = v31_update_state(
                 registered=True, idle_confirmed=False, lifecycle="registered",
@@ -1415,6 +1430,53 @@ class Handler(BaseHTTPRequestHandler):
                 server_log(f"HOST_RESERVATION_RELEASED account_id={identity['account_id']}")
             self.send_php({"success": 1})
             return
+        elif function == "set_reconnect":
+            if ACCOUNTS is None:
+                raise RuntimeError("Account database is not initialized")
+            state = v31_read_state()
+            supplied_session = params.get("session", [""])[0]
+            expected_session = str(state.get("server_session") or "")
+            try:
+                account_id = int(params.get("account_id", ["0"])[0])
+                match_id = int(params.get("match_id", ["0"])[0])
+            except ValueError:
+                account_id = 0
+                match_id = 0
+            try:
+                active_match_id = int(state.get("match_id", 0) or 0)
+            except (TypeError, ValueError):
+                active_match_id = 0
+            if (
+                not supplied_session
+                or not expected_session
+                or not hmac.compare_digest(supplied_session, expected_session)
+                or account_id <= 0
+                or match_id <= 0
+                or match_id != active_match_id
+            ):
+                server_log(
+                    f"SET_RECONNECT_REJECTED account_id={account_id} "
+                    f"match_id={match_id} active_match_id={active_match_id}"
+                )
+                self.send_php({"success": 0, "error": ["Invalid reconnect registration"]})
+                return
+            reconnect_ip = CONFIG.server_list_ip or params.get("ip", [CONFIG.match_server_ip])[0]
+            try:
+                reconnect_port = CONFIG.server_list_port if CONFIG.server_list_ip else int(
+                    params.get("port", [str(CONFIG.match_server_port)])[0]
+                )
+            except ValueError:
+                self.send_php({"success": 0, "error": ["Invalid reconnect port"]})
+                return
+            ACCOUNTS.set_reconnect(
+                account_id, supplied_session, reconnect_ip, reconnect_port, match_id
+            )
+            server_log(
+                f"SET_RECONNECT_ACCEPTED account_id={account_id} match_id={match_id} "
+                f"advertised={reconnect_ip}:{reconnect_port}"
+            )
+            self.send_php({"success": 1})
+            return
         elif function in {"c_conn", "client_auth"}:
             if ACCOUNTS is None:
                 raise RuntimeError("Account database is not initialized")
@@ -1451,6 +1513,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_php(response)
             return
         elif function == "shutdown":
+            if ACCOUNTS is not None:
+                ACCOUNTS.clear_reconnects()
             v31_update_state(
                 registered=False, idle_confirmed=False, lifecycle="offline",
                 match_id=0, match_date="", match_name="", match_map="",

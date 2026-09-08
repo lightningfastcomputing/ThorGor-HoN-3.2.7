@@ -58,6 +58,10 @@ class AccountStore:
                 casual TEXT NOT NULL DEFAULT '', match_mode TEXT NOT NULL DEFAULT '',
                 accounts TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+            db.execute("""CREATE TABLE IF NOT EXISTS reconnects (
+                account_id INTEGER PRIMARY KEY, server_session TEXT NOT NULL,
+                ip TEXT NOT NULL, port INTEGER NOT NULL, match_id INTEGER NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
             db.execute("""CREATE TABLE IF NOT EXISTS friend_requests (
                 requester_id INTEGER NOT NULL, target_id INTEGER NOT NULL,
                 notification_id INTEGER NOT NULL,
@@ -123,6 +127,35 @@ class AccountStore:
             db.commit(); match_id = int(cursor.lastrowid)
         if match_id <= 0: raise RuntimeError("SQLite did not allocate a positive match ID")
         return match_id
+
+    def set_reconnect(self, account_id: int, server_session: str,
+                      ip: str, port: int, match_id: int) -> None:
+        if account_id <= 0 or not server_session or not ip or not 0 < port <= 65535 or match_id <= 0:
+            raise ValueError("Invalid reconnect record")
+        with self.lock, self.connect() as db:
+            db.execute("""INSERT INTO reconnects (account_id,server_session,ip,port,match_id)
+                VALUES (?,?,?,?,?) ON CONFLICT(account_id) DO UPDATE SET
+                server_session=excluded.server_session,ip=excluded.ip,port=excluded.port,
+                match_id=excluded.match_id,updated_at=CURRENT_TIMESTAMP""",
+                (account_id, server_session, ip, port, match_id))
+            db.commit()
+
+    def get_reconnect(self, account_id: int) -> dict[str, object] | None:
+        with self.lock, self.connect() as db:
+            row = db.execute("""SELECT server_session,ip,port,match_id
+                FROM reconnects WHERE account_id=?""", (account_id,)).fetchone()
+        if row is None:
+            return None
+        return {"server_session": str(row["server_session"]), "ip": str(row["ip"]),
+                "port": int(row["port"]), "match_id": int(row["match_id"])}
+
+    def clear_reconnects(self, account_id: int | None = None) -> None:
+        with self.lock, self.connect() as db:
+            if account_id is None:
+                db.execute("DELETE FROM reconnects")
+            else:
+                db.execute("DELETE FROM reconnects WHERE account_id=?", (account_id,))
+            db.commit()
 
     def list_accounts(self) -> list[Account]:
         with self.lock, self.connect() as db: rows = db.execute("SELECT account_id,username,password,nickname,enabled FROM accounts ORDER BY account_id").fetchall()

@@ -1,4 +1,5 @@
 import unittest
+import struct
 from types import SimpleNamespace
 
 from thorgor.protocols.game_protocol import (
@@ -6,6 +7,7 @@ from thorgor.protocols.game_protocol import (
     browser_team_size,
     connected_player_count,
     is_client_disconnect,
+    parse_reconnect_info_request,
     reserve_loopback_source,
 )
 
@@ -68,6 +70,15 @@ class BrowserOccupancyTests(unittest.TestCase):
         self.assertEqual(first, "127.0.0.2")
         self.assertEqual(second, "127.0.0.3")
         self.assertEqual(reserve_loopback_source(allocated), "127.0.0.4")
+
+    def test_native_reconnect_probe_is_recognized_exactly(self):
+        packet = b"\x00\x00\x01\xcc" + struct.pack("<IIH", 42, 7, 0x1234)
+        request = parse_reconnect_info_request(packet)
+        self.assertIsNotNone(request)
+        self.assertEqual((request.match_id, request.account_id, request.connection_id),
+                         (42, 7, 0x1234))
+        for malformed in (packet[:-1], packet + b"\0", b"\x00\x00\x01\xca" + packet[4:]):
+            self.assertIsNone(parse_reconnect_info_request(malformed))
 
 
 if __name__ == "__main__":
