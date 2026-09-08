@@ -65,18 +65,26 @@ def local_account_id_from_cookie(cookie: str) -> int | None:
     return account_id if account_id > 0 else None
 
 
+def stable_connection_id_for_account(account_id: int) -> int:
+    """Map a local account to the nonzero uint16 K2 uses to recover client number."""
+    if account_id <= 0:
+        raise ValueError("account ID must be positive")
+    return ((account_id - 1) % 0xFFFF) + 1
+
+
 def make_reconnect_info_reply(
     request: ReconnectInfoRequest,
     active_match_id: int,
     reconnect_deadlines: dict[int, float],
     now: float,
-) -> bytes | None:
-    """Build the stock 0x6f availability response for an eligible leaver."""
+) -> bytes:
+    """Build the stock 0x6f availability response, including a zero denial."""
+    remaining_ms = 0
     if request.match_id <= 0 or request.match_id != active_match_id:
-        return None
+        return b"\x00\x00\x01\x6f" + struct.pack("<I", remaining_ms)
     deadline = reconnect_deadlines.get(request.account_id)
     if deadline is None or deadline <= now:
-        return None
+        return b"\x00\x00\x01\x6f" + struct.pack("<I", remaining_ms)
     remaining_ms = max(1, min(int((deadline - now) * 1000), 0xFFFFFFFF))
     return b"\x00\x00\x01\x6f" + struct.pack("<I", remaining_ms)
 
@@ -89,6 +97,22 @@ def reserve_loopback_source(allocated: set[str]) -> str:
             allocated.add(candidate)
             return candidate
     raise RuntimeError("no unique loopback source IP remains")
+
+
+def reserve_identity_source(
+    cookie: str | None,
+    sources_by_cookie: dict[str, str],
+    allocated: set[str],
+) -> str:
+    """Keep K2's proxy-side network identity stable across client UDP ports."""
+    if cookie:
+        existing = sources_by_cookie.get(cookie)
+        if existing is not None:
+            return existing
+    source_ip = reserve_loopback_source(allocated)
+    if cookie:
+        sources_by_cookie[cookie] = source_ip
+    return source_ip
 
 
 def browser_player_count(
@@ -931,8 +955,10 @@ def main(argv=None) -> int:
     route_counters: dict[tuple[str, int], dict[str, int]] = {}
     route_challenge_at: dict[tuple[str, int], float] = {}
     route_source_ip: dict[tuple[str, int], str] = {}
+    route_source_ip_by_cookie: dict[str, str] = {}
     allocated_source_ips: set[str] = set()
     retired_route_deadlines: dict[tuple[str, int], float] = {}
+    retired_route_by_cookie: dict[str, tuple[str, int]] = {}
     admission_traces: dict[tuple[str, int], dict[str, object]] = {}
     route_traces: dict[tuple[str, int], dict[str, object]] = {}
     route_trace_dir = BASE_DIR / args.route_trace_dir
@@ -1039,6 +1065,9 @@ def main(argv=None) -> int:
         route_slot.pop(client_addr, None)
         route_player_number.pop(client_addr, None)
         handled_team_chat_sequences.pop(client_addr, None)
+        for cookie, retired_addr in tuple(retired_route_by_cookie.items()):
+            if retired_addr == client_addr:
+                retired_route_by_cookie.pop(cookie, None)
         source_ip = route_source_ip.pop(client_addr, "0.0.0.0")
         if upstream is None:
             return
@@ -1055,6 +1084,8 @@ def main(argv=None) -> int:
         """Stop counting a leaver while preserving its final K2 handshake."""
         remember_player_metadata(client_addr)
         connection = route_connect.pop(client_addr, None)
+        if connection is not None and client_addr in upstream_by_client:
+            retired_route_by_cookie[connection.cookie] = client_addr
         account_id = (
             local_account_id_from_cookie(connection.cookie)
             if connection is not None
@@ -1071,13 +1102,54 @@ def main(argv=None) -> int:
         route_slot.pop(client_addr, None)
         route_player_number.pop(client_addr, None)
         handled_team_chat_sequences.pop(client_addr, None)
-        retired_route_deadlines[client_addr] = time.time() + 30.0
+        retired_route_deadlines[client_addr] = time.time() + 300.0
         username = connection.username if connection is not None else "-"
         log(
             f"ROUTE_RETIRED client={client_addr[0]}:{client_addr[1]} "
-            f"user={username!r} grace=30s "
+            f"user={username!r} grace=300s "
             f"players={connected_player_count(route_connect.values())}"
         )
+
+    def reattach_retired_route(cookie: str, client_addr: tuple[str, int]) -> bool:
+        """Move K2's exact retained UDP endpoint to a returning real client."""
+        retired_addr = retired_route_by_cookie.pop(cookie, None)
+        if retired_addr is None or retired_addr == client_addr:
+            return False
+        upstream = upstream_by_client.pop(retired_addr, None)
+        if upstream is None:
+            return False
+        if client_addr in upstream_by_client:
+            close_route(client_addr, "reconnect_route_replaced")
+        routes.remove(retired_addr)
+        client_by_upstream[upstream] = client_addr
+        upstream_by_client[client_addr] = upstream
+        source_ip = route_source_ip.pop(retired_addr, upstream.getsockname()[0])
+        route_source_ip[client_addr] = source_ip
+        route_activity.pop(retired_addr, None)
+        route_activity[client_addr] = time.time()
+        route_counters.pop(retired_addr, None)
+        route_counters[client_addr] = {
+            "to_server": 0,
+            "to_server_bytes": 0,
+            "from_server": 0,
+            "from_server_bytes": 0,
+        }
+        retired_route_deadlines.pop(retired_addr, None)
+        route_challenge_at.pop(retired_addr, None)
+        admission_traces.pop(retired_addr, None)
+        route_traces.pop(retired_addr, None)
+        server_sequence_offset.pop(retired_addr, None)
+        last_server_sequence.pop(retired_addr, None)
+        server_sequence_translation.pop(retired_addr, None)
+        server_ack_translation.pop(retired_addr, None)
+        handled_team_chat_sequences.pop(retired_addr, None)
+        routes.add(ClientRoute(client_addr, upstream, source_ip))
+        log(
+            f"ROUTE_REATTACHED previous_client={retired_addr[0]}:{retired_addr[1]} "
+            f"client={client_addr[0]}:{client_addr[1]} "
+            f"upstream={source_ip}:{upstream.getsockname()[1]}"
+        )
+        return True
 
     def begin_admission_trace(client_addr: tuple[str, int], username: str) -> None:
         if args.admission_trace_seconds <= 0 or args.admission_trace_packets <= 0:
@@ -1311,14 +1383,15 @@ def main(argv=None) -> int:
         )
         return repaired
 
-    def allocate_route_source_ip() -> str:
+    def allocate_route_source_ip(cookie: str | None = None) -> str:
         if not args.unique_loopback_sources:
             return "0.0.0.0"
-        # K2 keys these 3.2.7.1 sessions by source IP plus connection ID zero.
-        # Never recycle an IP while the dedicated process is alive, even after
-        # the transport grace period, or a quick rejoin can collide with K2's
-        # recently departed client record and receive no response.
-        return reserve_loopback_source(allocated_source_ips)
+        # K2 keys these 3.2.7.1 sessions by proxy source IP and connection ID.
+        # A returning account must therefore retain both values even though
+        # its real client UDP port and proxy socket port change.
+        return reserve_identity_source(
+            cookie, route_source_ip_by_cookie, allocated_source_ips
+        )
 
     def get_or_create_route(client_addr: tuple[str, int]) -> socket.socket:
         existing = upstream_by_client.get(client_addr)
@@ -1331,7 +1404,10 @@ def main(argv=None) -> int:
         upstream = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         if hasattr(socket, "SIO_UDP_CONNRESET"):
             upstream.ioctl(socket.SIO_UDP_CONNRESET, False)
-        source_ip = allocate_route_source_ip()
+        connection = route_connect.get(client_addr)
+        source_ip = allocate_route_source_ip(
+            connection.cookie if connection is not None else None
+        )
         upstream.bind((source_ip, 0))
         upstream.setblocking(False)
         upstream_by_client[client_addr] = upstream
@@ -1615,17 +1691,16 @@ def main(argv=None) -> int:
                         reconnect_deadlines_by_account,
                         time.time(),
                     )
-                    if reconnect_reply is not None:
-                        sent = client_sock.sendto(reconnect_reply, addr)
-                        counters["client_tx"] += 1
-                        counters["client_tx_bytes"] += sent
-                        remaining_ms = struct.unpack_from("<I", reconnect_reply, 4)[0]
-                        log(
-                            f"RECONNECT_REPLY client={addr[0]}:{addr[1]} "
-                            f"account_id={reconnect_request.account_id} "
-                            f"match_id={reconnect_request.match_id} remaining_ms={remaining_ms}"
-                        )
-                        continue
+                    sent = client_sock.sendto(reconnect_reply, addr)
+                    counters["client_tx"] += 1
+                    counters["client_tx_bytes"] += sent
+                    remaining_ms = struct.unpack_from("<I", reconnect_reply, 4)[0]
+                    log(
+                        f"RECONNECT_REPLY client={addr[0]}:{addr[1]} "
+                        f"account_id={reconnect_request.account_id} "
+                        f"match_id={reconnect_request.match_id} remaining_ms={remaining_ms}"
+                    )
+                    continue
                 for reply_kind, browser_reply in browser_replies:
                     sent = client_sock.sendto(browser_reply, addr)
                     counters["client_tx"] += 1
@@ -1658,15 +1733,26 @@ def main(argv=None) -> int:
                         f"C0_WIRE client={addr[0]}:{addr[1]} user={connect.username!r} "
                         f"bytes={len(data)} flag_offset={connect.flag_offset} hex={data.hex()}"
                     )
-                    data = make_authorized_local_c0(data, connect, is_match_host=is_match_host)
+                    account_id = local_account_id_from_cookie(connect.cookie)
+                    stable_connection_id = (
+                        stable_connection_id_for_account(account_id)
+                        if account_id is not None
+                        else None
+                    )
+                    data = make_authorized_local_c0(
+                        data,
+                        connect,
+                        is_match_host=is_match_host,
+                        connection_id=stable_connection_id,
+                    )
                     # Retire any older endpoint for this identity and transfer
                     # its proxy-only team/chat metadata to the returning route.
                     for previous_addr, previous_connect in tuple(route_connect.items()):
                         if previous_addr != addr and previous_connect.cookie == connect.cookie:
                             remember_player_metadata(previous_addr)
                             retire_player_identity(previous_addr)
+                    reattach_retired_route(connect.cookie, addr)
                     route_connect[addr] = connect
-                    account_id = local_account_id_from_cookie(connect.cookie)
                     if account_id is not None:
                         reconnect_deadlines_by_account.pop(account_id, None)
                     restore_player_metadata(addr, connect)
@@ -1688,7 +1774,8 @@ def main(argv=None) -> int:
                     start_route_trace(addr, connect.username)
                     log(
                         f"C0_AUTH_LOCALIZED client={addr[0]}:{addr[1]} "
-                        f"flag_offset={connect.flag_offset} host_id_preserved=0x{connect.host_id:08X}"
+                        f"flag_offset={connect.flag_offset} host_id_preserved=0x{connect.host_id:08X} "
+                        f"stable_connection_id=0x{(stable_connection_id or 0):04X}"
                     )
                 elif (
                     args.require_c0_auth

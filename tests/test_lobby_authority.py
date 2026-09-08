@@ -47,6 +47,21 @@ class LobbyAuthorityTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 make_authorized_local_c0(bytes(4), SimpleNamespace(flag_offset=offset), is_match_host=False)
 
+    def test_gateway_can_assign_a_stable_native_connection_id(self):
+        original = connection("", marker=0)
+        parsed = parse_connect_c0(original)
+        changed = make_authorized_local_c0(
+            original, parsed, is_match_host=False, connection_id=0x1234
+        )
+        reparsed = parse_connect_c0(changed)
+        self.assertEqual(reparsed.connection_id, 0x1234)
+        self.assertEqual(reparsed.cookie, parsed.cookie)
+        for invalid in (0, 0x10000):
+            with self.assertRaises(ValueError):
+                make_authorized_local_c0(
+                    original, parsed, is_match_host=False, connection_id=invalid
+                )
+
     def test_authorization_requires_unique_typed_decision_and_matching_cookie(self):
         response = b's:6:"cookie";s:6:"cookie";s:10:"account_id";i:2;s:11:"game_cookie";s:4:"abcd";'
         for decision in (0, 1):

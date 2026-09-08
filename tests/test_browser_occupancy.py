@@ -11,6 +11,8 @@ from thorgor.protocols.game_protocol import (
     make_reconnect_info_reply,
     parse_reconnect_info_request,
     reserve_loopback_source,
+    reserve_identity_source,
+    stable_connection_id_for_account,
 )
 
 
@@ -73,6 +75,19 @@ class BrowserOccupancyTests(unittest.TestCase):
         self.assertEqual(second, "127.0.0.3")
         self.assertEqual(reserve_loopback_source(allocated), "127.0.0.4")
 
+    def test_authenticated_identity_keeps_its_proxy_source_on_reconnect(self):
+        allocated = set()
+        sources = {}
+        first = reserve_identity_source("player-cookie", sources, allocated)
+        self.assertEqual(first, "127.0.0.2")
+        self.assertEqual(
+            reserve_identity_source("player-cookie", sources, allocated), first
+        )
+        self.assertEqual(
+            reserve_identity_source("other-cookie", sources, allocated), "127.0.0.3"
+        )
+        self.assertEqual(reserve_identity_source(None, sources, allocated), "127.0.0.4")
+
     def test_native_reconnect_probe_is_recognized_exactly(self):
         packet = b"\x00\x00\x01\xcc" + struct.pack("<IIH", 42, 7, 0x1234)
         request = parse_reconnect_info_request(packet)
@@ -87,6 +102,13 @@ class BrowserOccupancyTests(unittest.TestCase):
         for cookie in ("cookie", "THORGOR_LOCAL_COOKIE_3", "THORGOR_LOCAL_COOKIE_00000000"):
             self.assertIsNone(local_account_id_from_cookie(cookie))
 
+    def test_local_accounts_receive_stable_nonzero_connection_ids(self):
+        self.assertEqual(stable_connection_id_for_account(1), 1)
+        self.assertEqual(stable_connection_id_for_account(3), 3)
+        self.assertEqual(stable_connection_id_for_account(0x10000), 1)
+        with self.assertRaises(ValueError):
+            stable_connection_id_for_account(0)
+
     def test_reconnect_reply_requires_same_live_match_and_unexpired_leaver(self):
         request = parse_reconnect_info_request(
             b"\x00\x00\x01\xcc" + struct.pack("<IIH", 42, 7, 0)
@@ -95,8 +117,12 @@ class BrowserOccupancyTests(unittest.TestCase):
         reply = make_reconnect_info_reply(request, 42, {7: 130.0}, 100.0)
         self.assertEqual(reply[:4], b"\x00\x00\x01\x6f")
         self.assertEqual(struct.unpack_from("<I", reply, 4)[0], 30000)
-        self.assertIsNone(make_reconnect_info_reply(request, 41, {7: 130.0}, 100.0))
-        self.assertIsNone(make_reconnect_info_reply(request, 42, {7: 99.0}, 100.0))
+        for denied in (
+            make_reconnect_info_reply(request, 41, {7: 130.0}, 100.0),
+            make_reconnect_info_reply(request, 42, {7: 99.0}, 100.0),
+        ):
+            self.assertEqual(denied[:4], b"\x00\x00\x01\x6f")
+            self.assertEqual(struct.unpack_from("<I", denied, 4)[0], 0)
 
 
 if __name__ == "__main__":
