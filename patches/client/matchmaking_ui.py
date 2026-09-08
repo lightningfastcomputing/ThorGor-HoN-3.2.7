@@ -52,12 +52,61 @@ PATCHES = (
         b"\tmessageType, channel, message, entity, premessage = messageType or '', channel or '', message or '', entity or '', ''\r\n",
         b"\tmessageType, channel, message, entity, premessage = messageType or '', channel or '', message or '', entity or '', ''\r\n"
         b"\tlocal thorgorTeamMarker = '[THORGOR_TEAM]'\r\n"
-        b"\tif (string.find(message, thorgorTeamMarker, 1, true)) then\r\n"
+        b"\tlocal thorgorNameHex = string.match(message, '%[THORGOR_TEAM:([0-9A-F]+)%]')\r\n"
+        b"\tlocal thorgorTeamMessage = thorgorNameHex ~= nil or string.find(message, thorgorTeamMarker, 1, true)\r\n"
+        b"\tif (thorgorNameHex) then\r\n"
+        b"\t\tlocal thorgorName = string.gsub(thorgorNameHex, '(%x%x)', function(value) return string.char(tonumber(value, 16)) end)\r\n"
+        b"\t\tlocal markerStart, markerEnd = string.find(message, '[THORGOR_TEAM:' .. thorgorNameHex .. ']', 1, true)\r\n"
+        b"\t\tlocal labelEnd = string.find(message, ']', 1, true)\r\n"
+        b"\t\tlocal thorgorVisual = GameChat.thorgorPlayerVisuals and GameChat.thorgorPlayerVisuals[StripClanTag(thorgorName)]\r\n"
+        b"\t\tlocal thorgorColor = '^*'\r\n"
+        b"\t\tif (thorgorVisual) then\r\n"
+        b"\t\t\tlocal red, green, blue = string.match(thorgorVisual.color or '', '([%d%.]+)%s+([%d%.]+)%s+([%d%.]+)')\r\n"
+        b"\t\t\tif (red) then thorgorColor = '^' .. floor(tonumber(red) * 9 + 0.5) .. floor(tonumber(green) * 9 + 0.5) .. floor(tonumber(blue) * 9 + 0.5) end\r\n"
+        b"\t\t\tif (thorgorVisual.icon and string.len(thorgorVisual.icon) > 0) then entity = 'THORGOR_ICON:' .. thorgorVisual.icon end\r\n"
+        b"\t\tend\r\n"
+        b"\t\tif (labelEnd and markerStart) then message = string.sub(message, 1, labelEnd) .. ' ' .. thorgorColor .. thorgorName .. ': ^*' .. string.sub(message, markerEnd + 1) end\r\n"
+        b"\telseif (thorgorTeamMessage) then\r\n"
         b"\t\tmessage = string.gsub(message, '%[THORGOR_TEAM%]', '', 1)\r\n"
+        b"\tend\r\n"
+        b"\tif (thorgorTeamMessage) then\r\n"
         b"\t\tmessage = string.gsub(message, '%[ALL%]', '^y[TEAM]', 1)\r\n"
         b"\t\tmessageType = '5'\r\n"
         b"\tend\r\n",
         "Render private ThorGor chat mirrors with HoN's native player colors and team label.",
+    ),
+    ResourceReplacement(
+        "ui/scripts/chat.lua",
+        "23BEA7B8A49D064F19F470C3F42DEC7BF69EFE2DAB25D3D41D025DDB38EFB520",
+        b"local function ScoreBoardPlayer(playerTeam, playerIndex, _, playerName, _, _, _, _, _, _, _, _, _, isBot)\r\n"
+        b"\tGameChat.team[playerTeam] = GameChat.team[playerTeam]  or {}\r\n"
+        b"\tGameChat.team[playerTeam][playerIndex] = playerName\r\n",
+        b"local function ScoreBoardPlayer(playerTeam, playerIndex, _, playerName, _, heroIcon, playerColor, _, _, _, _, _, _, isBot)\r\n"
+        b"\tGameChat.team[playerTeam] = GameChat.team[playerTeam]  or {}\r\n"
+        b"\tGameChat.team[playerTeam][playerIndex] = playerName\r\n"
+        b"\tGameChat.thorgorPlayerVisuals = GameChat.thorgorPlayerVisuals or {}\r\n"
+        b"\tGameChat.thorgorPlayerVisualSlots = GameChat.thorgorPlayerVisualSlots or {}\r\n"
+        b"\tlocal previousName = GameChat.thorgorPlayerVisualSlots[playerIndex]\r\n"
+        b"\tif (previousName) then GameChat.thorgorPlayerVisuals[previousName] = nil end\r\n"
+        b"\tif (playerName and string.len(playerName) > 0) then\r\n"
+        b"\t\tlocal visualName = StripClanTag(playerName)\r\n"
+        b"\t\tGameChat.thorgorPlayerVisualSlots[playerIndex] = visualName\r\n"
+        b"\t\tGameChat.thorgorPlayerVisuals[visualName] = { icon = heroIcon, color = playerColor }\r\n"
+        b"\telse\r\n"
+        b"\t\tGameChat.thorgorPlayerVisualSlots[playerIndex] = nil\r\n"
+        b"\tend\r\n",
+        "Cache each scoreboard player's real portrait and color for private chat mirrors.",
+    ),
+    ResourceReplacement(
+        "ui/scripts/chat.lua",
+        "23BEA7B8A49D064F19F470C3F42DEC7BF69EFE2DAB25D3D41D025DDB38EFB520",
+        b"\t\t\t\t\t\t\t\t\timagewidget:UICmd(\"SetTexture(GetEntityIconPath('\"..entity..\"'))\")\r\n",
+        b"\t\t\t\t\t\t\t\t\tif (string.sub(entity, 1, 13) == 'THORGOR_ICON:') then\r\n"
+        b"\t\t\t\t\t\t\t\t\t\timagewidget:SetTexture(string.sub(entity, 14))\r\n"
+        b"\t\t\t\t\t\t\t\t\telse\r\n"
+        b"\t\t\t\t\t\t\t\t\t\timagewidget:UICmd(\"SetTexture(GetEntityIconPath('\"..entity..\"'))\")\r\n"
+        b"\t\t\t\t\t\t\t\t\tend\r\n",
+        "Render the sender's cached scoreboard portrait for private chat mirrors.",
     ),
     ResourceReplacement(
         "ui/scripts/game_new.lua",
@@ -127,9 +176,10 @@ def patched_entries(source_archive: Path, patches=PATCHES) -> dict[str, bytes]:
     result: dict[str, bytes] = {}
     with zipfile.ZipFile(source_archive) as source:
         for patch in patches:
-            data = source.read(patch.entry)
-            if _digest(data) != patch.source_sha256:
+            source_data = source.read(patch.entry)
+            if _digest(source_data) != patch.source_sha256:
                 raise ValueError(f"unsupported HoN resource entry: {patch.entry}")
+            data = result.get(patch.entry, source_data)
             if data.count(patch.original) != 1:
                 raise ValueError(f"resource patch anchor is not unique: {patch.entry}")
             result[patch.entry] = data.replace(patch.original, patch.replacement, 1)

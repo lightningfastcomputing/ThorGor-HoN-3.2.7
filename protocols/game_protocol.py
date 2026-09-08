@@ -323,13 +323,22 @@ def parse_server_team_chat(data: bytes) -> tuple[int, bytes] | None:
     return sender, message
 
 
-def make_visible_team_chat_packet(sequence: int, sender_number: int, message: bytes) -> bytes:
+def make_visible_team_chat_packet(
+    sequence: int, sender_number: int, message: bytes, sender_name: str | None = None
+) -> bytes:
     """Build one private UI-routed team-chat packet for a recipient."""
     safe_message = message.replace(b"\x00", b"")[:1024]
+    marker = THORGOR_TEAM_CHAT_MARKER
+    if sender_name:
+        # The dedicated server's client number is not connection order and can
+        # be reused around bots/reconnects.  Carry the authenticated name in
+        # the private marker so the UI does not display the transport entity.
+        safe_name = sender_name.encode("utf-8", errors="replace").replace(b"\x00", b"")[:96]
+        marker = b"[THORGOR_TEAM:" + safe_name.hex().upper().encode("ascii") + b"]"
     payload = (
         SERVER_ALL_CHAT_PREFIX
         + bytes((sender_number & 0xFF,))
-        + THORGOR_TEAM_CHAT_MARKER
+        + marker
         + safe_message
         + b"\x00"
     )
@@ -1257,14 +1266,20 @@ def main(argv=None) -> int:
         server_sequence_offset[recipient_addr] = offset
         visible_sequence = (previous + 1) & 0xFFFFFFFF
         last_server_sequence[recipient_addr] = visible_sequence
-        visible = make_visible_team_chat_packet(visible_sequence, sender_number, message)
+        # Player zero is the lobby creator and remains a valid CPlayer for the
+        # life of the match.  It is only a transport envelope: the UI replaces
+        # its display identity with the authenticated sender name in `marker`.
+        envelope_sender = 0
+        visible = make_visible_team_chat_packet(
+            visible_sequence, envelope_sender, message, sender_name=sender_name
+        )
         server_ack_translation.setdefault(recipient_addr, {})[visible_sequence] = None
         sent_visible = client_sock.sendto(visible, recipient_addr)
         counters["client_tx"] += 1
         counters["client_tx_bytes"] += sent_visible
         log(
             f"JOINER_TEAM_CHAT_MIRRORED client={recipient_addr[0]}:{recipient_addr[1]} "
-            f"sender={sender_number} name={sender_name!r} team={route_team.get(recipient_addr)} "
+            f"sender={envelope_sender} name={sender_name!r} team={route_team.get(recipient_addr)} "
             f"reason={reason} sequence={visible_sequence} bytes={sent_visible}"
         )
         return True

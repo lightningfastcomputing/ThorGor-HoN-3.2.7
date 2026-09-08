@@ -74,6 +74,16 @@ class TeamChatVisibilityTests(unittest.TestCase):
         self.assertEqual(packet[:7], bytes.fromhex("00000378563412"))
         self.assertEqual(packet[7:], b"\x5f\x02\x01[THORGOR_TEAM]hello\x00")
 
+    def test_authenticated_sender_name_is_carried_without_trusting_entity_number(self):
+        packet = make_visible_team_chat_packet(
+            0x12345678, 0, b"hello", sender_name="Pl\u00e4yer Two"
+        )
+        self.assertEqual(packet[:7], bytes.fromhex("00000378563412"))
+        self.assertEqual(
+            packet[7:],
+            b"\x5f\x02\x00[THORGOR_TEAM:506CC3A47965722054776F]hello\x00",
+        )
+
     def test_rewrites_data_and_ack_sequences(self):
         source = reliable(b"payload", sequence=3)
         self.assertEqual(rewrite_reliable_sequence(source, 9), reliable(b"payload", sequence=9))
