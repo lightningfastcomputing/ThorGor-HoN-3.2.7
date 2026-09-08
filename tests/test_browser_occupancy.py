@@ -5,6 +5,7 @@ from thorgor.protocols.game_protocol import (
     browser_player_count,
     connected_player_count,
     is_client_disconnect,
+    reserve_loopback_source,
 )
 
 
@@ -42,6 +43,14 @@ class BrowserOccupancyTests(unittest.TestCase):
             b"",
         ):
             self.assertFalse(is_client_disconnect(packet))
+
+    def test_loopback_identity_is_never_reused_during_proxy_run(self):
+        allocated = set()
+        first = reserve_loopback_source(allocated)
+        second = reserve_loopback_source(allocated)
+        self.assertEqual(first, "127.0.0.2")
+        self.assertEqual(second, "127.0.0.3")
+        self.assertEqual(reserve_loopback_source(allocated), "127.0.0.4")
 
 
 if __name__ == "__main__":

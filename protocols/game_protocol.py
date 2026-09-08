@@ -36,6 +36,16 @@ def is_client_disconnect(data: bytes) -> bool:
     return data == b"\x00\x00\x01\xc3"
 
 
+def reserve_loopback_source(allocated: set[str]) -> str:
+    """Reserve a session-unique K2 loopback identity for this proxy run."""
+    for final_octet in range(2, 255):
+        candidate = f"127.0.0.{final_octet}"
+        if candidate not in allocated:
+            allocated.add(candidate)
+            return candidate
+    raise RuntimeError("no unique loopback source IP remains")
+
+
 def browser_player_count(
     connections: Iterable[object], lobby_active: bool, default_count: int, maximum: int
 ) -> int:
@@ -829,6 +839,8 @@ def main(argv=None) -> int:
     route_counters: dict[tuple[str, int], dict[str, int]] = {}
     route_challenge_at: dict[tuple[str, int], float] = {}
     route_source_ip: dict[tuple[str, int], str] = {}
+    allocated_source_ips: set[str] = set()
+    retired_route_deadlines: dict[tuple[str, int], float] = {}
     admission_traces: dict[tuple[str, int], dict[str, object]] = {}
     route_traces: dict[tuple[str, int], dict[str, object]] = {}
     route_trace_dir = BASE_DIR / args.route_trace_dir
@@ -895,6 +907,7 @@ def main(argv=None) -> int:
         route_connect.pop(client_addr, None)
         route_counters.pop(client_addr, None)
         route_challenge_at.pop(client_addr, None)
+        retired_route_deadlines.pop(client_addr, None)
         server_sequence_offset.pop(client_addr, None)
         last_server_sequence.pop(client_addr, None)
         server_sequence_translation.pop(client_addr, None)
@@ -911,6 +924,20 @@ def main(argv=None) -> int:
         log(
             f"ROUTE_CLOSE client={client_addr[0]}:{client_addr[1]} "
             f"upstream={source_ip}:{local_port} reason={reason} routes={len(upstream_by_client)} "
+            f"players={connected_player_count(route_connect.values())}"
+        )
+
+    def retire_player_identity(client_addr: tuple[str, int]) -> None:
+        """Stop counting a leaver while preserving its final K2 handshake."""
+        connection = route_connect.pop(client_addr, None)
+        route_team.pop(client_addr, None)
+        route_player_number.pop(client_addr, None)
+        handled_team_chat_sequences.pop(client_addr, None)
+        retired_route_deadlines[client_addr] = time.time() + 30.0
+        username = connection.username if connection is not None else "-"
+        log(
+            f"ROUTE_RETIRED client={client_addr[0]}:{client_addr[1]} "
+            f"user={username!r} grace=30s "
             f"players={connected_player_count(route_connect.values())}"
         )
 
@@ -1149,12 +1176,11 @@ def main(argv=None) -> int:
     def allocate_route_source_ip() -> str:
         if not args.unique_loopback_sources:
             return "0.0.0.0"
-        used = set(route_source_ip.values())
-        for final_octet in range(2, 255):
-            candidate = f"127.0.0.{final_octet}"
-            if candidate not in used:
-                return candidate
-        raise RuntimeError("no unique loopback source IP remains")
+        # K2 keys these 3.2.7.1 sessions by source IP plus connection ID zero.
+        # Never recycle an IP while the dedicated process is alive, even after
+        # the transport grace period, or a quick rejoin can collide with K2's
+        # recently departed client record and receive no response.
+        return reserve_loopback_source(allocated_source_ips)
 
     def get_or_create_route(client_addr: tuple[str, int]) -> socket.socket:
         existing = upstream_by_client.get(client_addr)
@@ -1351,6 +1377,9 @@ def main(argv=None) -> int:
         ]
         for client_addr in expired_clients:
             close_route(client_addr, "idle_timeout")
+        for client_addr, deadline in list(retired_route_deadlines.items()):
+            if now >= deadline:
+                close_route(client_addr, "disconnect_grace_complete")
         if args.proxy_challenge:
             for client_addr in list(upstream_by_client):
                 challenged_at = route_challenge_at.get(client_addr, 0.0)
@@ -1445,6 +1474,7 @@ def main(argv=None) -> int:
                     )
                     data = make_authorized_local_c0(data, connect, is_match_host=is_match_host)
                     route_connect[addr] = connect
+                    retired_route_deadlines.pop(addr, None)
                     log(
                         f"LOBBY_OCCUPANCY players={connected_player_count(route_connect.values())} "
                         f"latest={connect.username!r}"
@@ -1600,10 +1630,10 @@ def main(argv=None) -> int:
                         f"upstream_port={upstream.getsockname()[1]} forwarded={sent}"
                     )
                 if disconnect_after_forward:
-                    # Deliver the leave to K2 first, then retire the proxy's
-                    # authenticated identity so the next browser poll drops the
-                    # displayed occupancy immediately instead of after timeout.
-                    close_route(addr, "client_disconnect_c3")
+                    # Stop counting the player immediately, but keep the UDP
+                    # route briefly so K2 and the departing client can finish
+                    # their disconnect exchange before the socket is closed.
+                    retire_player_identity(addr)
                 if is_browser_query:
                     token = data[4:6]
                     pending_browser_queries[token] = {
