@@ -11,6 +11,7 @@ from thorgor.patches.engine import apply_patch, sha256
 from thorgor.patches.installer import install_game_capacity, install_k2
 
 try:
+    import pefile
     import unicorn as uc
     from unicorn import x86_const as reg
 except ImportError:
@@ -19,25 +20,7 @@ except ImportError:
 HON_HOME = os.environ.get("THORGOR_TEST_HON_HOME")
 
 
-def mapped_pe(data: bytes) -> tuple[int, int, bytes]:
-    pe = struct.unpack_from("<I", data, 0x3C)[0]
-    section_count = struct.unpack_from("<H", data, pe + 6)[0]
-    optional_size = struct.unpack_from("<H", data, pe + 20)[0]
-    optional = pe + 24
-    image_base = struct.unpack_from("<I", data, optional + 28)[0]
-    image_size = struct.unpack_from("<I", data, optional + 56)[0]
-    header_size = struct.unpack_from("<I", data, optional + 60)[0]
-    image = bytearray(image_size)
-    image[:header_size] = data[:header_size]
-    table = optional + optional_size
-    for index in range(section_count):
-        section = table + index * 40
-        virtual_address, raw_size, raw_offset = struct.unpack_from("<III", data, section + 12)
-        image[virtual_address:virtual_address + raw_size] = data[raw_offset:raw_offset + raw_size]
-    return image_base, image_size, bytes(image)
-
-
-@unittest.skipUnless(uc is not None and HON_HOME, "requires unicorn and THORGOR_TEST_HON_HOME")
+@unittest.skipUnless(uc is not None and HON_HOME, "requires unicorn, pefile and THORGOR_TEST_HON_HOME")
 class NativeLobbyAuthorityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -58,32 +41,29 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
 
     def setUp(self):
         self.vm = uc.Uc(uc.UC_ARCH_X86, uc.UC_MODE_32)
-        self.base, image_size, mapped = mapped_pe(self.image)
-        size = (image_size + 4095) & ~4095
+        pe = pefile.PE(data=self.image)
+        self.base = pe.OPTIONAL_HEADER.ImageBase
+        size = (pe.OPTIONAL_HEADER.SizeOfImage + 4095) & ~4095
         self.vm.mem_map(self.base, size)
-        self.vm.mem_write(self.base, mapped)
+        self.vm.mem_write(self.base, pe.get_memory_mapped_image())
         self.vm.mem_map(0x100000, 0x20000)
         self.client, self.frame, self.stack = 0x108000, 0x118000, 0x117000
 
-    def admit(self, marker, flags, account_id=7):
+    def admit(self, marker, flags):
         self.vm.reg_write(reg.UC_X86_REG_EBX, self.client)
         self.vm.reg_write(reg.UC_X86_REG_EBP, self.frame)
         self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
         self.vm.mem_write(self.frame - 0x11, bytes([marker]))
-        self.vm.mem_write(self.frame - 0x48, struct.pack("<I", account_id))
         self.vm.mem_write(self.client + 0xCC, struct.pack("<I", flags))
         self.vm.emu_start(self.base + authority.HOOK_RVA, self.base + authority.RETURN_RVA, count=100)
-        return (
-            struct.unpack("<I", self.vm.mem_read(self.client + 0xCC, 4))[0],
-            struct.unpack("<I", self.vm.mem_read(self.client + 0x0C, 4))[0],
-        )
+        return struct.unpack("<I", self.vm.mem_read(self.client + 0xCC, 4))[0]
 
     def test_actual_hook_grants_only_marker_bit_zero_and_preserves_other_flags(self):
         for marker in (0, 1, 2, 3, 0xFE, 0xFF):
             for flags in (0, 7, 0x100, 0xFFFFFFFF):
                 with self.subTest(marker=marker, flags=flags):
                     expected = flags & ~7 | (7 if marker & 1 else 0)
-                    self.assertEqual(self.admit(marker, flags), (expected, 7))
+                    self.assertEqual(self.admit(marker, flags), expected)
                     self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), self.stack)
                     self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EBX), self.client)
 
@@ -106,15 +86,12 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
             self.vm.hook_del(hook)
             self.assertEqual(events, [0x69, 1] if creator else [])
             self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), self.stack)
-            self.assertEqual(
-                self.image[authority.ACCOUNT_RESET_RVA:authority.ACCOUNT_RESET_RVA + 3],
-                b"\x90" * 3,
-            )
 
     def test_actual_capacity_guard_accepts_second_player_and_rejects_eleventh(self):
-        base, image_size, mapped = mapped_pe(self.game)
-        self.vm.mem_map(base, (image_size + 4095) & ~4095)
-        self.vm.mem_write(base, mapped)
+        pe = pefile.PE(data=self.game)
+        base = pe.OPTIONAL_HEADER.ImageBase
+        self.vm.mem_map(base, (pe.OPTIONAL_HEADER.SizeOfImage + 4095) & ~4095)
+        self.vm.mem_write(base, pe.get_memory_mapped_image())
         self.vm.reg_write(reg.UC_X86_REG_EDI, self.client)
         self.vm.reg_write(reg.UC_X86_REG_EBX, 0)
         self.vm.mem_write(self.client + 0xCC, bytes(4))

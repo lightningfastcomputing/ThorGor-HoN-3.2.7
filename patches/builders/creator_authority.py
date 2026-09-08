@@ -12,13 +12,12 @@ from pathlib import Path
 from thorgor.patches.engine import _rva_to_file, sha256
 
 SOURCE_SHA256 = "25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026"
-OUTPUT_SHA256 = "3F1944986EE403AAEAB8F440AF66E73B3893D1A1898E67C40549ECCBB52D5527"
+OUTPUT_SHA256 = "21AD692656419D6483DE1B93A16DFB7E04BC7C2ACB6EBDA00D6F7A54A13493F0"
 MARKER_REJECTION_RVA = 0x2F5982
 HOOK_RVA = 0x2F5AD6
 RETURN_RVA = 0x2F5ADD
 CAVE_RVA = 0x70D740
 PROMOTION_RVA = 0x2F8E1E
-ACCOUNT_RESET_RVA = 0x2F8E50
 
 
 def jump(source: int, target: int) -> bytes:
@@ -27,8 +26,6 @@ def jump(source: int, target: int) -> bytes:
 
 def authority_stub() -> bytes:
     code = bytes.fromhex(
-        "8b45b8"          # load the authenticated account ID parsed from C0
-        "89430c"          # retain it in CClientConnection for GenerateClientID
         "83a3cc000000f8"  # clear the composite local/admin/host bits
         "f645ef01"        # test byte [ebp-0x11],1: approved creator only
         "7407"            # skip granting creator bits for ordinary joiners
@@ -47,9 +44,6 @@ def operations() -> tuple[tuple[int, bytes, bytes], ...]:
         # AuthSuccess's legacy account/roster fallback must not override the
         # master decision. Host-flag testing and NETCMD_GAME_HOST stay native.
         (PROMOTION_RVA, bytes.fromhex("838dcc00000001"), b"\x90" * 7),
-        # Local admission previously discarded the account ID just before
-        # GenerateClientID, making native reconnect correlation impossible.
-        (ACCOUNT_RESET_RVA, bytes.fromhex("897d0c"), b"\x90" * 3),
     )
 
 
