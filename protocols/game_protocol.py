@@ -66,13 +66,6 @@ def local_account_id_from_cookie(cookie: str) -> int | None:
     return account_id if account_id > 0 else None
 
 
-def stable_connection_id_for_account(account_id: int) -> int:
-    """Map a local account to the nonzero uint16 K2 uses to recover client number."""
-    if account_id <= 0:
-        raise ValueError("account ID must be positive")
-    return ((account_id - 1) % 0xFFFF) + 1
-
-
 def make_reconnect_info_reply(
     request: ReconnectInfoRequest,
     active_match_id: int,
@@ -1004,7 +997,7 @@ def main(argv=None) -> int:
     )
     source_path = Path(__file__).resolve()
     source_digest = hashlib.sha256(source_path.read_bytes()).hexdigest()[:12]
-    log(f"SOURCE path={source_path} sha256={source_digest} reconnect_transport=retained-300s-v2")
+    log(f"SOURCE path={source_path} sha256={source_digest} reconnect_transport=fresh-udp-native-id-v3")
     if args.preset:
         log(f"PRESET {args.preset}")
     if args.joiner_team_chat_fallback:
@@ -1114,44 +1107,29 @@ def main(argv=None) -> int:
             f"players={connected_player_count(route_connect.values())}"
         )
 
-    def reattach_retired_route(cookie: str, client_addr: tuple[str, int]) -> bool:
-        """Move K2's exact retained UDP endpoint to a returning real client."""
+    def release_retired_transport(cookie: str, client_addr: tuple[str, int]) -> bool:
+        """Discard the departed K2 transport before opening a reconnect route.
+
+        K2 invalidates the UDP endpoint as soon as it receives C3. Reusing that
+        socket makes it silently discard the returning C0 and every following
+        C9. A reconnect must instead use a fresh source port while retaining the
+        account's proxy source IP and the native C0 connection ID.
+        """
         retired_addr = retired_route_by_cookie.pop(cookie, None)
         if retired_addr is None or retired_addr == client_addr:
             return False
-        upstream = upstream_by_client.pop(retired_addr, None)
-        if upstream is None:
-            return False
-        if client_addr in upstream_by_client:
-            close_route(client_addr, "reconnect_route_replaced")
-        routes.remove(retired_addr)
-        client_by_upstream[upstream] = client_addr
-        upstream_by_client[client_addr] = upstream
-        source_ip = route_source_ip.pop(retired_addr, upstream.getsockname()[0])
-        route_source_ip[client_addr] = source_ip
-        route_activity.pop(retired_addr, None)
-        route_activity[client_addr] = time.time()
-        route_counters.pop(retired_addr, None)
-        route_counters[client_addr] = {
-            "to_server": 0,
-            "to_server_bytes": 0,
-            "from_server": 0,
-            "from_server_bytes": 0,
-        }
-        retired_route_deadlines.pop(retired_addr, None)
-        route_challenge_at.pop(retired_addr, None)
-        admission_traces.pop(retired_addr, None)
-        route_traces.pop(retired_addr, None)
-        server_sequence_offset.pop(retired_addr, None)
-        last_server_sequence.pop(retired_addr, None)
-        server_sequence_translation.pop(retired_addr, None)
-        server_ack_translation.pop(retired_addr, None)
-        handled_team_chat_sequences.pop(retired_addr, None)
-        routes.add(ClientRoute(client_addr, upstream, source_ip))
+        upstream = upstream_by_client.get(retired_addr)
+        source = upstream.getsockname() if upstream is not None else ("0.0.0.0", 0)
+        replacement = upstream_by_client.get(client_addr)
+        replacement_source = (
+            replacement.getsockname() if replacement is not None else ("0.0.0.0", 0)
+        )
+        close_route(retired_addr, "reconnect_fresh_transport")
         log(
-            f"ROUTE_REATTACHED previous_client={retired_addr[0]}:{retired_addr[1]} "
+            f"RECONNECT_TRANSPORT_RELEASED previous_client={retired_addr[0]}:{retired_addr[1]} "
             f"client={client_addr[0]}:{client_addr[1]} "
-            f"upstream={source_ip}:{upstream.getsockname()[1]}"
+            f"previous_upstream={source[0]}:{source[1]} "
+            f"replacement_upstream={replacement_source[0]}:{replacement_source[1]}"
         )
         return True
 
@@ -1738,16 +1716,10 @@ def main(argv=None) -> int:
                         f"bytes={len(data)} flag_offset={connect.flag_offset} hex={data.hex()}"
                     )
                     account_id = local_account_id_from_cookie(connect.cookie)
-                    stable_connection_id = (
-                        stable_connection_id_for_account(account_id)
-                        if account_id is not None
-                        else None
-                    )
                     data = make_authorized_local_c0(
                         data,
                         connect,
                         is_match_host=is_match_host,
-                        connection_id=stable_connection_id,
                     )
                     # Retire any older endpoint for this identity and transfer
                     # its proxy-only team/chat metadata to the returning route.
@@ -1755,8 +1727,13 @@ def main(argv=None) -> int:
                         if previous_addr != addr and previous_connect.cookie == connect.cookie:
                             remember_player_metadata(previous_addr)
                             retire_player_identity(previous_addr)
-                    reattach_retired_route(connect.cookie, addr)
                     route_connect[addr] = connect
+                    if connect.cookie in retired_route_by_cookie:
+                        # Bind the replacement while the departed socket is
+                        # still open. Windows must then allocate a genuinely
+                        # different UDP port for K2's new transport.
+                        get_or_create_route(addr)
+                        release_retired_transport(connect.cookie, addr)
                     if account_id is not None:
                         reconnect_deadlines_by_account.pop(account_id, None)
                     restore_player_metadata(addr, connect)
@@ -1779,7 +1756,7 @@ def main(argv=None) -> int:
                     log(
                         f"C0_AUTH_LOCALIZED client={addr[0]}:{addr[1]} "
                         f"flag_offset={connect.flag_offset} host_id_preserved=0x{connect.host_id:08X} "
-                        f"stable_connection_id=0x{(stable_connection_id or 0):04X}"
+                        f"native_connection_id=0x{connect.connection_id:04X}"
                     )
                 elif (
                     args.require_c0_auth

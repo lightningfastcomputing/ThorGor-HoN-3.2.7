@@ -12,7 +12,6 @@ from thorgor.protocols.game_protocol import (
     parse_reconnect_info_request,
     reserve_loopback_source,
     reserve_identity_source,
-    stable_connection_id_for_account,
 )
 
 
@@ -101,13 +100,6 @@ class BrowserOccupancyTests(unittest.TestCase):
         self.assertEqual(local_account_id_from_cookie("THORGOR_LOCAL_COOKIE_00000003"), 3)
         for cookie in ("cookie", "THORGOR_LOCAL_COOKIE_3", "THORGOR_LOCAL_COOKIE_00000000"):
             self.assertIsNone(local_account_id_from_cookie(cookie))
-
-    def test_local_accounts_receive_stable_nonzero_connection_ids(self):
-        self.assertEqual(stable_connection_id_for_account(1), 1)
-        self.assertEqual(stable_connection_id_for_account(3), 3)
-        self.assertEqual(stable_connection_id_for_account(0x10000), 1)
-        with self.assertRaises(ValueError):
-            stable_connection_id_for_account(0)
 
     def test_reconnect_reply_requires_same_live_match_and_unexpired_leaver(self):
         request = parse_reconnect_info_request(
