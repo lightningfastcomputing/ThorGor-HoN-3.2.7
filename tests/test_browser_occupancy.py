@@ -7,6 +7,8 @@ from thorgor.protocols.game_protocol import (
     browser_team_size,
     connected_player_count,
     is_client_disconnect,
+    local_account_id_from_cookie,
+    make_reconnect_info_reply,
     parse_reconnect_info_request,
     reserve_loopback_source,
 )
@@ -79,6 +81,22 @@ class BrowserOccupancyTests(unittest.TestCase):
                          (42, 7, 0x1234))
         for malformed in (packet[:-1], packet + b"\0", b"\x00\x00\x01\xca" + packet[4:]):
             self.assertIsNone(parse_reconnect_info_request(malformed))
+
+    def test_local_account_id_is_recovered_only_from_our_cookie(self):
+        self.assertEqual(local_account_id_from_cookie("THORGOR_LOCAL_COOKIE_00000003"), 3)
+        for cookie in ("cookie", "THORGOR_LOCAL_COOKIE_3", "THORGOR_LOCAL_COOKIE_00000000"):
+            self.assertIsNone(local_account_id_from_cookie(cookie))
+
+    def test_reconnect_reply_requires_same_live_match_and_unexpired_leaver(self):
+        request = parse_reconnect_info_request(
+            b"\x00\x00\x01\xcc" + struct.pack("<IIH", 42, 7, 0)
+        )
+        self.assertIsNotNone(request)
+        reply = make_reconnect_info_reply(request, 42, {7: 130.0}, 100.0)
+        self.assertEqual(reply[:4], b"\x00\x00\x01\x6f")
+        self.assertEqual(struct.unpack_from("<I", reply, 4)[0], 30000)
+        self.assertIsNone(make_reconnect_info_reply(request, 41, {7: 130.0}, 100.0))
+        self.assertIsNone(make_reconnect_info_reply(request, 42, {7: 99.0}, 100.0))
 
 
 if __name__ == "__main__":

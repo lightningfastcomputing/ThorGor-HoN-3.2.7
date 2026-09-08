@@ -56,6 +56,31 @@ def parse_reconnect_info_request(data: bytes) -> ReconnectInfoRequest | None:
     return ReconnectInfoRequest(match_id, account_id, connection_id)
 
 
+def local_account_id_from_cookie(cookie: str) -> int | None:
+    """Recover the authenticated local account ID from our deterministic cookie."""
+    match = re.fullmatch(r"THORGOR_LOCAL_COOKIE_([0-9]{8})", cookie)
+    if match is None:
+        return None
+    account_id = int(match.group(1))
+    return account_id if account_id > 0 else None
+
+
+def make_reconnect_info_reply(
+    request: ReconnectInfoRequest,
+    active_match_id: int,
+    reconnect_deadlines: dict[int, float],
+    now: float,
+) -> bytes | None:
+    """Build the stock 0x6f availability response for an eligible leaver."""
+    if request.match_id <= 0 or request.match_id != active_match_id:
+        return None
+    deadline = reconnect_deadlines.get(request.account_id)
+    if deadline is None or deadline <= now:
+        return None
+    remaining_ms = max(1, min(int((deadline - now) * 1000), 0xFFFFFFFF))
+    return b"\x00\x00\x01\x6f" + struct.pack("<I", remaining_ms)
+
+
 def reserve_loopback_source(allocated: set[str]) -> str:
     """Reserve a session-unique K2 loopback identity for this proxy run."""
     for final_octet in range(2, 255):
@@ -924,6 +949,10 @@ def main(argv=None) -> int:
     # Team-chat routing metadata must outlive a UDP endpoint. A reconnect uses
     # the same authenticated cookie but commonly returns from a new local port.
     player_metadata_by_cookie: dict[str, dict[str, int]] = {}
+    # The native server does not publish or answer reconnect availability in
+    # this local-dedicated configuration. Preserve the stock five-minute grace
+    # window for authenticated players that explicitly leave an active match.
+    reconnect_deadlines_by_account: dict[int, float] = {}
     handled_team_chat_sequences: dict[tuple[str, int], dict[int, float]] = {}
     server_sequence_offset: dict[tuple[str, int], int] = {}
     last_server_sequence: dict[tuple[str, int], int] = {}
@@ -1026,6 +1055,18 @@ def main(argv=None) -> int:
         """Stop counting a leaver while preserving its final K2 handshake."""
         remember_player_metadata(client_addr)
         connection = route_connect.pop(client_addr, None)
+        account_id = (
+            local_account_id_from_cookie(connection.cookie)
+            if connection is not None
+            else None
+        )
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            active_match_id = int(state.get("match_id", 0))
+        except (OSError, ValueError, TypeError):
+            active_match_id = 0
+        if account_id is not None and active_match_id > 0:
+            reconnect_deadlines_by_account[account_id] = time.time() + 300.0
         route_team.pop(client_addr, None)
         route_slot.pop(client_addr, None)
         route_player_number.pop(client_addr, None)
@@ -1563,6 +1604,28 @@ def main(argv=None) -> int:
                         f"account_id={reconnect_request.account_id} "
                         f"connection_id=0x{reconnect_request.connection_id:04X}"
                     )
+                    try:
+                        reconnect_state = json.loads(state_path.read_text(encoding="utf-8"))
+                        active_match_id = int(reconnect_state.get("match_id", 0))
+                    except (OSError, ValueError, TypeError):
+                        active_match_id = 0
+                    reconnect_reply = make_reconnect_info_reply(
+                        reconnect_request,
+                        active_match_id,
+                        reconnect_deadlines_by_account,
+                        time.time(),
+                    )
+                    if reconnect_reply is not None:
+                        sent = client_sock.sendto(reconnect_reply, addr)
+                        counters["client_tx"] += 1
+                        counters["client_tx_bytes"] += sent
+                        remaining_ms = struct.unpack_from("<I", reconnect_reply, 4)[0]
+                        log(
+                            f"RECONNECT_REPLY client={addr[0]}:{addr[1]} "
+                            f"account_id={reconnect_request.account_id} "
+                            f"match_id={reconnect_request.match_id} remaining_ms={remaining_ms}"
+                        )
+                        continue
                 for reply_kind, browser_reply in browser_replies:
                     sent = client_sock.sendto(browser_reply, addr)
                     counters["client_tx"] += 1
@@ -1603,6 +1666,9 @@ def main(argv=None) -> int:
                             remember_player_metadata(previous_addr)
                             retire_player_identity(previous_addr)
                     route_connect[addr] = connect
+                    account_id = local_account_id_from_cookie(connect.cookie)
+                    if account_id is not None:
+                        reconnect_deadlines_by_account.pop(account_id, None)
                     restore_player_metadata(addr, connect)
                     retired_route_deadlines.pop(addr, None)
                     log(

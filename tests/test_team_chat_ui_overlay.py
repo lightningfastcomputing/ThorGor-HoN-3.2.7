@@ -69,6 +69,10 @@ class TeamChatUiOverlayTests(unittest.TestCase):
             patch.replacement for patch in PATCHES if patch.entry == "ui/scripts/chat.lua"
         )
         self.assertIn(b"thorgorPlayerVisuals[visualName]", replacements)
+        self.assertIn(
+            b"visualSlot = tostring(playerTeam) .. ':' .. tostring(playerIndex)",
+            replacements,
+        )
         self.assertIn(b"color = playerColor", replacements)
         self.assertIn(b"icon = heroIcon", replacements)
         self.assertIn(b"entity = 'THORGOR_PLAYER:'", replacements)

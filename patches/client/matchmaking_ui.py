@@ -88,14 +88,15 @@ PATCHES = (
         b"\tGameChat.team[playerTeam][playerIndex] = playerName\r\n"
         b"\tGameChat.thorgorPlayerVisuals = GameChat.thorgorPlayerVisuals or {}\r\n"
         b"\tGameChat.thorgorPlayerVisualSlots = GameChat.thorgorPlayerVisualSlots or {}\r\n"
-        b"\tlocal previousName = GameChat.thorgorPlayerVisualSlots[playerIndex]\r\n"
+        b"\tlocal visualSlot = tostring(playerTeam) .. ':' .. tostring(playerIndex)\r\n"
+        b"\tlocal previousName = GameChat.thorgorPlayerVisualSlots[visualSlot]\r\n"
         b"\tif (previousName) then GameChat.thorgorPlayerVisuals[previousName] = nil end\r\n"
         b"\tif (playerName and string.len(playerName) > 0) then\r\n"
         b"\t\tlocal visualName = StripClanTag(playerName)\r\n"
-        b"\t\tGameChat.thorgorPlayerVisualSlots[playerIndex] = visualName\r\n"
+        b"\t\tGameChat.thorgorPlayerVisualSlots[visualSlot] = visualName\r\n"
         b"\t\tGameChat.thorgorPlayerVisuals[visualName] = { icon = heroIcon, color = playerColor }\r\n"
         b"\telse\r\n"
-        b"\t\tGameChat.thorgorPlayerVisualSlots[playerIndex] = nil\r\n"
+        b"\t\tGameChat.thorgorPlayerVisualSlots[visualSlot] = nil\r\n"
         b"\tend\r\n",
         "Cache each scoreboard player's real portrait and color for private chat mirrors.",
     ),
