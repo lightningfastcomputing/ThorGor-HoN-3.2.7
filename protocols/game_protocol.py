@@ -66,6 +66,13 @@ def local_account_id_from_cookie(cookie: str) -> int | None:
     return account_id if account_id > 0 else None
 
 
+def stable_connection_id_for_account(account_id: int) -> int:
+    """Return the nonzero uint16 K2 uses to find a disconnected client record."""
+    if account_id <= 0:
+        raise ValueError("account ID must be positive")
+    return ((account_id - 1) % 0xFFFF) + 1
+
+
 def make_reconnect_info_reply(
     request: ReconnectInfoRequest,
     active_match_id: int,
@@ -997,7 +1004,7 @@ def main(argv=None) -> int:
     )
     source_path = Path(__file__).resolve()
     source_digest = hashlib.sha256(source_path.read_bytes()).hexdigest()[:12]
-    log(f"SOURCE path={source_path} sha256={source_digest} reconnect_transport=fresh-udp-native-id-v3")
+    log(f"SOURCE path={source_path} sha256={source_digest} reconnect_transport=fresh-udp-stable-id-v4")
     if args.preset:
         log(f"PRESET {args.preset}")
     if args.joiner_team_chat_fallback:
@@ -1716,10 +1723,16 @@ def main(argv=None) -> int:
                         f"bytes={len(data)} flag_offset={connect.flag_offset} hex={data.hex()}"
                     )
                     account_id = local_account_id_from_cookie(connect.cookie)
+                    stable_connection_id = (
+                        stable_connection_id_for_account(account_id)
+                        if account_id is not None
+                        else None
+                    )
                     data = make_authorized_local_c0(
                         data,
                         connect,
                         is_match_host=is_match_host,
+                        connection_id=stable_connection_id,
                     )
                     # Retire any older endpoint for this identity and transfer
                     # its proxy-only team/chat metadata to the returning route.
@@ -1756,7 +1769,8 @@ def main(argv=None) -> int:
                     log(
                         f"C0_AUTH_LOCALIZED client={addr[0]}:{addr[1]} "
                         f"flag_offset={connect.flag_offset} host_id_preserved=0x{connect.host_id:08X} "
-                        f"native_connection_id=0x{connect.connection_id:04X}"
+                        f"wire_connection_id=0x{connect.connection_id:04X} "
+                        f"slave_connection_id=0x{(stable_connection_id or 0):04X}"
                     )
                 elif (
                     args.require_c0_auth
