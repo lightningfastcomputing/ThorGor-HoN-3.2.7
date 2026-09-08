@@ -32,6 +32,7 @@ FROZEN_SERVICES = {
     "thorgormanagerbridge.exe",
     "thorgornativebridge.exe",
 }
+THORGOR_LISTENERS = {("udp", 11236), ("tcp", 11031), ("tcp", 1135), ("tcp", 1136)}
 
 
 def _is_thorgor_process(name: str, command: str) -> bool:
@@ -78,19 +79,60 @@ def discover_processes() -> tuple[tuple[int, str, str], ...]:
     return tuple(rows)
 
 
-def cleanup_stale_processes(exclude: set[int] | None = None) -> tuple[int, ...]:
-    excluded = set(exclude or ()) | {os.getpid()}
-    stopped = []
-    for pid, _name, _command in discover_processes():
-        if pid in excluded:
-            continue
-        subprocess.run(
-            ["taskkill.exe", "/PID", str(pid), "/T", "/F"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+def discover_listener_processes() -> tuple[tuple[int, str, str], ...]:
+    """Find stale stack owners even when Windows hides their command lines."""
+    if os.name != "nt":
+        return ()
+    rows: dict[int, tuple[int, str, str]] = {}
+    for protocol in ("tcp", "udp"):
+        result = subprocess.run(
+            ["netstat.exe", "-ano", "-p", protocol],
+            capture_output=True,
+            text=True,
+            errors="replace",
             timeout=10,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
+        if result.returncode != 0:
+            continue
+        for line in result.stdout.splitlines():
+            columns = line.split()
+            if len(columns) < 4 or columns[0].casefold() != protocol:
+                continue
+            try:
+                port = int(columns[1].rsplit(":", 1)[-1])
+                pid = int(columns[-1])
+            except ValueError:
+                continue
+            if pid > 0 and (protocol, port) in THORGOR_LISTENERS:
+                rows[pid] = (pid, "listener", f"{protocol.upper()} {columns[1]}")
+    return tuple(rows.values())
+
+
+def cleanup_stale_processes(exclude: set[int] | None = None) -> tuple[int, ...]:
+    excluded = set(exclude or ()) | {os.getpid()}
+    stopped = []
+    candidates = {
+        pid: (pid, name, command)
+        for pid, name, command in (*discover_processes(), *discover_listener_processes())
+    }
+    for pid, _name, _command in candidates.values():
+        if pid in excluded:
+            continue
+        result = subprocess.run(
+            ["taskkill.exe", "/PID", str(pid), "/T", "/F"],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=10,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or "taskkill failed").strip()
+            raise RuntimeError(
+                f"Could not stop stale ThorGor process {pid} ({_name}): {detail}. "
+                "Close the old dashboard or run START_STACK.bat as Administrator."
+            )
         stopped.append(pid)
     return tuple(stopped)
 

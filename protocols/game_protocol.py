@@ -1,5 +1,6 @@
 import argparse
 import binascii
+import hashlib
 import json
 import re
 import select
@@ -1001,6 +1002,9 @@ def main(argv=None) -> int:
         f"LISTEN {client_sock.getsockname()[0]}:{client_sock.getsockname()[1]} -> TARGET {args.target_host}:{args.target_port} "
         f"(isolated per-client upstream sockets; max routes {args.max_client_routes})"
     )
+    source_path = Path(__file__).resolve()
+    source_digest = hashlib.sha256(source_path.read_bytes()).hexdigest()[:12]
+    log(f"SOURCE path={source_path} sha256={source_digest} reconnect_transport=retained-300s-v2")
     if args.preset:
         log(f"PRESET {args.preset}")
     if args.joiner_team_chat_fallback:
