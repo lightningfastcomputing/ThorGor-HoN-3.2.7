@@ -60,6 +60,29 @@ def browser_player_count(
     return max(0, min(current, maximum))
 
 
+def browser_team_size(
+    state: dict[str, object], lobby_active: bool, default_size: int, maximum_players: int
+) -> int:
+    """Return the per-team size byte consumed by the 3.2.7.1 game list."""
+    if not lobby_active:
+        return max(0, min(int(default_size), 0xFF))
+    candidates = [state.get("match_team_size")]
+    match = re.search(r"(?:^|\s)teamsize:(\d+)(?:\s|$)", str(state.get("match_options") or ""))
+    if match is not None:
+        candidates.append(match.group(1))
+    for candidate in candidates:
+        try:
+            team_size = int(candidate)
+        except (TypeError, ValueError):
+            continue
+        if 1 <= team_size <= 5:
+            return team_size
+    # The public sandbox currently advertises ten player slots, so retaining a
+    # useful 5v5 display is safer than emitting the old zero when older state
+    # files do not yet include a parsed teamsize option.
+    return max(1, min(int(maximum_players) // 2, 5))
+
+
 @dataclass(frozen=True)
 class ConnectC0:
     product: str
@@ -1279,6 +1302,9 @@ def main(argv=None) -> int:
         current_players = browser_player_count(
             route_connect.values(), lobby_active, args.browser_local_654, args.browser_bvar2
         )
+        team_size = browser_team_size(
+            state, lobby_active, args.browser_local_655, args.browser_bvar2
+        )
 
         payload = bytearray()
         payload += token
@@ -1296,7 +1322,9 @@ def main(argv=None) -> int:
         payload += encode_cpacket_wstring(browser_map)
         payload += encode_cpacket_wstring(browser_name)
         payload += encode_cpacket_wstring(args.browser_local_5ec)
-        payload += bytes([args.browser_local_655 & 0xFF])
+        # CServerList::ProcessServerResponse reads this byte as yTeamSize and
+        # renders it as the game-list NvN value.
+        payload += bytes([team_size])
         payload += args.browser_local_57c.to_bytes(4, "little", signed=True)
         payload += bytes([args.browser_local_660 & 0xFF])
         payload += args.browser_local_558.to_bytes(2, "little", signed=False)
