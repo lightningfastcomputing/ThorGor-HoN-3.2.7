@@ -104,9 +104,11 @@ def reserve_identity_source(
     cookie: str | None,
     sources_by_cookie: dict[str, str],
     allocated: set[str],
+    *,
+    replace: bool = False,
 ) -> str:
-    """Keep K2's proxy-side network identity stable across client UDP ports."""
-    if cookie:
+    """Reserve or deliberately rotate a proxy source IP for an identity."""
+    if cookie and not replace:
         existing = sources_by_cookie.get(cookie)
         if existing is not None:
             return existing
@@ -1004,7 +1006,7 @@ def main(argv=None) -> int:
     )
     source_path = Path(__file__).resolve()
     source_digest = hashlib.sha256(source_path.read_bytes()).hexdigest()[:12]
-    log(f"SOURCE path={source_path} sha256={source_digest} reconnect_transport=fresh-udp-stable-id-v4")
+    log(f"SOURCE path={source_path} sha256={source_digest} reconnect_transport=fresh-ip-udp-stable-id-v5")
     if args.preset:
         log(f"PRESET {args.preset}")
     if args.joiner_team_chat_fallback:
@@ -1375,11 +1377,15 @@ def main(argv=None) -> int:
     def allocate_route_source_ip(cookie: str | None = None) -> str:
         if not args.unique_loopback_sources:
             return "0.0.0.0"
-        # K2 keys these 3.2.7.1 sessions by proxy source IP and connection ID.
-        # A returning account must therefore retain both values even though
-        # its real client UDP port and proxy socket port change.
+        # K2's socket layer retains a departed proxy source IP and drops a new
+        # C0 from it before CHostServer can perform its connection-ID lookup.
+        # Rotate the IP for a reconnect, then let the stable nonzero C0
+        # connection ID recover the original native client record.
         return reserve_identity_source(
-            cookie, route_source_ip_by_cookie, allocated_source_ips
+            cookie,
+            route_source_ip_by_cookie,
+            allocated_source_ips,
+            replace=bool(cookie and cookie in retired_route_by_cookie),
         )
 
     def get_or_create_route(client_addr: tuple[str, int]) -> socket.socket:

@@ -75,7 +75,7 @@ class BrowserOccupancyTests(unittest.TestCase):
         self.assertEqual(second, "127.0.0.3")
         self.assertEqual(reserve_loopback_source(allocated), "127.0.0.4")
 
-    def test_authenticated_identity_keeps_its_proxy_source_on_reconnect(self):
+    def test_authenticated_identity_keeps_its_proxy_source_while_active(self):
         allocated = set()
         sources = {}
         first = reserve_identity_source("player-cookie", sources, allocated)
@@ -87,6 +87,19 @@ class BrowserOccupancyTests(unittest.TestCase):
             reserve_identity_source("other-cookie", sources, allocated), "127.0.0.3"
         )
         self.assertEqual(reserve_identity_source(None, sources, allocated), "127.0.0.4")
+
+    def test_reconnect_rotates_stale_native_socket_identity(self):
+        allocated = set()
+        sources = {}
+        first = reserve_identity_source("player-cookie", sources, allocated)
+        replacement = reserve_identity_source(
+            "player-cookie", sources, allocated, replace=True
+        )
+        self.assertEqual(first, "127.0.0.2")
+        self.assertEqual(replacement, "127.0.0.3")
+        self.assertEqual(
+            reserve_identity_source("player-cookie", sources, allocated), replacement
+        )
 
     def test_native_reconnect_probe_is_recognized_exactly(self):
         packet = b"\x00\x00\x01\xcc" + struct.pack("<IIH", 42, 7, 0x1234)
