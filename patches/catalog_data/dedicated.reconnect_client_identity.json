@@ -3,7 +3,7 @@
   "binary": "game.dll",
   "version": "3.2.7.1-zero-account-reconnect",
   "source_sha256": "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B",
-  "output_sha256": "B9BEBCA27AB64BF3AA2A405B39CE60E06A537FB5CEBCD5827AE200BB15EEC754",
+  "output_sha256": "E73485414DE9EF839EA65273D3BDE179A078DA40DAE9EAAA4E10543433EC12CA",
   "reason": "Match returning local players by their stable native client number when retail account IDs are unavailable.",
   "observed_failure": "Every locally authenticated player has native account ID zero, so game.dll selects the host as the first reconnect candidate and rejects a joiner with disconnect_client_number_mismatch.",
   "discovered": "2026-09-11",
@@ -13,7 +13,7 @@
       "address": "rva",
       "offset": "0x333A3",
       "expected": "8B82580200003B470C757A",
-      "replacement": "8B426C3B4708757B909090"
+      "replacement": "8B426C3B4708757D909090"
     }
   ]
 }

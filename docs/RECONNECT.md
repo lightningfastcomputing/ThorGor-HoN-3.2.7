@@ -15,6 +15,11 @@ match, to select the correct player record. Profile/account fields are not synth
 or changed; this is important because doing so corrupts lobby icons and other profile
 presentation state.
 
+The replacement's short conditional branch is based at RVA `0x333A9` and must target
+the original player-loop continuation at RVA `0x33428` (displacement `0x7D`). A branch
+to RVA `0x33426` enters the middle of `mov esi,[ebp+8]` and crashes the dedicated slave
+as soon as reconnect admission skips a nonmatching player.
+
 The server-capacity patch remains a separate prerequisite so each stage has an exact,
 verified input and output hash.
 
