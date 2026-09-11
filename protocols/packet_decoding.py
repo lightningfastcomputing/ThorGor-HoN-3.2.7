@@ -21,6 +21,8 @@ class ConnectC0:
     invitation: str
     external_auth: bool
     flag_offset: int
+    account_id: int
+    account_id_offset: int
 
 
 def parse_lobby_create(data: bytes) -> dict[str, str] | None:
@@ -77,16 +79,19 @@ def parse_connect_c0(data: bytes) -> ConnectC0:
     ip = read_cstring("ip")
     match_key = read_cstring("match key")
     invitation = read_cstring("invitation")
-    if cursor >= len(data):
-        raise ValueError("missing external-auth flag")
+    if cursor + 5 > len(data):
+        raise ValueError("missing external-auth flag or account id")
     flag_offset = cursor
     external_auth = bool(data[cursor] & 1)
+    account_id_offset = cursor + 1
+    account_id = struct.unpack_from("<I", data, account_id_offset)[0]
     if product != "Heroes of Newerth" or version != "3.2.7.1":
         raise ValueError(f"unsupported product/version: {product!r} {version!r}")
     if not username or not cookie:
         raise ValueError("username and cookie are required")
     return ConnectC0(product, version, host_id, connection_id, password, username,
-                     cookie, ip, match_key, invitation, external_auth, flag_offset)
+                     cookie, ip, match_key, invitation, external_auth, flag_offset,
+                     account_id, account_id_offset)
 
 
 def format_packet(data: bytes) -> str:

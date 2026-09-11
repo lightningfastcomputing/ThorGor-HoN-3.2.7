@@ -9,25 +9,26 @@ from urllib.request import Request, urlopen
 from .packet_decoding import ConnectC0
 
 
-def validate_c_conn_response(wire: bytes, expected_cookie: str) -> tuple[bool, str, bool]:
+def validate_c_conn_response(wire: bytes, expected_cookie: str) -> tuple[bool, str, bool, int]:
     try:
         cookie_bytes = expected_cookie.encode("utf-8", errors="strict")
     except UnicodeEncodeError:
-        return False, "cookie is not UTF-8", False
+        return False, "cookie is not UTF-8", False, 0
     marker = b's:6:"cookie";s:' + str(len(cookie_bytes)).encode("ascii") + b':"' + cookie_bytes + b'";'
     if marker not in wire:
-        return False, "response cookie did not match", False
+        return False, "response cookie did not match", False, 0
     account = re.search(rb's:10:"account_id";i:([1-9][0-9]*);', wire)
     if account is None:
-        return False, "response has no positive integer account_id", False
+        return False, "response has no positive integer account_id", False, 0
     game_cookie = re.search(rb's:11:"game_cookie";s:([1-9][0-9]*):"([^"\r\n]+)";', wire)
     if game_cookie is None or int(game_cookie.group(1)) != len(game_cookie.group(2)):
-        return False, "response has no valid nonempty game_cookie", False
+        return False, "response has no valid nonempty game_cookie", False, 0
     decisions = re.findall(rb's:13:"is_match_host";i:([01]);', wire)
     if len(decisions) != 1:
-        return False, "response has no unique typed match-host authority", False
+        return False, "response has no unique typed match-host authority", False, 0
     creator = decisions[0] == b"1"
-    return True, f"account_id={account.group(1).decode('ascii')} creator={int(creator)}", creator
+    account_id = int(account.group(1))
+    return True, f"account_id={account_id} creator={int(creator)}", creator, account_id
 
 
 def _post(master_url: str, fields: dict[str, str], timeout: float) -> bytes:
@@ -37,14 +38,14 @@ def _post(master_url: str, fields: dict[str, str], timeout: float) -> bytes:
         return response.read(64 * 1024)
 
 
-def authorize_connect_c0(packet: ConnectC0, master_url: str, timeout: float) -> tuple[bool, str, bool]:
+def authorize_connect_c0(packet: ConnectC0, master_url: str, timeout: float) -> tuple[bool, str, bool, int]:
     fields = {"f": "c_conn", "cookie": packet.cookie, "ip": packet.ip or "127.0.0.1"}
     if packet.match_key:
         fields["host_key"] = packet.match_key
     try:
         wire = _post(master_url, fields, timeout)
     except (HTTPError, URLError, TimeoutError, OSError) as exc:
-        return False, f"backend request failed: {exc}", False
+        return False, f"backend request failed: {exc}", False, 0
     return validate_c_conn_response(wire, packet.cookie)
 
 

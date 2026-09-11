@@ -1,11 +1,11 @@
 {
   "id": "dedicated.creator_authority",
   "binary": "k2.dll",
-  "version": "3.2.7.1-v77+creator-authority",
+  "version": "3.2.7.1-v77+creator-authority+local-reconnect-identity",
   "source_sha256": "25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026",
-  "output_sha256": "21AD692656419D6483DE1B93A16DFB7E04BC7C2ACB6EBDA00D6F7A54A13493F0",
-  "reason": "Use the authenticated master creator decision for native host flags, badges and lobby controls.",
-  "observed_failure": "Every local-admission joiner receives the creator's composite flags and host state.",
+  "output_sha256": "3F1944986EE403AAEAB8F440AF66E73B3893D1A1898E67C40549ECCBB52D5527",
+  "reason": "Use authenticated creator authority and preserve a stable, non-retail native identity for reconnect correlation.",
+  "observed_failure": "Local admission cleared every account identity, so game.dll could not associate a reconnecting transport with its disconnected player.",
   "discovered": "2026-09-07",
   "evidence": ["docs/LOBBY_AUTHORITY.md", "tests/test_lobby_authority.py", "tests/test_native_lobby_authority.py"],
   "implementation": {"kind": "stable_builder", "path": "patches/builders/creator_authority.py"}

@@ -33,6 +33,11 @@ The master, proxy, and K2 patch are a paired change and must be deployed
 together. Creator reconnect with the original key retains authority; an
 empty-key JOIN remains an ordinary player.
 
+For reconnect correlation, the proxy also writes a stable negative local-only
+account identity into the C0 account field. K2 preserves it through player
+creation. The negative namespace prevents retail profile/avatar lookup while
+giving game.dll a unique identity to find after the transport is replaced.
+
 ## Capacity dependency
 
 The verified retail `game.dll` has a one-client capacity callback at RVA
@@ -43,7 +48,7 @@ normal five-versus-five lobby.
 ## Reproducibility
 
 - K2 input: `25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026`
-- K2 output: `21AD692656419D6483DE1B93A16DFB7E04BC7C2ACB6EBDA00D6F7A54A13493F0`
+- K2 output: `3F1944986EE403AAEAB8F440AF66E73B3893D1A1898E67C40549ECCBB52D5527`
 - game.dll input: `D345F8537ED9FD5C6705F8F1A9FA6663C5F4AE4476CD328B2D8F1074C044CF99`
 - game.dll output: `929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B`
 

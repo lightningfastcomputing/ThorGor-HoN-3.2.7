@@ -21,6 +21,7 @@ def make_authorized_local_c0(
     packet: ConnectC0,
     *,
     is_match_host: bool,
+    account_id: int,
     connection_id: int | None = None,
 ) -> bytes:
     """Encode the master decision for the paired K2 creator-authority patch.
@@ -31,9 +32,18 @@ def make_authorized_local_c0(
     """
     if not 0 <= packet.flag_offset < len(data):
         raise ValueError("external-auth flag offset is outside packet")
+    if not 0 < account_id < 0x7FFFFFFF:
+        raise ValueError("account ID must fit the local native identity namespace")
+    if not 0 <= packet.account_id_offset <= len(data) - 4:
+        raise ValueError("account ID offset is outside packet")
     if connection_id is not None and not 0 < connection_id <= 0xFFFF:
         raise ValueError("connection ID must be a nonzero uint16")
     rewritten = bytearray(data)
+    # K2/game.dll need a stable, unique account identity to associate a new
+    # transport with a disconnected CPlayer.  Keep it negative when interpreted
+    # as int32 so retail profile/avatar lookup still treats this as a local user.
+    native_account_id = 0x80000000 | account_id
+    struct.pack_into("<I", rewritten, packet.account_id_offset, native_account_id)
     if connection_id is not None:
         connection_id_offset = (
             4

@@ -1712,7 +1712,9 @@ def main(argv=None) -> int:
                     except ValueError as exc:
                         log(f"C0_AUTH_REJECT client={addr[0]}:{addr[1]} reason={exc}")
                         continue
-                    approved, reason, is_match_host = authorize_connect_c0(connect, args.master_url, args.auth_timeout)
+                    approved, reason, is_match_host, account_id = authorize_connect_c0(
+                        connect, args.master_url, args.auth_timeout
+                    )
                     if not approved:
                         log(
                             f"C0_AUTH_REJECT client={addr[0]}:{addr[1]} "
@@ -1728,7 +1730,6 @@ def main(argv=None) -> int:
                         f"C0_WIRE client={addr[0]}:{addr[1]} user={connect.username!r} "
                         f"bytes={len(data)} flag_offset={connect.flag_offset} hex={data.hex()}"
                     )
-                    account_id = local_account_id_from_cookie(connect.cookie)
                     stable_connection_id = (
                         stable_connection_id_for_account(account_id)
                         if account_id is not None
@@ -1738,6 +1739,7 @@ def main(argv=None) -> int:
                         data,
                         connect,
                         is_match_host=is_match_host,
+                        account_id=account_id,
                         connection_id=stable_connection_id,
                     )
                     # Retire any older endpoint for this identity and transfer
@@ -1776,7 +1778,8 @@ def main(argv=None) -> int:
                         f"C0_AUTH_LOCALIZED client={addr[0]}:{addr[1]} "
                         f"flag_offset={connect.flag_offset} host_id_preserved=0x{connect.host_id:08X} "
                         f"wire_connection_id=0x{connect.connection_id:04X} "
-                        f"slave_connection_id=0x{(stable_connection_id or 0):04X}"
+                        f"slave_connection_id=0x{(stable_connection_id or 0):04X} "
+                        f"native_account_id=0x{(0x80000000 | account_id):08X}"
                     )
                 elif (
                     args.require_c0_auth

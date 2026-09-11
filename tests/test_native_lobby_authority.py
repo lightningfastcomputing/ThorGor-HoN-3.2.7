@@ -49,21 +49,25 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         self.vm.mem_map(0x100000, 0x20000)
         self.client, self.frame, self.stack = 0x108000, 0x118000, 0x117000
 
-    def admit(self, marker, flags):
+    def admit(self, marker, flags, native_account_id=0x80000007):
         self.vm.reg_write(reg.UC_X86_REG_EBX, self.client)
         self.vm.reg_write(reg.UC_X86_REG_EBP, self.frame)
         self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
         self.vm.mem_write(self.frame - 0x11, bytes([marker]))
+        self.vm.mem_write(self.frame - 0x48, struct.pack("<I", native_account_id))
         self.vm.mem_write(self.client + 0xCC, struct.pack("<I", flags))
         self.vm.emu_start(self.base + authority.HOOK_RVA, self.base + authority.RETURN_RVA, count=100)
-        return struct.unpack("<I", self.vm.mem_read(self.client + 0xCC, 4))[0]
+        return (
+            struct.unpack("<I", self.vm.mem_read(self.client + 0xCC, 4))[0],
+            struct.unpack("<I", self.vm.mem_read(self.client + 0x0C, 4))[0],
+        )
 
     def test_actual_hook_grants_only_marker_bit_zero_and_preserves_other_flags(self):
         for marker in (0, 1, 2, 3, 0xFE, 0xFF):
             for flags in (0, 7, 0x100, 0xFFFFFFFF):
                 with self.subTest(marker=marker, flags=flags):
                     expected = flags & ~7 | (7 if marker & 1 else 0)
-                    self.assertEqual(self.admit(marker, flags), expected)
+                    self.assertEqual(self.admit(marker, flags), (expected, 0x80000007))
                     self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), self.stack)
                     self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EBX), self.client)
 
@@ -102,12 +106,12 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
             accepted = self.vm.reg_read(reg.UC_X86_REG_EIP) == base + 0x33825
             self.assertEqual(accepted, count < 10)
 
-    def test_reconnect_search_compares_stable_client_number(self):
+    def test_reconnect_search_uses_native_account_identity(self):
         pe = pefile.PE(data=self.game)
         offset = pe.get_offset_from_rva(0x333A3)
         self.assertEqual(
             self.game[offset:offset + 11],
-            bytes.fromhex("8B426C3B4708757D909090"),
+            bytes.fromhex("8B82580200003B470C757A"),
         )
 
     def test_exact_hashes_idempotence_and_rejected_input(self):
