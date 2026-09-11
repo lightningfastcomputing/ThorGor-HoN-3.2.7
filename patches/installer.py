@@ -135,22 +135,26 @@ def install_k2(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
 def install_game_capacity(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
     catalog = catalog or PatchCatalog()
     capacity = catalog.get("dedicated.server_capacity")
+    reconnect = catalog.get("dedicated.reconnect_client_identity")
     target = hon_home / "game" / "game.dll"
     backup = target.with_name("game.dll.thorgor_stock_3.2.7.1")
     current = file_hash(target)
-    if current == capacity.output_sha256:
-        return "Native ten-client capacity is already installed."
-    source = target if current in capacity.source_sha256 else backup
-    if not _verified(source, set(capacity.source_sha256)):
-        raise ValueError("A verified stock game.dll is required for native multiplayer capacity")
+    if current == reconnect.output_sha256:
+        return "Native ten-client capacity and reconnect identity are already installed."
+    stock_hashes = set(capacity.source_sha256)
+    if current in stock_hashes:
+        _preserve_verified(target, backup, current)
+    if not _verified(backup, stock_hashes):
+        raise ValueError("A verified stock game.dll is required for native multiplayer support")
     # Build before replacing and preserve the previous installation verbatim.
     with tempfile.TemporaryDirectory(prefix="thorgor-capacity-") as directory:
+        staged = Path(directory) / "capacity.dll"
         candidate = Path(directory) / "game.dll"
-        apply_patch(capacity, source, candidate)
+        apply_patch(capacity, backup, staged)
+        apply_patch(reconnect, staged, candidate)
         _preserve_verified(target, target.with_name(f"game.dll.thorgor_before_{current.lower()}"), current)
-        _preserve_verified(source, backup, capacity.source_sha256[0])
-        _replace_from_patch(capacity, backup, target)
-    return "Installed native ten-client capacity for ordinary joiners."
+        os.replace(candidate, target)
+    return "Installed native ten-client capacity and stable reconnect identity."
 
 
 def install_cgame(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
@@ -186,7 +190,7 @@ def verify_supported_install(hon_home: Path) -> tuple[str, ...]:
     catalog = PatchCatalog()
     expected = (
         (hon_home / "k2.dll", catalog.get("dedicated.creator_authority").output_sha256),
-        (hon_home / "game" / "game.dll", catalog.get("dedicated.server_capacity").output_sha256),
+        (hon_home / "game" / "game.dll", catalog.get("dedicated.reconnect_client_identity").output_sha256),
         (hon_home / "game" / "cgame.dll", catalog.get("dedicated.complete_registry_guard").output_sha256),
     )
     verified = []

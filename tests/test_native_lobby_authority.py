@@ -102,9 +102,20 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
             accepted = self.vm.reg_read(reg.UC_X86_REG_EIP) == base + 0x33825
             self.assertEqual(accepted, count < 10)
 
+    def test_reconnect_search_compares_stable_client_number(self):
+        pe = pefile.PE(data=self.game)
+        offset = pe.get_offset_from_rva(0x333A3)
+        self.assertEqual(
+            self.game[offset:offset + 11],
+            bytes.fromhex("8B426C3B4708757B909090"),
+        )
+
     def test_exact_hashes_idempotence_and_rejected_input(self):
         self.assertEqual(sha256(self.image), authority.OUTPUT_SHA256)
-        self.assertEqual(sha256(self.game), self.catalog.get("dedicated.server_capacity").output_sha256)
+        self.assertEqual(
+            sha256(self.game),
+            self.catalog.get("dedicated.reconnect_client_identity").output_sha256,
+        )
         self.assertIn("already installed", install_k2(self.work))
         self.assertIn("already installed", install_game_capacity(self.work))
         bad, target = self.work / "bad.dll", self.work / "must-not-exist.dll"
