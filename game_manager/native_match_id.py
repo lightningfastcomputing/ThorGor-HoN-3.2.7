@@ -60,6 +60,7 @@ VERIFIED_GAME_DLL_SHA256 = "D345F8537ED9FD5C6705F8F1A9FA6663C5F4AE4476CD328B2D8F
 VERIFIED_GAME_DLL_SHA256S = frozenset((
     VERIFIED_GAME_DLL_SHA256,
     "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B",
+    "B9BEBCA27AB64BF3AA2A405B39CE60E06A537FB5CEBCD5827AE200BB15EEC754",
 ))
 GAME_SINGLETON_PTR_RVA = 0x9163C
 CGAME_GAMEINFO_OFFSET = 0x78
@@ -363,7 +364,7 @@ def main(argv=None) -> int:
                         if dll_hash not in VERIFIED_GAME_DLL_SHA256S and not args.allow_unknown_game_dll:
                             raise RuntimeError(
                                 f"loaded game.dll hash mismatch path={str(dll_path)!r} "
-                                f"sha256={dll_hash} expected={VERIFIED_GAME_DLL_SHA256}"
+                                f"sha256={dll_hash} expected_one_of={','.join(sorted(VERIFIED_GAME_DLL_SHA256S))}"
                             )
                         verified_modules[key] = dll_hash
                         append_log(

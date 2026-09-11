@@ -17,3 +17,9 @@ presentation state.
 
 The server-capacity patch remains a separate prerequisite so each stage has an exact,
 verified input and output hash.
+
+The native match-ID bridge must recognize the final patched hash as well as the stock
+and capacity-stage hashes. If it rejects the loaded DLL, the dedicated process keeps
+the `0xFFFFFFFF` sentinel. Clients then probe reconnect availability with that invalid
+match ID, and the gateway correctly returns zero time remaining, so no reconnect dialog
+can appear.
