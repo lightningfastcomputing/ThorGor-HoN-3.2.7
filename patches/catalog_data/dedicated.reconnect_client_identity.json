@@ -1,11 +1,11 @@
 {
   "id": "dedicated.reconnect_client_identity",
   "binary": "game.dll",
-  "version": "3.2.7.1-native-account-reconnect-v2",
+  "version": "3.2.7.1-native-account-reconnect-v3",
   "source_sha256": "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B",
-  "output_sha256": "F1DCF44A85AF648A263EB87A573A1EA49D468BC7ED1A9DC6984690767EF406C8",
-  "reason": "Use the authenticated native account identity as the reconnect authority when a replacement transport receives a new server client number.",
-  "observed_failure": "The correct disconnected player is now selected by account identity, but K2 assigns the replacement connection a new client number and stock game.dll rejects it with disconnect_client_number_mismatch.",
+  "output_sha256": "6B9D4396FF499E3F39B2FA8C834482030BC896A164FB843DE219109E016B9766",
+  "reason": "Use authenticated native account identity to find the disconnected player, then transfer that player's original client number to the replacement connection.",
+  "observed_failure": "Skipping the client-number mismatch allowed state packets through, but the returning client kept a newly allocated number and could not bind the snapshot to its saved player, leaving it in a black pre-match shell.",
   "discovered": "2026-09-11",
   "evidence": ["docs/RECONNECT.md", "tests/test_native_lobby_authority.py"],
   "operations": [
@@ -19,7 +19,7 @@
       "address": "rva",
       "offset": "0x333DD",
       "expected": "8B406C3B47087416",
-      "replacement": "EB1C909090909090"
+      "replacement": "8B506C895708EB16"
     }
   ]
 }

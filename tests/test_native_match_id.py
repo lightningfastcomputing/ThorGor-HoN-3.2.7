@@ -18,8 +18,8 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
         reconnect = PatchCatalog().get("dedicated.reconnect_client_identity")
         account_match, client_number_guard = reconnect.operations
         self.assertEqual(account_match.replacement, bytes.fromhex("8B82580200003B470C757A"))
-        self.assertEqual(client_number_guard.replacement, bytes.fromhex("EB1C909090909090"))
-        self.assertEqual(client_number_guard.offset + 2 + 0x1C, 0x333FB)
+        self.assertEqual(client_number_guard.replacement, bytes.fromhex("8B506C895708EB16"))
+        self.assertEqual(client_number_guard.offset + 8 + 0x16, 0x333FB)
 
 
 if __name__ == "__main__":

@@ -108,6 +108,7 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
 
     def test_reconnect_search_uses_native_account_identity(self):
         pe = pefile.PE(data=self.game)
+        base = pe.OPTIONAL_HEADER.ImageBase
         offset = pe.get_offset_from_rva(0x333A3)
         self.assertEqual(
             self.game[offset:offset + 11],
@@ -116,8 +117,19 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         guard_offset = pe.get_offset_from_rva(0x333DD)
         self.assertEqual(
             self.game[guard_offset:guard_offset + 8],
-            bytes.fromhex("EB1C909090909090"),
+            bytes.fromhex("8B506C895708EB16"),
         )
+
+        self.vm.mem_map(base, (pe.OPTIONAL_HEADER.SizeOfImage + 4095) & ~4095)
+        self.vm.mem_write(base, pe.get_memory_mapped_image())
+        player = self.client + 0x1000
+        self.vm.mem_write(player + 0x6C, struct.pack("<I", 1))
+        self.vm.mem_write(self.client + 0x08, struct.pack("<I", 3))
+        self.vm.reg_write(reg.UC_X86_REG_EAX, player)
+        self.vm.reg_write(reg.UC_X86_REG_EDI, self.client)
+        self.vm.emu_start(base + 0x333DD, base + 0x333FB, count=4)
+        adopted = struct.unpack("<I", self.vm.mem_read(self.client + 0x08, 4))[0]
+        self.assertEqual(adopted, 1)
 
     def test_exact_hashes_idempotence_and_rejected_input(self):
         self.assertEqual(sha256(self.image), authority.OUTPUT_SHA256)
