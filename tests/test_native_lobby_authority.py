@@ -49,17 +49,19 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         self.vm.mem_map(0x100000, 0x20000)
         self.client, self.frame, self.stack = 0x108000, 0x118000, 0x117000
 
-    def admit(self, marker, flags, native_account_id=0x80000007):
+    def admit(self, marker, flags, native_account_id=0x80000007, connection_id=7):
         self.vm.reg_write(reg.UC_X86_REG_EBX, self.client)
         self.vm.reg_write(reg.UC_X86_REG_EBP, self.frame)
         self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
         self.vm.mem_write(self.frame - 0x11, bytes([marker]))
         self.vm.mem_write(self.frame - 0x48, struct.pack("<I", native_account_id))
+        self.vm.mem_write(self.frame - 0x18, struct.pack("<I", connection_id))
         self.vm.mem_write(self.client + 0xCC, struct.pack("<I", flags))
         self.vm.emu_start(self.base + authority.HOOK_RVA, self.base + authority.RETURN_RVA, count=100)
         return (
             struct.unpack("<I", self.vm.mem_read(self.client + 0xCC, 4))[0],
             struct.unpack("<I", self.vm.mem_read(self.client + 0x0C, 4))[0],
+            struct.unpack("<H", self.vm.mem_read(self.client + 0x14, 2))[0],
         )
 
     def test_actual_hook_grants_only_marker_bit_zero_and_preserves_other_flags(self):
@@ -67,7 +69,7 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
             for flags in (0, 7, 0x100, 0xFFFFFFFF):
                 with self.subTest(marker=marker, flags=flags):
                     expected = flags & ~7 | (7 if marker & 1 else 0)
-                    self.assertEqual(self.admit(marker, flags), (expected, 0x80000007))
+                    self.assertEqual(self.admit(marker, flags), (expected, 0x80000007, 7))
                     self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), self.stack)
                     self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EBX), self.client)
 
@@ -117,7 +119,7 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         guard_offset = pe.get_offset_from_rva(0x333DD)
         self.assertEqual(
             self.game[guard_offset:guard_offset + 8],
-            bytes.fromhex("8B506C895708EB16"),
+            bytes.fromhex("8B406C3B47087416"),
         )
 
         self.vm.mem_map(base, (pe.OPTIONAL_HEADER.SizeOfImage + 4095) & ~4095)
@@ -127,9 +129,10 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         self.vm.mem_write(self.client + 0x08, struct.pack("<I", 3))
         self.vm.reg_write(reg.UC_X86_REG_EAX, player)
         self.vm.reg_write(reg.UC_X86_REG_EDI, self.client)
-        self.vm.emu_start(base + 0x333DD, base + 0x333FB, count=4)
-        adopted = struct.unpack("<I", self.vm.mem_read(self.client + 0x08, 4))[0]
-        self.assertEqual(adopted, 1)
+        self.vm.emu_start(base + 0x333DD, base + 0x333FB, count=3)
+        self.assertNotEqual(self.vm.reg_read(reg.UC_X86_REG_EIP), base + 0x333FB)
+        retained = struct.unpack("<I", self.vm.mem_read(self.client + 0x08, 4))[0]
+        self.assertEqual(retained, 3)
 
     def test_exact_hashes_idempotence_and_rejected_input(self):
         self.assertEqual(sha256(self.image), authority.OUTPUT_SHA256)

@@ -12,7 +12,7 @@ from pathlib import Path
 from thorgor.patches.engine import _rva_to_file, sha256
 
 SOURCE_SHA256 = "25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026"
-OUTPUT_SHA256 = "3F1944986EE403AAEAB8F440AF66E73B3893D1A1898E67C40549ECCBB52D5527"
+OUTPUT_SHA256 = "26DFA2673B4551CDD75B1CA4F90511BB2A8A2CA9B41631D4D5C882E2C4D5C076"
 MARKER_REJECTION_RVA = 0x2F5982
 HOOK_RVA = 0x2F5AD6
 RETURN_RVA = 0x2F5ADD
@@ -27,6 +27,8 @@ def jump(source: int, target: int) -> bytes:
 
 def authority_stub() -> bytes:
     code = bytes.fromhex(
+        "8b45e8"          # load the authenticated C0 connection ID parsed at [ebp-0x18]
+        "66894314"        # preserve it for GenerateClientID's reconnect lookup
         "8b45b8"          # load the authenticated local-only account identity
         "89430c"          # retain it in CClientConnection for CPlayer creation/reconnect
         "83a3cc000000f8"  # clear the composite local/admin/host bits

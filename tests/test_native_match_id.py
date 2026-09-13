@@ -1,6 +1,7 @@
 import unittest
 
 from thorgor.game_manager.native_match_id import VERIFIED_GAME_DLL_SHA256S
+from thorgor.patches.builders import creator_authority
 from thorgor.patches.catalog import PatchCatalog
 
 
@@ -18,8 +19,13 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
         reconnect = PatchCatalog().get("dedicated.reconnect_client_identity")
         account_match, client_number_guard = reconnect.operations
         self.assertEqual(account_match.replacement, bytes.fromhex("8B82580200003B470C757A"))
-        self.assertEqual(client_number_guard.replacement, bytes.fromhex("8B506C895708EB16"))
+        self.assertEqual(client_number_guard.replacement, bytes.fromhex("8B406C3B47087416"))
         self.assertEqual(client_number_guard.offset + 8 + 0x16, 0x333FB)
+
+    def test_k2_hook_restores_parsed_connection_id_before_account_identity(self):
+        stub = creator_authority.authority_stub()
+        self.assertTrue(stub.startswith(bytes.fromhex("8B45E8668943148B45B889430C")))
+        self.assertLessEqual(len(stub), 0x40)
 
 
 if __name__ == "__main__":
