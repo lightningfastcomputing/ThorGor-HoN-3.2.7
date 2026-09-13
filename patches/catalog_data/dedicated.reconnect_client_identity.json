@@ -1,11 +1,11 @@
 {
   "id": "dedicated.reconnect_client_identity",
   "binary": "game.dll",
-  "version": "3.2.7.1-native-account-reconnect",
+  "version": "3.2.7.1-native-account-reconnect-v2",
   "source_sha256": "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B",
-  "output_sha256": "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B",
-  "reason": "Retain game.dll's stock account-identity reconnect contract; K2 now preserves a stable local-only identity.",
-  "observed_failure": "Matching by the gateway connection ID was invalid because it is not K2's server-assigned client number and every reconnect fell through to disconnect_game_in_progress.",
+  "output_sha256": "F1DCF44A85AF648A263EB87A573A1EA49D468BC7ED1A9DC6984690767EF406C8",
+  "reason": "Use the authenticated native account identity as the reconnect authority when a replacement transport receives a new server client number.",
+  "observed_failure": "The correct disconnected player is now selected by account identity, but K2 assigns the replacement connection a new client number and stock game.dll rejects it with disconnect_client_number_mismatch.",
   "discovered": "2026-09-11",
   "evidence": ["docs/RECONNECT.md", "tests/test_native_lobby_authority.py"],
   "operations": [
@@ -14,6 +14,12 @@
       "offset": "0x333A3",
       "expected": "8B82580200003B470C757A",
       "replacement": "8B82580200003B470C757A"
+    },
+    {
+      "address": "rva",
+      "offset": "0x333DD",
+      "expected": "8B406C3B47087416",
+      "replacement": "EB1C909090909090"
     }
   ]
 }

@@ -140,7 +140,7 @@ def install_game_capacity(hon_home: Path, catalog: PatchCatalog | None = None) -
     backup = target.with_name("game.dll.thorgor_stock_3.2.7.1")
     current = file_hash(target)
     if current == reconnect.output_sha256:
-        return "Native ten-client capacity with stock account reconnect matching is already installed."
+        return "Native ten-client capacity with authenticated reconnect matching is already installed."
     stock_hashes = set(capacity.source_sha256)
     if current in stock_hashes:
         _preserve_verified(target, backup, current)
@@ -154,7 +154,7 @@ def install_game_capacity(hon_home: Path, catalog: PatchCatalog | None = None) -
         apply_patch(reconnect, staged, candidate)
         _preserve_verified(target, target.with_name(f"game.dll.thorgor_before_{current.lower()}"), current)
         os.replace(candidate, target)
-    return "Installed native ten-client capacity with stock account reconnect matching."
+    return "Installed native ten-client capacity with authenticated reconnect matching."
 
 
 def install_cgame(hon_home: Path, catalog: PatchCatalog | None = None) -> str:

@@ -17,9 +17,12 @@ lobby portraits with the Chiprel fallback. The K2 admission patch preserves this
 in `CClientConnection + 0x0c` and no longer clears it before CPlayer initialization.
 Both the initial connection and the returning C0 receive the same value.
 
-game.dll therefore retains its verified stock predicate at RVA `0x333A3`: compare
-`CPlayer + 0x258` with `CClientConnection + 0x0c`, then perform the stock client-number
-safety check only after the correct disconnected player has been selected. Returning
+game.dll retains its verified stock identity predicate at RVA `0x333A3`: compare
+`CPlayer + 0x258` with `CClientConnection + 0x0c`. Once that authenticated identity
+selects the correct disconnected player, the patch at RVA `0x333DD` skips the obsolete
+client-number check and rejoins the stock success path at RVA `0x333FB`. K2 assigns a
+new server client number to the replacement transport, so retaining that check produced
+`disconnect_client_number_mismatch` even after identity matching was fixed. Returning
 the existing CPlayer lets the caller execute `CPlayer::Connected`, which drives the
 in-game reconnect notice/timer and state transfer.
 

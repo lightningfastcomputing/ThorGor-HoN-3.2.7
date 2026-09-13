@@ -113,6 +113,11 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
             self.game[offset:offset + 11],
             bytes.fromhex("8B82580200003B470C757A"),
         )
+        guard_offset = pe.get_offset_from_rva(0x333DD)
+        self.assertEqual(
+            self.game[guard_offset:guard_offset + 8],
+            bytes.fromhex("EB1C909090909090"),
+        )
 
     def test_exact_hashes_idempotence_and_rejected_input(self):
         self.assertEqual(sha256(self.image), authority.OUTPUT_SHA256)

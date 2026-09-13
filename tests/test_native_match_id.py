@@ -16,8 +16,10 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
 
     def test_reconnect_uses_stock_account_identity_comparison(self):
         reconnect = PatchCatalog().get("dedicated.reconnect_client_identity")
-        operation = reconnect.operations[0]
-        self.assertEqual(operation.replacement, bytes.fromhex("8B82580200003B470C757A"))
+        account_match, client_number_guard = reconnect.operations
+        self.assertEqual(account_match.replacement, bytes.fromhex("8B82580200003B470C757A"))
+        self.assertEqual(client_number_guard.replacement, bytes.fromhex("EB1C909090909090"))
+        self.assertEqual(client_number_guard.offset + 2 + 0x1C, 0x333FB)
 
 
 if __name__ == "__main__":
