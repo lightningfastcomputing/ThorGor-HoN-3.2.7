@@ -69,9 +69,58 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
             for flags in (0, 7, 0x100, 0xFFFFFFFF):
                 with self.subTest(marker=marker, flags=flags):
                     expected = flags & ~7 | (7 if marker & 1 else 0)
-                    self.assertEqual(self.admit(marker, flags), (expected, 0x80000007, 7))
+                    self.assertEqual(self.admit(marker, flags), (expected, 0x80000007, 0))
                     self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), self.stack)
                     self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EBX), self.client)
+
+    def test_generate_client_id_reuses_an_authenticated_account_allocation(self):
+        host = self.client
+        connection_id = self.client + 0x1000
+        records = self.client + 0x2000
+        return_address = self.client + 0x3000
+        stack = self.stack
+        account_id = 0x80000007
+
+        self.vm.mem_write(host + 0x164, struct.pack("<I", records))
+        self.vm.mem_write(host + 0x168, struct.pack("<I", records + 24))
+        self.vm.mem_write(
+            records,
+            struct.pack("<IIHBB", 1, account_id, 0, 0, 0)
+            + struct.pack("<IIHBB", 2, 0x80000008, 0, 0, 0),
+        )
+        self.vm.mem_write(connection_id, b"\0\0")
+        self.vm.mem_write(
+            stack,
+            struct.pack("<III", return_address, connection_id, account_id),
+        )
+        self.vm.reg_write(reg.UC_X86_REG_ECX, host)
+        self.vm.reg_write(reg.UC_X86_REG_ESP, stack)
+        self.vm.emu_start(self.base + 0x2F1B80, return_address, count=100)
+
+        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EAX), 1)
+        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), stack + 12)
+
+    def test_generate_client_id_does_not_reuse_zero_or_unknown_account(self):
+        host = self.client
+        connection_id = self.client + 0x1000
+        records = self.client + 0x2000
+        stack = self.stack
+        allocation_path = self.base + 0x2F1BD2
+        self.vm.mem_write(host + 0x164, struct.pack("<I", records))
+        self.vm.mem_write(host + 0x168, struct.pack("<I", records + 12))
+        self.vm.mem_write(records, struct.pack("<IIHBB", 1, 0, 0, 0, 0))
+
+        for account_id in (0, 0x80000009):
+            with self.subTest(account_id=account_id):
+                self.vm.mem_write(connection_id, b"\0\0")
+                self.vm.mem_write(
+                    stack,
+                    struct.pack("<III", self.client + 0x3000, connection_id, account_id),
+                )
+                self.vm.reg_write(reg.UC_X86_REG_ECX, host)
+                self.vm.reg_write(reg.UC_X86_REG_ESP, stack)
+                self.vm.emu_start(self.base + 0x2F1B80, allocation_path, count=100)
+                self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EIP), allocation_path)
 
     def test_auth_success_cannot_repromote_joiner_and_only_creator_gets_host_event(self):
         for creator in (False, True):

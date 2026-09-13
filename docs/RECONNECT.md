@@ -22,13 +22,18 @@ with `CClientConnection + 0x0c`, then compares the saved native client number at
 `CPlayer + 0x6c` with `CClientConnection + 0x08`.
 
 Ghidra analysis of `CHostServer::GenerateClientID(unsigned short &, int)` established
-that K2 already has the native reconnect mechanism. It reuses an earlier client number
-when both the C0 connection ID and account identity match its retained allocation
-record. The local-admission path parsed the C0 connection ID but then explicitly wrote
-zero to `CClientConnection + 0x14`, disabling that lookup. The authority hook now copies
-the authenticated C0 connection ID from `[ebp-0x18]` into `CClientConnection + 0x14`
-before authentication succeeds. K2 therefore assigns the original client number before
-it sends NETCMD 0x50, registers the connection, or calls into game.dll.
+that K2 retains allocation records containing the native client number, account ID,
+connection ID, and state byte. Local admission deliberately clears the C0 connection-ID
+field before calling this allocator. Restoring that field on a fresh connection proved
+unsafe and terminated the dedicated slave during game creation.
+
+The allocator now gates its retained-record lookup on a nonzero authenticated account
+ID and compares that account directly. A first-time account has no retained record and
+uses the original allocation path unchanged. A returning account finds its earlier
+record and receives the original native client number before K2 sends NETCMD 0x50,
+registers the transport, or calls into game.dll. Account zero is excluded so internal
+pseudo clients retain stock allocation behavior, and `CClientConnection + 0x14` remains
+untouched at the stock zero value.
 
 Changing `CClientConnection + 0x08` later inside game.dll was unsafe: K2 had already
 registered the new number, producing split transport/player identity, the black

@@ -22,10 +22,21 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
         self.assertEqual(client_number_guard.replacement, bytes.fromhex("8B406C3B47087416"))
         self.assertEqual(client_number_guard.offset + 8 + 0x16, 0x333FB)
 
-    def test_k2_hook_restores_parsed_connection_id_before_account_identity(self):
+    def test_k2_hook_preserves_account_without_mutating_connection_id(self):
         stub = creator_authority.authority_stub()
-        self.assertTrue(stub.startswith(bytes.fromhex("8B45E8668943148B45B889430C")))
+        self.assertTrue(stub.startswith(bytes.fromhex("8B45B889430C")))
         self.assertLessEqual(len(stub), 0x40)
+
+    def test_k2_allocator_matches_retained_record_by_nonzero_account(self):
+        operations = {rva: replacement for rva, _, replacement in creator_authority.operations()}
+        self.assertEqual(
+            operations[creator_authority.GENERATE_ID_IDENTITY_RVA],
+            bytes.fromhex("558B6C241C85ED565790909090"),
+        )
+        self.assertEqual(
+            operations[creator_authority.GENERATE_ID_COMPARE_RVA],
+            bytes.fromhex("39680490"),
+        )
 
 
 if __name__ == "__main__":

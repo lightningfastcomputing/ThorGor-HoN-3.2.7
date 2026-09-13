@@ -12,7 +12,9 @@ from pathlib import Path
 from thorgor.patches.engine import _rva_to_file, sha256
 
 SOURCE_SHA256 = "25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026"
-OUTPUT_SHA256 = "26DFA2673B4551CDD75B1CA4F90511BB2A8A2CA9B41631D4D5C882E2C4D5C076"
+OUTPUT_SHA256 = "9EA575796AA4985F844B4A4A67A1C1A6EF459F5B5E3C5C5228E6220C90C3B38E"
+GENERATE_ID_IDENTITY_RVA = 0x2F1B88
+GENERATE_ID_COMPARE_RVA = 0x2F1BAD
 MARKER_REJECTION_RVA = 0x2F5982
 HOOK_RVA = 0x2F5AD6
 RETURN_RVA = 0x2F5ADD
@@ -27,8 +29,6 @@ def jump(source: int, target: int) -> bytes:
 
 def authority_stub() -> bytes:
     code = bytes.fromhex(
-        "8b45e8"          # load the authenticated C0 connection ID parsed at [ebp-0x18]
-        "66894314"        # preserve it for GenerateClientID's reconnect lookup
         "8b45b8"          # load the authenticated local-only account identity
         "89430c"          # retain it in CClientConnection for CPlayer creation/reconnect
         "83a3cc000000f8"  # clear the composite local/admin/host bits
@@ -42,6 +42,21 @@ def authority_stub() -> bytes:
 def operations() -> tuple[tuple[int, bytes, bytes], ...]:
     code = authority_stub()
     return (
+        # GenerateClientID normally gates reconnect lookup on the caller's
+        # connection-ID word. Local admission intentionally clears that word.
+        # Gate and compare on the authenticated account ID instead, so a
+        # returning account reclaims its retained allocation while a new
+        # account still follows the untouched allocation path.
+        (
+            GENERATE_ID_IDENTITY_RVA,
+            bytes.fromhex("0fb7136685d2558b6c241c5657"),
+            bytes.fromhex("558b6c241c85ed565790909090"),
+        ),
+        (
+            GENERATE_ID_COMPARE_RVA,
+            bytes.fromhex("66395008"),
+            bytes.fromhex("39680490"),
+        ),
         # Enter the proven local constructor even for a creator-marked C0.
         (MARKER_REJECTION_RVA, bytes.fromhex("0f859a020000"), b"\x90" * 6),
         (HOOK_RVA, bytes.fromhex("838bcc00000007"), jump(HOOK_RVA, CAVE_RVA) + b"\x90\x90"),
