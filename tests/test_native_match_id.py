@@ -31,7 +31,7 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
         operations = {rva: replacement for rva, _, replacement in creator_authority.operations()}
         self.assertEqual(
             operations[creator_authority.GENERATE_ID_RECONNECT_MARKER_RVA],
-            bytes.fromhex("66833B7F7506"),
+            bytes.fromhex("381075089090"),
         )
         self.assertEqual(
             operations[creator_authority.GENERATE_ID_COMPARE_RVA],

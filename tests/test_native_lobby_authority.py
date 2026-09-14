@@ -69,7 +69,7 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
             for flags in (0, 7, 0x100, 0xFFFFFFFF):
                 with self.subTest(marker=marker, flags=flags):
                     expected = flags & ~7 | (7 if marker & 1 else 0)
-                    expected_connection_id = authority.RECONNECT_CONNECTION_ID if marker & 2 else 0
+                    expected_connection_id = 7 if marker & 2 else 0
                     self.assertEqual(
                         self.admit(marker, flags),
                         (expected, 0x80000007, expected_connection_id),
@@ -89,11 +89,11 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         self.vm.mem_write(host + 0x168, struct.pack("<I", records + 24))
         self.vm.mem_write(
             records,
-            struct.pack("<IIHBB", 1, account_id, 0, 1, 0)
-            + struct.pack("<IIHBB", 2, 0x80000008, 0, 1, 0),
+            struct.pack("<IIHBB", 0, account_id, 0, 1, 0)
+            + struct.pack("<IIHBB", 1, account_id, 0, 1, 0),
         )
         self.vm.mem_write(
-            connection_id, struct.pack("<H", authority.RECONNECT_CONNECTION_ID)
+            connection_id, struct.pack("<H", 0x8001)
         )
         self.vm.mem_write(
             stack,
