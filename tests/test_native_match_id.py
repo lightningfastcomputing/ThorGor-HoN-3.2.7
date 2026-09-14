@@ -30,12 +30,8 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
     def test_k2_allocator_matches_retained_record_by_nonzero_account(self):
         operations = {rva: replacement for rva, _, replacement in creator_authority.operations()}
         self.assertEqual(
-            operations[creator_authority.GENERATE_ID_IDENTITY_RVA],
-            bytes.fromhex("558B6C241C85ED565790909090"),
-        )
-        self.assertEqual(
-            operations[creator_authority.GENERATE_ID_LOCAL_STATE_RVA],
-            b"\x90" * 6,
+            operations[creator_authority.GENERATE_ID_RECONNECT_MARKER_RVA],
+            bytes.fromhex("66833B7F7506"),
         )
         self.assertEqual(
             operations[creator_authority.GENERATE_ID_COMPARE_RVA],

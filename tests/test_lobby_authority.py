@@ -43,7 +43,7 @@ class LobbyAuthorityTests(unittest.TestCase):
                 changed = make_authorized_local_c0(
                     original, parsed, is_match_host=creator, account_id=23
                 )
-                self.assertEqual(changed[parsed.flag_offset], incoming & 0xFE | int(creator))
+                self.assertEqual(changed[parsed.flag_offset], incoming & 0xFC | int(creator))
                 self.assertEqual(changed[:parsed.flag_offset], original[:parsed.flag_offset])
                 self.assertEqual(
                     struct.unpack_from("<I", changed, parsed.account_id_offset)[0],
@@ -125,3 +125,15 @@ class LobbyAuthorityTests(unittest.TestCase):
                     0x80000000 | account,
                 )
                 self.assertEqual(state["pending_host_account_id"], 1)
+
+    def test_gateway_marks_only_an_authenticated_reconnect(self):
+        original = connection("", marker=0xFF)
+        parsed = parse_connect_c0(original)
+        fresh = make_authorized_local_c0(
+            original, parsed, is_match_host=False, is_reconnect=False, account_id=7
+        )
+        returning = make_authorized_local_c0(
+            original, parsed, is_match_host=False, is_reconnect=True, account_id=7
+        )
+        self.assertEqual(fresh[parsed.flag_offset] & 3, 0)
+        self.assertEqual(returning[parsed.flag_offset] & 3, 2)

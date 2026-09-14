@@ -21,6 +21,7 @@ def make_authorized_local_c0(
     packet: ConnectC0,
     *,
     is_match_host: bool,
+    is_reconnect: bool = False,
     account_id: int,
     connection_id: int | None = None,
 ) -> bytes:
@@ -54,5 +55,11 @@ def make_authorized_local_c0(
         if connection_id_offset + 2 > len(rewritten):
             raise ValueError("connection ID offset is outside packet")
         struct.pack_into("<H", rewritten, connection_id_offset, connection_id)
-    rewritten[packet.flag_offset] = (rewritten[packet.flag_offset] & 0xFE) | int(is_match_host)
+    # Bits zero and one are private decisions made by the authenticated proxy:
+    # creator authority and an explicit reconnect admission, respectively.
+    rewritten[packet.flag_offset] = (
+        (rewritten[packet.flag_offset] & 0xFC)
+        | int(is_match_host)
+        | (int(is_reconnect) << 1)
+    )
     return bytes(rewritten)

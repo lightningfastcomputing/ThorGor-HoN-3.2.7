@@ -1735,10 +1735,12 @@ def main(argv=None) -> int:
                         if account_id is not None
                         else None
                     )
+                    is_reconnect = connect.cookie in retired_route_by_cookie
                     data = make_authorized_local_c0(
                         data,
                         connect,
                         is_match_host=is_match_host,
+                        is_reconnect=is_reconnect,
                         account_id=account_id,
                         connection_id=stable_connection_id,
                     )
@@ -1779,6 +1781,7 @@ def main(argv=None) -> int:
                         f"flag_offset={connect.flag_offset} host_id_preserved=0x{connect.host_id:08X} "
                         f"wire_connection_id=0x{connect.connection_id:04X} "
                         f"slave_connection_id=0x{(stable_connection_id or 0):04X} "
+                        f"reconnect={int(is_reconnect)} "
                         f"native_account_id=0x{(0x80000000 | account_id):08X}"
                     )
                 elif (

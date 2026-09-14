@@ -27,16 +27,14 @@ connection ID, and state byte. Local admission deliberately clears the C0 connec
 field before calling this allocator. Restoring that field on a fresh connection proved
 unsafe and terminated the dedicated slave during game creation.
 
-The allocator now gates its retained-record lookup on a nonzero authenticated account
-ID and compares that account directly. The stock lookup also excluded allocation
-records whose connection ID was initially zero; those are precisely the records created
-by local admission, so the account-based path deliberately ignores that obsolete state
-filter. A first-time account still has no matching record and uses the original
-allocation path unchanged. A returning account finds its earlier record and receives
-the original native client number before K2 sends NETCMD 0x50, registers the transport,
-or calls into game.dll. Account zero is excluded so internal pseudo clients retain stock
-allocation behavior, and `CClientConnection + 0x14` remains untouched at the stock zero
-value.
+The gateway marks a C0 as reconnecting only when it has already retired that exact
+authenticated cookie. K2 converts that private marker into a short-lived connection-ID
+sentinel before calling the allocator. Fresh admissions retain a zero ID and therefore
+cannot enter retained-record lookup or steal a live player's native client number. The
+explicit reconnect path may inspect connectionless local records and compares their
+authenticated account directly. A returning account receives its original native
+client number before K2 sends NETCMD 0x50, registers the transport, or calls into
+game.dll. Internal pseudo clients retain stock allocation behavior.
 
 Changing `CClientConnection + 0x08` later inside game.dll was unsafe: K2 had already
 registered the new number, producing split transport/player identity, the black

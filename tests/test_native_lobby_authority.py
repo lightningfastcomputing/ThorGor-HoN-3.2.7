@@ -69,7 +69,11 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
             for flags in (0, 7, 0x100, 0xFFFFFFFF):
                 with self.subTest(marker=marker, flags=flags):
                     expected = flags & ~7 | (7 if marker & 1 else 0)
-                    self.assertEqual(self.admit(marker, flags), (expected, 0x80000007, 0))
+                    expected_connection_id = authority.RECONNECT_CONNECTION_ID if marker & 2 else 0
+                    self.assertEqual(
+                        self.admit(marker, flags),
+                        (expected, 0x80000007, expected_connection_id),
+                    )
                     self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), self.stack)
                     self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EBX), self.client)
 
@@ -88,7 +92,9 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
             struct.pack("<IIHBB", 1, account_id, 0, 1, 0)
             + struct.pack("<IIHBB", 2, 0x80000008, 0, 1, 0),
         )
-        self.vm.mem_write(connection_id, b"\0\0")
+        self.vm.mem_write(
+            connection_id, struct.pack("<H", authority.RECONNECT_CONNECTION_ID)
+        )
         self.vm.mem_write(
             stack,
             struct.pack("<III", return_address, connection_id, account_id),
@@ -100,7 +106,7 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EAX), 1)
         self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), stack + 12)
 
-    def test_generate_client_id_does_not_reuse_zero_or_unknown_account(self):
+    def test_generate_client_id_does_not_reuse_during_normal_admission(self):
         host = self.client
         connection_id = self.client + 0x1000
         records = self.client + 0x2000
@@ -110,9 +116,13 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         self.vm.mem_write(host + 0x168, struct.pack("<I", records + 12))
         self.vm.mem_write(records, struct.pack("<IIHBB", 1, 0, 0, 1, 0))
 
-        for account_id in (0, 0x80000009):
-            with self.subTest(account_id=account_id):
-                self.vm.mem_write(connection_id, b"\0\0")
+        for account_id, candidate_connection_id in (
+            (0, 0xDCD8),
+            (0x80000007, 0),
+            (0x80000009, 0),
+        ):
+            with self.subTest(account_id=account_id, connection_id=candidate_connection_id):
+                self.vm.mem_write(connection_id, struct.pack("<H", candidate_connection_id))
                 self.vm.mem_write(
                     stack,
                     struct.pack("<III", self.client + 0x3000, connection_id, account_id),
