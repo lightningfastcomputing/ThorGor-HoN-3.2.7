@@ -28,12 +28,15 @@ field before calling this allocator. Restoring that field on a fresh connection 
 unsafe and terminated the dedicated slave during game creation.
 
 The allocator now gates its retained-record lookup on a nonzero authenticated account
-ID and compares that account directly. A first-time account has no retained record and
-uses the original allocation path unchanged. A returning account finds its earlier
-record and receives the original native client number before K2 sends NETCMD 0x50,
-registers the transport, or calls into game.dll. Account zero is excluded so internal
-pseudo clients retain stock allocation behavior, and `CClientConnection + 0x14` remains
-untouched at the stock zero value.
+ID and compares that account directly. The stock lookup also excluded allocation
+records whose connection ID was initially zero; those are precisely the records created
+by local admission, so the account-based path deliberately ignores that obsolete state
+filter. A first-time account still has no matching record and uses the original
+allocation path unchanged. A returning account finds its earlier record and receives
+the original native client number before K2 sends NETCMD 0x50, registers the transport,
+or calls into game.dll. Account zero is excluded so internal pseudo clients retain stock
+allocation behavior, and `CClientConnection + 0x14` remains untouched at the stock zero
+value.
 
 Changing `CClientConnection + 0x08` later inside game.dll was unsafe: K2 had already
 registered the new number, producing split transport/player identity, the black

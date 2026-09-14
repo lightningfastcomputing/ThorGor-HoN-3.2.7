@@ -34,6 +34,10 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
             bytes.fromhex("558B6C241C85ED565790909090"),
         )
         self.assertEqual(
+            operations[creator_authority.GENERATE_ID_LOCAL_STATE_RVA],
+            b"\x90" * 6,
+        )
+        self.assertEqual(
             operations[creator_authority.GENERATE_ID_COMPARE_RVA],
             bytes.fromhex("39680490"),
         )

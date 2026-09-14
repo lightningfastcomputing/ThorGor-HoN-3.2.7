@@ -1,11 +1,11 @@
 {
   "id": "dedicated.creator_authority",
   "binary": "k2.dll",
-  "version": "3.2.7.1-v77+creator-authority+account-reconnect-allocation",
+  "version": "3.2.7.1-v77+creator-authority+local-account-reconnect-allocation",
   "source_sha256": "25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026",
-  "output_sha256": "9EA575796AA4985F844B4A4A67A1C1A6EF459F5B5E3C5C5228E6220C90C3B38E",
+  "output_sha256": "F786173B9A40CE1B06F17B5034F3891867EE3F767ED14EABDD6FCEAB2FDD847D",
   "reason": "Use authenticated creator authority and make K2 reclaim a retained native client number by the returning player's stable account identity.",
-  "observed_failure": "Restoring a nonzero C0 connection ID before first admission crashed the dedicated slave; leaving that field stock-zero and matching retained allocations by authenticated account identity isolates reconnect from fresh game creation.",
+  "observed_failure": "Local admission marks retained client-number records with a zero-connection state that the stock lookup excludes, so reconnect allocated a new native client number and game.dll rejected it as disconnect_client_number_mismatch. The authenticated nonzero-account lookup now includes those local records while fresh and internal clients retain the original allocation path.",
   "discovered": "2026-09-07",
   "evidence": ["docs/LOBBY_AUTHORITY.md", "tests/test_lobby_authority.py", "tests/test_native_lobby_authority.py"],
   "implementation": {"kind": "stable_builder", "path": "patches/builders/creator_authority.py"}

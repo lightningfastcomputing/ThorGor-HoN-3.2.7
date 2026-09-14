@@ -85,8 +85,8 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         self.vm.mem_write(host + 0x168, struct.pack("<I", records + 24))
         self.vm.mem_write(
             records,
-            struct.pack("<IIHBB", 1, account_id, 0, 0, 0)
-            + struct.pack("<IIHBB", 2, 0x80000008, 0, 0, 0),
+            struct.pack("<IIHBB", 1, account_id, 0, 1, 0)
+            + struct.pack("<IIHBB", 2, 0x80000008, 0, 1, 0),
         )
         self.vm.mem_write(connection_id, b"\0\0")
         self.vm.mem_write(
@@ -108,7 +108,7 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         allocation_path = self.base + 0x2F1BD2
         self.vm.mem_write(host + 0x164, struct.pack("<I", records))
         self.vm.mem_write(host + 0x168, struct.pack("<I", records + 12))
-        self.vm.mem_write(records, struct.pack("<IIHBB", 1, 0, 0, 0, 0))
+        self.vm.mem_write(records, struct.pack("<IIHBB", 1, 0, 0, 1, 0))
 
         for account_id in (0, 0x80000009):
             with self.subTest(account_id=account_id):
