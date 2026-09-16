@@ -126,14 +126,32 @@ class LobbyAuthorityTests(unittest.TestCase):
                 )
                 self.assertEqual(state["pending_host_account_id"], 1)
 
-    def test_gateway_marks_only_an_authenticated_reconnect(self):
+    def test_reconnect_marker_is_authenticated_and_disjoint_from_account_id(self):
+        original = connection("", marker=0xFF)
+        parsed = parse_connect_c0(original)
+        changed = make_authorized_local_c0(
+            original,
+            parsed,
+            is_match_host=False,
+            is_reconnect=True,
+            account_id=7,
+            connection_id=0x8001,
+        )
+        self.assertEqual(
+            struct.unpack_from("<I", changed, parsed.account_id_offset)[0],
+            0xC0000007,
+        )
+        self.assertEqual(parse_connect_c0(changed).connection_id, 0x8001)
+        self.assertEqual(changed[parsed.flag_offset] & 3, 0)
+
+    def test_gateway_marker_carries_only_authenticated_creator_authority(self):
         original = connection("", marker=0xFF)
         parsed = parse_connect_c0(original)
         fresh = make_authorized_local_c0(
-            original, parsed, is_match_host=False, is_reconnect=False, account_id=7
+            original, parsed, is_match_host=False, account_id=7
         )
         returning = make_authorized_local_c0(
-            original, parsed, is_match_host=False, is_reconnect=True, account_id=7
+            original, parsed, is_match_host=False, account_id=7
         )
         self.assertEqual(fresh[parsed.flag_offset] & 3, 0)
-        self.assertEqual(returning[parsed.flag_offset] & 3, 2)
+        self.assertEqual(returning[parsed.flag_offset] & 3, 0)

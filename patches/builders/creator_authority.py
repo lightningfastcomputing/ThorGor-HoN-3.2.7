@@ -12,9 +12,7 @@ from pathlib import Path
 from thorgor.patches.engine import _rva_to_file, sha256
 
 SOURCE_SHA256 = "25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026"
-OUTPUT_SHA256 = "3A8AC75E915DEC1BA52BAF0C132F348BC1B129A63B737B3F9E1D46728538B6A7"
-GENERATE_ID_RECONNECT_MARKER_RVA = 0x2F1BA7
-GENERATE_ID_COMPARE_RVA = 0x2F1BAD
+OUTPUT_SHA256 = "B0CFEA2ACE1EAF7D7F8CE66C4D8750775A2A18AE22521C47C94EA5A6B4CA375E"
 MARKER_REJECTION_RVA = 0x2F5982
 HOOK_RVA = 0x2F5AD6
 RETURN_RVA = 0x2F5ADD
@@ -30,11 +28,8 @@ def jump(source: int, target: int) -> bytes:
 def authority_stub() -> bytes:
     code = bytes.fromhex(
         "8b45b8"          # load the authenticated local-only account identity
-        "89430c"          # retain it in CClientConnection for CPlayer creation/reconnect
-        "f645ef02"        # test authenticated proxy reconnect marker bit
-        "7407"            # leave first-time admissions connectionless
-        "8b45e8"          # load the gateway's encoded native client number
-        "66894314"         # expose it only to reconnect allocation
+        "25ffffffbf"      # remove private reconnect marker from the account
+        "89430c"          # retain normalized account identity
         "83a3cc000000f8"  # clear the composite local/admin/host bits
         "f645ef01"        # test byte [ebp-0x11],1: approved creator only
         "7407"            # skip granting creator bits for ordinary joiners
@@ -42,25 +37,9 @@ def authority_stub() -> bytes:
     )
     return code + jump(CAVE_RVA + len(code), RETURN_RVA)
 
-
 def operations() -> tuple[tuple[int, bytes, bytes], ...]:
     code = authority_stub()
     return (
-        # Stock K2 enters retained-record lookup only with a nonzero connection
-        # ID. On reconnect the gateway encodes the exact native client number
-        # observed in K2's original NETCMD 0x50. Match that number and then the
-        # authenticated account below. Fresh admissions remain on the original
-        # unique-allocation path.
-        (
-            GENERATE_ID_RECONNECT_MARKER_RVA,
-            bytes.fromhex("80780a007506"),
-            bytes.fromhex("381075089090"),
-        ),
-        (
-            GENERATE_ID_COMPARE_RVA,
-            bytes.fromhex("66395008"),
-            bytes.fromhex("39680490"),
-        ),
         # Enter the proven local constructor even for a creator-marked C0.
         (MARKER_REJECTION_RVA, bytes.fromhex("0f859a020000"), b"\x90" * 6),
         (HOOK_RVA, bytes.fromhex("838bcc00000007"), jump(HOOK_RVA, CAVE_RVA) + b"\x90\x90"),

@@ -11,10 +11,8 @@ from thorgor.protocols.game_protocol import (
     make_reconnect_info_reply,
     parse_reconnect_info_request,
     parse_server_client_assignment,
-    reconnect_connection_id,
     reserve_loopback_source,
     reserve_identity_source,
-    stable_connection_id_for_account,
 )
 
 
@@ -23,7 +21,7 @@ def player(cookie: str):
 
 
 class BrowserOccupancyTests(unittest.TestCase):
-    def test_native_client_number_round_trips_into_reconnect_allocator_token(self):
+    def test_native_client_number_is_parsed_for_diagnostics(self):
         packet = (
             b"\0\0\3"
             + struct.pack("<I", 9)
@@ -32,17 +30,12 @@ class BrowserOccupancyTests(unittest.TestCase):
             + b"\0"
         )
         self.assertEqual(parse_server_client_assignment(packet), 7)
-        self.assertEqual(reconnect_connection_id(7), 0x8007)
         for malformed in (
             b"",
             packet[:7] + b"\x51" + packet[8:],
             packet[:10] + struct.pack("<I", 256) + b"\0",
         ):
             self.assertIsNone(parse_server_client_assignment(malformed))
-        for invalid in (-1, 256):
-            with self.assertRaises(ValueError):
-                reconnect_connection_id(invalid)
-
     def test_live_lobby_tracks_authenticated_players(self):
         for count in range(1, 11):
             connections = [player(f"cookie-{index}") for index in range(count)]
@@ -136,13 +129,6 @@ class BrowserOccupancyTests(unittest.TestCase):
         self.assertEqual(local_account_id_from_cookie("THORGOR_LOCAL_COOKIE_00000003"), 3)
         for cookie in ("cookie", "THORGOR_LOCAL_COOKIE_3", "THORGOR_LOCAL_COOKIE_00000000"):
             self.assertIsNone(local_account_id_from_cookie(cookie))
-
-    def test_local_account_maps_to_stable_nonzero_native_connection_id(self):
-        self.assertEqual(stable_connection_id_for_account(1), 1)
-        self.assertEqual(stable_connection_id_for_account(3), 3)
-        self.assertEqual(stable_connection_id_for_account(0x10000), 1)
-        with self.assertRaises(ValueError):
-            stable_connection_id_for_account(0)
 
     def test_reconnect_reply_requires_same_live_match_and_unexpired_leaver(self):
         request = parse_reconnect_info_request(

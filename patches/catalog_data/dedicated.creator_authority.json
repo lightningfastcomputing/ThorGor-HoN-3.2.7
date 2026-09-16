@@ -1,11 +1,11 @@
 {
   "id": "dedicated.creator_authority",
   "binary": "k2.dll",
-  "version": "3.2.7.1-v77+creator-authority+verified-client-number-reconnect",
+  "version": "3.2.7.1-v77+creator-authority+account-reconnect",
   "source_sha256": "25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026",
-  "output_sha256": "3A8AC75E915DEC1BA52BAF0C132F348BC1B129A63B737B3F9E1D46728538B6A7",
-  "reason": "Use authenticated creator authority and make K2 reclaim the exact retained native client number observed during the player's original admission.",
-  "observed_failure": "The explicit reconnect marker reached K2 with the correct account, but account-only allocation lookup still returned a different client number and game.dll rejected it as disconnect_client_number_mismatch. The gateway now retains K2's original NETCMD 0x50 client number and reconnect admission validates that exact number together with the authenticated account.",
+  "output_sha256": "B0CFEA2ACE1EAF7D7F8CE66C4D8750775A2A18AE22521C47C94EA5A6B4CA375E",
+  "reason": "Keep normal and reconnect C0 admission on K2's stock fresh-allocation path while preserving a normalized authenticated account for game-layer player selection.",
+  "observed_failure": "K2 no longer retained the disconnected allocation record, so private lookup tokens still produced a new client number. Copying the old number back into that registered connection split K2 transport identity and terminated the slave.",
   "discovered": "2026-09-07",
   "evidence": ["docs/LOBBY_AUTHORITY.md", "tests/test_lobby_authority.py", "tests/test_native_lobby_authority.py"],
   "implementation": {"kind": "stable_builder", "path": "patches/builders/creator_authority.py"}

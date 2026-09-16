@@ -17,24 +17,25 @@ lobby portraits with the Chiprel fallback. The K2 admission patch preserves this
 in `CClientConnection + 0x0c` and no longer clears it before CPlayer initialization.
 Both the initial connection and the returning C0 receive the same value.
 
-game.dll retains both verified stock identity predicates: it compares `CPlayer + 0x258`
-with `CClientConnection + 0x0c`, then compares the saved native client number at
-`CPlayer + 0x6c` with `CClientConnection + 0x08`.
+game.dll retains the verified account predicate: it compares `CPlayer + 0x258` with
+`CClientConnection + 0x0c`. Once that selects the correct disconnected player, the
+handoff copies K2's authoritative new transport number from `CClientConnection + 0x08`
+into `CPlayer + 0x6c` before entering the stock reconnect-success path.
 
 Ghidra analysis of `CHostServer::GenerateClientID(unsigned short &, int)` established
-that K2 retains allocation records containing the native client number, account ID,
-connection ID, and state byte. Local admission deliberately clears the C0 connection-ID
-field before calling this allocator. Restoring that field on a fresh connection proved
-unsafe and terminated the dedicated slave during game creation.
+that this allocator runs before `game.dll` receives the connection. Its retained record
+contains the native client number, account ID, C0 connection ID, and connection state.
+When the connection ID is nonzero, stock K2 matches the disconnected record by that ID
+and account, then returns the record's original native client number.
 
-The gateway records the native client number in K2's original NETCMD 0x50 response and
-marks a C0 as reconnecting only after it has retired that exact authenticated cookie.
-For that path it encodes the recorded number in a private connection-ID token. Fresh
-admissions retain a zero ID and therefore cannot enter retained-record lookup or steal
-a live player's native client number. The explicit reconnect path validates both the
-requested retained number and authenticated account. A returning account receives its
-original native client number before K2 registers the replacement transport or calls
-into game.dll. Internal pseudo clients retain stock allocation behavior.
+Normal admission leaves K2's persistent connection field cleared exactly as the retail
+local path expects. Temporary handshake IDs are forwarded but never copied into the
+player record; doing so terminated the slave during server selection or game creation.
+
+Only a route that the authenticated gateway has retired is marked as reconnecting. The
+gateway uses a private account marker which K2 removes before game admission. K2 keeps
+its stock fresh-client allocation because the disconnected transport allocation record
+does not survive; game.dll then transfers that new number into the retained player.
 
 Changing `CClientConnection + 0x08` later inside game.dll was unsafe: K2 had already
 registered the new number, producing split transport/player identity, the black
@@ -48,3 +49,16 @@ rejects the loaded DLL, the dedicated process keeps
 the `0xFFFFFFFF` sentinel. Clients then probe reconnect availability with that invalid
 match ID, and the gateway correctly returns zero time remaining, so no reconnect dialog
 can appear.
+
+## v14 flow milestone
+
+The 2026-09-16 two-client test established the first stable end-to-end reconnect flow:
+the reconnect dialog appeared, the returning client entered the running game, and the
+slave remained alive. This is preserved by the Git tag
+`reconnect-v14-flow-milestone`.
+
+The remaining defect is player ownership. A disconnected `player2` returned as
+`player`, disrupting the match. The transport handoff is therefore stable enough to
+reach game admission, but the retained `CPlayer` selection or final ownership binding
+still resolves to the creator instead of the authenticated returning account. Do not
+describe v14 as a complete reconnect implementation.

@@ -5,6 +5,8 @@ import struct
 
 from .packet_decoding import ConnectC0
 
+RECONNECT_ACCOUNT_MARKER = 0x40000000
+
 
 def build_proxy_challenge(server_creation_timestamp: int, value: int) -> bytes:
     if not 0 < server_creation_timestamp <= 0xFFFFFFFF:
@@ -33,7 +35,7 @@ def make_authorized_local_c0(
     """
     if not 0 <= packet.flag_offset < len(data):
         raise ValueError("external-auth flag offset is outside packet")
-    if not 0 < account_id < 0x7FFFFFFF:
+    if not 0 < account_id < RECONNECT_ACCOUNT_MARKER:
         raise ValueError("account ID must fit the local native identity namespace")
     if not 0 <= packet.account_id_offset <= len(data) - 4:
         raise ValueError("account ID offset is outside packet")
@@ -43,7 +45,11 @@ def make_authorized_local_c0(
     # K2/game.dll need a stable, unique account identity to associate a new
     # transport with a disconnected CPlayer.  Keep it negative when interpreted
     # as int32 so retail profile/avatar lookup still treats this as a local user.
-    native_account_id = 0x80000000 | account_id
+    native_account_id = (
+        0x80000000
+        | account_id
+        | (RECONNECT_ACCOUNT_MARKER if is_reconnect else 0)
+    )
     struct.pack_into("<I", rewritten, packet.account_id_offset, native_account_id)
     if connection_id is not None:
         connection_id_offset = (
@@ -55,11 +61,10 @@ def make_authorized_local_c0(
         if connection_id_offset + 2 > len(rewritten):
             raise ValueError("connection ID offset is outside packet")
         struct.pack_into("<H", rewritten, connection_id_offset, connection_id)
-    # Bits zero and one are private decisions made by the authenticated proxy:
-    # creator authority and an explicit reconnect admission, respectively.
+    # K2 masks this byte to bit zero, so it carries creator authority only.
+    # Reconnect admission is carried in the authenticated account namespace;
+    # the paired K2 hook removes that marker before the game sees the account.
     rewritten[packet.flag_offset] = (
-        (rewritten[packet.flag_offset] & 0xFC)
-        | int(is_match_host)
-        | (int(is_reconnect) << 1)
+        (rewritten[packet.flag_offset] & 0xFC) | int(is_match_host)
     )
     return bytes(rewritten)

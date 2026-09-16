@@ -57,6 +57,8 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         self.vm.mem_write(self.frame - 0x48, struct.pack("<I", native_account_id))
         self.vm.mem_write(self.frame - 0x18, struct.pack("<I", connection_id))
         self.vm.mem_write(self.client + 0xCC, struct.pack("<I", flags))
+        # Stock C0 admission clears this field at RVA 0x2F5A8C before our hook.
+        self.vm.mem_write(self.client + 0x14, bytes(2))
         self.vm.emu_start(self.base + authority.HOOK_RVA, self.base + authority.RETURN_RVA, count=100)
         return (
             struct.unpack("<I", self.vm.mem_read(self.client + 0xCC, 4))[0],
@@ -64,49 +66,23 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
             struct.unpack("<H", self.vm.mem_read(self.client + 0x14, 2))[0],
         )
 
-    def test_actual_hook_grants_only_marker_bit_zero_and_preserves_other_flags(self):
-        for marker in (0, 1, 2, 3, 0xFE, 0xFF):
+    def test_actual_hook_leaves_normal_connection_field_cleared(self):
+        for marker in (0, 1):
             for flags in (0, 7, 0x100, 0xFFFFFFFF):
                 with self.subTest(marker=marker, flags=flags):
-                    expected = flags & ~7 | (7 if marker & 1 else 0)
-                    expected_connection_id = 7 if marker & 2 else 0
+                    expected = flags & ~7 | (7 if marker else 0)
                     self.assertEqual(
-                        self.admit(marker, flags),
-                        (expected, 0x80000007, expected_connection_id),
+                        self.admit(marker, flags, connection_id=0xC5F8),
+                        (expected, 0x80000007, 0),
                     )
-                    self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), self.stack)
-                    self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EBX), self.client)
 
-    def test_generate_client_id_reuses_an_authenticated_account_allocation(self):
-        host = self.client
-        connection_id = self.client + 0x1000
-        records = self.client + 0x2000
-        return_address = self.client + 0x3000
-        stack = self.stack
-        account_id = 0x80000007
-
-        self.vm.mem_write(host + 0x164, struct.pack("<I", records))
-        self.vm.mem_write(host + 0x168, struct.pack("<I", records + 24))
-        self.vm.mem_write(
-            records,
-            struct.pack("<IIHBB", 0, account_id, 0, 1, 0)
-            + struct.pack("<IIHBB", 1, account_id, 0, 1, 0),
+    def test_actual_hook_normalizes_marked_reconnect_without_transport_token(self):
+        self.assertEqual(
+            self.admit(0, 0, native_account_id=0xC0000007, connection_id=0x8001),
+            (0, 0x80000007, 0),
         )
-        self.vm.mem_write(
-            connection_id, struct.pack("<H", 0x8001)
-        )
-        self.vm.mem_write(
-            stack,
-            struct.pack("<III", return_address, connection_id, account_id),
-        )
-        self.vm.reg_write(reg.UC_X86_REG_ECX, host)
-        self.vm.reg_write(reg.UC_X86_REG_ESP, stack)
-        self.vm.emu_start(self.base + 0x2F1B80, return_address, count=100)
 
-        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EAX), 1)
-        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), stack + 12)
-
-    def test_generate_client_id_does_not_reuse_during_normal_admission(self):
+    def test_stock_generate_client_id_allocates_when_no_retained_identity_matches(self):
         host = self.client
         connection_id = self.client + 0x1000
         records = self.client + 0x2000
@@ -117,9 +93,9 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         self.vm.mem_write(records, struct.pack("<IIHBB", 1, 0, 0, 1, 0))
 
         for account_id, candidate_connection_id in (
-            (0, 0xDCD8),
-            (0x80000007, 0),
-            (0x80000009, 0),
+            (0, 0),
+            (0x80000007, 7),
+            (0x80000009, 3),
         ):
             with self.subTest(account_id=account_id, connection_id=candidate_connection_id):
                 self.vm.mem_write(connection_id, struct.pack("<H", candidate_connection_id))
@@ -178,20 +154,21 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         guard_offset = pe.get_offset_from_rva(0x333DD)
         self.assertEqual(
             self.game[guard_offset:guard_offset + 8],
-            bytes.fromhex("8B406C3B47087416"),
+            bytes.fromhex("8B570889506CEB16"),
         )
 
         self.vm.mem_map(base, (pe.OPTIONAL_HEADER.SizeOfImage + 4095) & ~4095)
         self.vm.mem_write(base, pe.get_memory_mapped_image())
         player = self.client + 0x1000
         self.vm.mem_write(player + 0x6C, struct.pack("<I", 1))
-        self.vm.mem_write(self.client + 0x08, struct.pack("<I", 3))
+        self.vm.mem_write(self.client + 0x08, struct.pack("<I", 2))
         self.vm.reg_write(reg.UC_X86_REG_EAX, player)
         self.vm.reg_write(reg.UC_X86_REG_EDI, self.client)
-        self.vm.emu_start(base + 0x333DD, base + 0x333FB, count=3)
-        self.assertNotEqual(self.vm.reg_read(reg.UC_X86_REG_EIP), base + 0x333FB)
-        retained = struct.unpack("<I", self.vm.mem_read(self.client + 0x08, 4))[0]
-        self.assertEqual(retained, 3)
+        self.vm.emu_start(base + 0x333DD, base + 0x333FB, count=4)
+        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EIP), base + 0x333FB)
+        self.assertEqual(struct.unpack("<I", self.vm.mem_read(self.client + 0x08, 4))[0], 2)
+        adopted = struct.unpack("<I", self.vm.mem_read(player + 0x6C, 4))[0]
+        self.assertEqual(adopted, 2)
 
     def test_exact_hashes_idempotence_and_rejected_input(self):
         self.assertEqual(sha256(self.image), authority.OUTPUT_SHA256)

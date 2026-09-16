@@ -19,24 +19,18 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
         reconnect = PatchCatalog().get("dedicated.reconnect_client_identity")
         account_match, client_number_guard = reconnect.operations
         self.assertEqual(account_match.replacement, bytes.fromhex("8B82580200003B470C757A"))
-        self.assertEqual(client_number_guard.replacement, bytes.fromhex("8B406C3B47087416"))
+        self.assertEqual(client_number_guard.replacement, bytes.fromhex("8B570889506CEB16"))
         self.assertEqual(client_number_guard.offset + 8 + 0x16, 0x333FB)
 
-    def test_k2_hook_preserves_account_without_mutating_connection_id(self):
+    def test_k2_hook_separates_normal_admission_from_reconnect(self):
         stub = creator_authority.authority_stub()
-        self.assertTrue(stub.startswith(bytes.fromhex("8B45B889430C")))
+        self.assertTrue(stub.startswith(bytes.fromhex("8B45B825FFFFFFBF89430C")))
         self.assertLessEqual(len(stub), 0x40)
 
-    def test_k2_allocator_matches_retained_record_by_nonzero_account(self):
-        operations = {rva: replacement for rva, _, replacement in creator_authority.operations()}
-        self.assertEqual(
-            operations[creator_authority.GENERATE_ID_RECONNECT_MARKER_RVA],
-            bytes.fromhex("381075089090"),
-        )
-        self.assertEqual(
-            operations[creator_authority.GENERATE_ID_COMPARE_RVA],
-            bytes.fromhex("39680490"),
-        )
+    def test_k2_allocator_remains_stock(self):
+        patched_rvas = {rva for rva, _, _ in creator_authority.operations()}
+        self.assertNotIn(0x2F1B95, patched_rvas)
+        self.assertNotIn(0x2F1BA7, patched_rvas)
 
 
 if __name__ == "__main__":
