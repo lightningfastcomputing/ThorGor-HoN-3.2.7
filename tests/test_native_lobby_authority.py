@@ -76,11 +76,35 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
                         (expected, 0x80000007, 0),
                     )
 
-    def test_actual_hook_normalizes_marked_reconnect_without_transport_token(self):
+    def test_actual_hook_normalizes_marked_reconnect_and_exposes_transport_token(self):
         self.assertEqual(
             self.admit(0, 0, native_account_id=0xC0000007, connection_id=0x8001),
-            (0, 0x80000007, 0),
+            (0, 0x80000007, 0x8001),
         )
+
+    def test_generate_client_id_reuses_gateway_authenticated_native_number(self):
+        host = self.client
+        connection_id = self.client + 0x1000
+        records = self.client + 0x2000
+        return_address = self.client + 0x3000
+        account_id = 0x80000007
+        self.vm.mem_write(host + 0x164, struct.pack("<I", records))
+        self.vm.mem_write(host + 0x168, struct.pack("<I", records + 24))
+        self.vm.mem_write(
+            records,
+            struct.pack("<IIHBB", 0, 0, 0, 1, 0)
+            + struct.pack("<IIHBB", 1, 0, 0, 1, 0),
+        )
+        self.vm.mem_write(connection_id, struct.pack("<H", 0x8001))
+        self.vm.mem_write(
+            self.stack,
+            struct.pack("<III", return_address, connection_id, account_id),
+        )
+        self.vm.reg_write(reg.UC_X86_REG_ECX, host)
+        self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
+        self.vm.emu_start(self.base + 0x2F1B80, return_address, count=100)
+        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EAX), 1)
+        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), self.stack + 12)
 
     def test_stock_generate_client_id_allocates_when_no_retained_identity_matches(self):
         host = self.client
@@ -154,21 +178,21 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         guard_offset = pe.get_offset_from_rva(0x333DD)
         self.assertEqual(
             self.game[guard_offset:guard_offset + 8],
-            bytes.fromhex("8B570889506CEB16"),
+            bytes.fromhex("8B406C3B47087416"),
         )
 
         self.vm.mem_map(base, (pe.OPTIONAL_HEADER.SizeOfImage + 4095) & ~4095)
         self.vm.mem_write(base, pe.get_memory_mapped_image())
         player = self.client + 0x1000
         self.vm.mem_write(player + 0x6C, struct.pack("<I", 1))
-        self.vm.mem_write(self.client + 0x08, struct.pack("<I", 2))
+        self.vm.mem_write(self.client + 0x08, struct.pack("<I", 1))
         self.vm.reg_write(reg.UC_X86_REG_EAX, player)
         self.vm.reg_write(reg.UC_X86_REG_EDI, self.client)
-        self.vm.emu_start(base + 0x333DD, base + 0x333FB, count=4)
+        self.vm.emu_start(base + 0x333DD, base + 0x333FB, count=3)
         self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EIP), base + 0x333FB)
-        self.assertEqual(struct.unpack("<I", self.vm.mem_read(self.client + 0x08, 4))[0], 2)
-        adopted = struct.unpack("<I", self.vm.mem_read(player + 0x6C, 4))[0]
-        self.assertEqual(adopted, 2)
+        self.assertEqual(struct.unpack("<I", self.vm.mem_read(self.client + 0x08, 4))[0], 1)
+        retained = struct.unpack("<I", self.vm.mem_read(player + 0x6C, 4))[0]
+        self.assertEqual(retained, 1)
 
     def test_exact_hashes_idempotence_and_rejected_input(self):
         self.assertEqual(sha256(self.image), authority.OUTPUT_SHA256)

@@ -1,11 +1,11 @@
 {
   "id": "dedicated.creator_authority",
   "binary": "k2.dll",
-  "version": "3.2.7.1-v77+creator-authority+account-reconnect",
+  "version": "3.2.7.1-v77+creator-authority+native-number-reconnect",
   "source_sha256": "25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026",
-  "output_sha256": "B0CFEA2ACE1EAF7D7F8CE66C4D8750775A2A18AE22521C47C94EA5A6B4CA375E",
-  "reason": "Keep normal and reconnect C0 admission on K2's stock fresh-allocation path while preserving a normalized authenticated account for game-layer player selection.",
-  "observed_failure": "K2 no longer retained the disconnected allocation record, so private lookup tokens still produced a new client number. Copying the old number back into that registered connection split K2 transport identity and terminated the slave.",
+  "output_sha256": "F12FB7FAF72024B65F740359EAFCD80AD766EC501DA69F5C817E8112BEF6527B",
+  "reason": "On authenticated reconnect, reclaim the gateway-observed retained K2 client number before game-layer player selection; normal admissions retain stock allocation.",
+  "observed_failure": "Fresh allocation assigned client 2 to returning player2 while the retained player and IGame map remained keyed as client 1, producing the wrong local player after an otherwise successful live-state load.",
   "discovered": "2026-09-07",
   "evidence": ["docs/LOBBY_AUTHORITY.md", "tests/test_lobby_authority.py", "tests/test_native_lobby_authority.py"],
   "implementation": {"kind": "stable_builder", "path": "patches/builders/creator_authority.py"}

@@ -7,7 +7,7 @@ from unittest.mock import patch
 from thorgor.master.host_authority import classify_match_host
 from thorgor.protocols.admission import authorize_connect_c0, validate_c_conn_response
 from thorgor.protocols.packet_decoding import parse_connect_c0
-from thorgor.protocols.transport import make_authorized_local_c0
+from thorgor.protocols.transport import make_authorized_local_c0, reconnect_connection_id
 
 
 def connection(key="", marker=0, account_id=7):
@@ -125,6 +125,14 @@ class LobbyAuthorityTests(unittest.TestCase):
                     0x80000000 | account,
                 )
                 self.assertEqual(state["pending_host_account_id"], 1)
+
+    def test_reconnect_connection_id_encodes_the_retained_native_number(self):
+        self.assertEqual(reconnect_connection_id(0), 0x8000)
+        self.assertEqual(reconnect_connection_id(1), 0x8001)
+        self.assertEqual(reconnect_connection_id(255), 0x80FF)
+        for invalid in (-1, 256):
+            with self.assertRaises(ValueError):
+                reconnect_connection_id(invalid)
 
     def test_reconnect_marker_is_authenticated_and_disjoint_from_account_id(self):
         original = connection("", marker=0xFF)

@@ -691,7 +691,11 @@ from thorgor.protocols.tracing import (
     extract_picker_hero_block_suffix,
     repair_truncated_picker_packet,
 )
-from thorgor.protocols.transport import build_proxy_challenge, make_authorized_local_c0
+from thorgor.protocols.transport import (
+    build_proxy_challenge,
+    make_authorized_local_c0,
+    reconnect_connection_id,
+)
 from thorgor.protocols.routing import ClientRoute, RouteTable
 
 
@@ -1007,7 +1011,7 @@ def main(argv=None) -> int:
     )
     source_path = Path(__file__).resolve()
     source_digest = hashlib.sha256(source_path.read_bytes()).hexdigest()[:12]
-    log(f"SOURCE path={source_path} sha256={source_digest} reconnect_transport=account-player-transfer-v14")
+    log(f"SOURCE path={source_path} sha256={source_digest} reconnect_transport=native-number-reuse-v15")
     if args.preset:
         log(f"PRESET {args.preset}")
     if args.joiner_team_chat_fallback:
@@ -1733,13 +1737,22 @@ def main(argv=None) -> int:
                     )
                     is_reconnect = connect.cookie in retired_route_by_cookie
                     reconnect_client_number = native_client_number_by_cookie.get(connect.cookie)
+                    if is_reconnect and reconnect_client_number is None:
+                        log(
+                            f"C0_AUTH_REJECT client={addr[0]}:{addr[1]} "
+                            f"user={connect.username!r} reason=missing retained native client number"
+                        )
+                        continue
                     data = make_authorized_local_c0(
                         data,
                         connect,
                         is_match_host=is_match_host,
                         is_reconnect=is_reconnect,
                         account_id=account_id,
-                        connection_id=None,
+                        connection_id=(
+                            reconnect_connection_id(reconnect_client_number)
+                            if is_reconnect else None
+                        ),
                     )
                     # Retire any older endpoint for this identity and transfer
                     # its proxy-only team/chat metadata to the returning route.
@@ -1777,7 +1790,7 @@ def main(argv=None) -> int:
                         f"C0_AUTH_LOCALIZED client={addr[0]}:{addr[1]} "
                         f"flag_offset={connect.flag_offset} host_id_preserved=0x{connect.host_id:08X} "
                         f"wire_connection_id=0x{connect.connection_id:04X} "
-                        "slave_connection_id=0x0000 "
+                        f"slave_connection_id=0x{(reconnect_connection_id(reconnect_client_number) if is_reconnect else 0):04X} "
                         f"reconnect={int(is_reconnect)} "
                         f"native_client_number={reconnect_client_number!r} "
                         f"native_account_id=0x{(0x80000000 | account_id | (0x40000000 if is_reconnect else 0)):08X}"

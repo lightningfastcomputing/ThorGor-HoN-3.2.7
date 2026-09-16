@@ -1,11 +1,11 @@
 {
   "id": "dedicated.reconnect_client_identity",
   "binary": "game.dll",
-  "version": "3.2.7.1-native-account-reconnect-v6",
+  "version": "3.2.7.1-native-account-reconnect-v7",
   "source_sha256": "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B",
-  "output_sha256": "614EA87B07858531A6F741CB33ED8B9922F5A7D9EA8EE1DC40351437C3A1C01A",
-  "reason": "Use authenticated account identity to select the disconnected player, then adopt K2's newly allocated transport number into that retained player before the stock reconnect success path.",
-  "observed_failure": "Copying the old player number into a connection already registered by K2 under a new number split transport identity and terminated the slave. The player must adopt the connection's authoritative new number instead.",
+  "output_sha256": "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B",
+  "reason": "Keep the stock account and client-number reconnect checks; authenticated K2 admission now reclaims the retained native allocation before game.dll resolves the player.",
+  "observed_failure": "Mutating the retained CPlayer client number after K2 admission left the IGame player map keyed by the old number, causing the returning player to inherit the wrong local ownership state.",
   "discovered": "2026-09-11",
   "evidence": ["docs/RECONNECT.md", "tests/test_native_lobby_authority.py"],
   "operations": [
@@ -19,7 +19,7 @@
       "address": "rva",
       "offset": "0x333DD",
       "expected": "8B406C3B47087416",
-      "replacement": "8B570889506CEB16"
+      "replacement": "8B406C3B47087416"
     }
   ]
 }
