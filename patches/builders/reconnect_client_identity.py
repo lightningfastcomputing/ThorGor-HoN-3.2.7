@@ -14,7 +14,7 @@ from pathlib import Path
 from thorgor.patches.engine import _rva_to_file, sha256
 
 SOURCE_SHA256 = "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B"
-OUTPUT_SHA256 = "EDE947C89F2503612A5CC8835AD730DBC99D4F9D958ADA4A96129D9A58BED856"
+OUTPUT_SHA256 = "B82E4946AD23DDCE6CEC96E6255C28B5B97B155E136175146C3A6AD1C10C2984"
 
 HOOK_RVA = 0x333DD
 SUCCESS_RVA = 0x333FB
@@ -70,6 +70,11 @@ def reconnect_stub() -> bytes:
     emit(bytes.fromhex("8D74240C"))        # map operator[] key ABI: esi
     emit(bytes.fromhex("89F9"))            # map operator[] this ABI: ecx
     call(MAP_INDEX_RVA)
+    # The stock success path later loads the retained CPlayer through EBX's
+    # tree node.  ERASE_RANGE freed the original node, so preserve the newly
+    # inserted node (operator[] returned &node->mapped at node + 0x10).
+    emit(bytes.fromhex("8D48F0"))          # ecx = new tree node
+    emit(bytes.fromhex("894C2420"))        # replace saved ebx before popad
     emit(bytes.fromhex("8B54242C"))        # retained player (saved eax)
     emit(bytes.fromhex("8910"))            # new map value = retained player
     emit(bytes.fromhex("8B4C240C"))

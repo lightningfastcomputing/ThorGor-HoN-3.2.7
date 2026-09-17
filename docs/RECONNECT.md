@@ -78,3 +78,17 @@ the capacity-patched 3.2.7.1 game.dll and uses a verified executable padding cav
 instruction-level test executes the real patched bytes and verifies the erase, insert,
 player pointer, player number, register state, and stack state. The full suite contains
 69 passing tests, including 9 tests executing the patched x86 DLL instructions.
+
+The first live v16 test exposed one additional native lifetime requirement. Although
+the map was rekeyed, the surrounding reconnect function still held the erased tree node
+in EBX and later loaded `CPlayer *` through that freed node. This produced the apparent
+host/player2 ownership swap, ended the host's match, and crashed the slave roughly 17
+seconds after admission.
+
+## v17 live iterator transfer
+
+Build v17 also replaces the reconnect function's saved EBX iterator with the new tree
+node returned by `map::operator[]` (`mapped-value address - 0x10`). The stock success
+path therefore resolves the retained player through the live replacement node. The
+native emulation test now asserts this iterator transfer in addition to the map key,
+mapped player pointer, player number, register state, and stack state.

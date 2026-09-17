@@ -225,6 +225,7 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         )
         self.assertEqual(struct.unpack("<I", self.vm.mem_read(player + 0x6C, 4))[0], 2)
         self.assertEqual(struct.unpack("<I", self.vm.mem_read(mapped_value, 4))[0], player)
+        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EBX), mapped_value - 0x10)
         self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EIP), base + reconnect.SUCCESS_RVA)
         self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), self.stack)
 

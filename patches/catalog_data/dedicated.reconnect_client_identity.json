@@ -1,11 +1,11 @@
 {
   "id": "dedicated.reconnect_client_identity",
   "binary": "game.dll",
-  "version": "3.2.7.1-native-account-reconnect-v8",
+  "version": "3.2.7.1-native-account-reconnect-v9",
   "source_sha256": "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B",
-  "output_sha256": "EDE947C89F2503612A5CC8835AD730DBC99D4F9D958ADA4A96129D9A58BED856",
-  "reason": "Match the retained player by authenticated account, then atomically move its IGame map entry to K2's freshly allocated reconnect number using HoN's native tree operations.",
-  "observed_failure": "Changing only CPlayer::clientNumber left IGame's map under the old key; forcing K2 to reuse the old number instead crashed the slave's transport registry.",
+  "output_sha256": "B82E4946AD23DDCE6CEC96E6255C28B5B97B155E136175146C3A6AD1C10C2984",
+  "reason": "Match the retained player by authenticated account, atomically move its IGame map entry to K2's fresh number, and continue through the newly inserted tree node.",
+  "observed_failure": "v16 rekeyed the map but restored EBX to the erased node; the stock success path dereferenced that freed iterator, selected invalid ownership state, and later crashed the slave.",
   "discovered": "2026-09-11",
   "evidence": ["docs/RECONNECT.md", "tests/test_native_lobby_authority.py"],
   "implementation": {"kind": "stable_builder", "path": "patches/builders/reconnect_client_identity.py"}

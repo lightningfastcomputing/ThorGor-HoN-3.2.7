@@ -1007,7 +1007,7 @@ def main(argv=None) -> int:
     )
     source_path = Path(__file__).resolve()
     source_digest = hashlib.sha256(source_path.read_bytes()).hexdigest()[:12]
-    log(f"SOURCE path={source_path} sha256={source_digest} reconnect_transport=atomic-player-map-transfer-v16")
+    log(f"SOURCE path={source_path} sha256={source_digest} reconnect_transport=atomic-player-map-transfer-v17")
     if args.preset:
         log(f"PRESET {args.preset}")
     if args.joiner_team_chat_fallback:
