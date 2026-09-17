@@ -17,33 +17,28 @@ lobby portraits with the Chiprel fallback. The K2 admission patch preserves this
 in `CClientConnection + 0x0c` and no longer clears it before CPlayer initialization.
 Both the initial connection and the returning C0 receive the same value.
 
-game.dll retains both verified stock predicates: it compares `CPlayer + 0x258` with
-`CClientConnection + 0x0c`, then `CPlayer + 0x6c` with
-`CClientConnection + 0x08`. The reconnect admission must therefore restore the old
-native client number before game.dll performs those checks.
+game.dll retains the verified account predicate: it compares `CPlayer + 0x258` with
+`CClientConnection + 0x0c`. Once that selects the retained player, the v16 reconnect
+hook transfers the player to K2's freshly allocated client number before entering the
+stock success path.
 
 Ghidra analysis of `CHostServer::GenerateClientID(unsigned short &, int)` established
-that this allocator runs before `game.dll` receives the connection. Its retained record
-contains the native client number, account ID, C0 connection ID, and connection state.
-When the connection ID is nonzero, stock K2 matches the disconnected record by that ID
-and account, then returns the record's original native client number.
-
-Normal admission leaves K2's persistent connection field cleared exactly as the retail
-local path expects. On reconnect only, the gateway encodes the previously observed
-native client number in a private connection token. The authenticated K2 hook exposes
-that token to `GenerateClientID`, which locates and returns the retained allocation by
-client number. It does not trust the client-supplied token or affect fresh admissions.
+that this allocator runs before `game.dll` receives the connection. Forcing it to return
+the disconnected player's still-registered number creates two K2 connection objects for
+one transport ID. The live v15 test confirmed that collision terminates the slave before
+game.dll receives a reconnect packet. K2 therefore remains on its stock fresh-allocation
+path for every admission.
 
 Only a route that the authenticated gateway has retired is marked as reconnecting. The
 gateway uses a private account marker which K2 removes before game admission. Live v14
-evidence showed the allocation record does survive: a returning player2 received fresh
-number 2 while number 1 remained reserved. v15 reclaims number 1 inside K2, preserving
-the retained CPlayer and the `IGame + 0xfc` player-map key together.
+evidence showed the allocation record survives: returning player2 received fresh number
+2 while retained player2 and the `IGame + 0xfc` map entry remained number 1.
 
-Changing either identity later inside game.dll was unsafe: K2 had already registered
-the new number, while the player map remained keyed by the old one. That produced the
-wrong local player, black pre-match shells, and slave instability. The v14 game-layer
-number mutation has been removed.
+Changing only `CPlayer + 0x6c` was incomplete because the native player map remained
+keyed by the old number. v16 uses the game's own iterator, range-erase, and map-insert
+routines to atomically remove the old node, insert the same retained `CPlayer *` under
+the fresh number, and then update `CPlayer + 0x6c`. This keeps K2 transport identity,
+game lookup identity, and local player ownership synchronized.
 
 The server-capacity patch remains a separate prerequisite so each stage has an exact,
 verified input and output hash.
@@ -67,10 +62,19 @@ reach game admission, but the retained `CPlayer` selection or final ownership bi
 still resolves to the creator instead of the authenticated returning account. Do not
 describe v14 as a complete reconnect implementation.
 
-## v15 native-number reuse
+## v15 rejected native-number reuse
 
 The follow-up log and Ghidra analysis located the mismatch before game admission:
 player2 originally held K2 client number 1, but reconnect was freshly assigned number
-2. v15 supplies the retained number only on an authenticated retired route and patches
-`CHostServer::GenerateClientID` to return that existing allocation. game.dll is restored
-to its stock account-and-number checks, avoiding any post-registration identity rewrite.
+2. v15 attempted to reclaim number 1 inside `CHostServer::GenerateClientID`. The live
+test proved this unsafe: K2 still owned number 1, the duplicate registration killed the
+slave, and game.dll was never reached. That experiment is retained only in Git history.
+
+## v16 atomic player-map transfer
+
+Build v16 restores the stable v14 K2 admission behavior and replaces the incomplete
+single-field game patch with a native map rekey. The implementation is hash-pinned to
+the capacity-patched 3.2.7.1 game.dll and uses a verified executable padding cave. The
+instruction-level test executes the real patched bytes and verifies the erase, insert,
+player pointer, player number, register state, and stack state. The full suite contains
+69 passing tests, including 9 tests executing the patched x86 DLL instructions.

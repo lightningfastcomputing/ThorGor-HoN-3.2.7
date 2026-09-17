@@ -6,14 +6,6 @@ import struct
 from .packet_decoding import ConnectC0
 
 RECONNECT_ACCOUNT_MARKER = 0x40000000
-RECONNECT_CLIENT_NUMBER_FLAG = 0x8000
-
-
-def reconnect_connection_id(client_number: int) -> int:
-    """Encode a gateway-observed K2 client number for native record reuse."""
-    if not 0 <= client_number <= 0xFF:
-        raise ValueError("native client number must fit a uint8")
-    return RECONNECT_CLIENT_NUMBER_FLAG | client_number
 
 
 def build_proxy_challenge(server_creation_timestamp: int, value: int) -> bytes:

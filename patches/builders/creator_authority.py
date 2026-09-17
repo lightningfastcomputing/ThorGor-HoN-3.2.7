@@ -12,9 +12,7 @@ from pathlib import Path
 from thorgor.patches.engine import _rva_to_file, sha256
 
 SOURCE_SHA256 = "25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026"
-OUTPUT_SHA256 = "F12FB7FAF72024B65F740359EAFCD80AD766EC501DA69F5C817E8112BEF6527B"
-GENERATE_ID_RECONNECT_NUMBER_RVA = 0x2F1BA7
-GENERATE_ID_REUSE_RVA = 0x2F1BAD
+OUTPUT_SHA256 = "B0CFEA2ACE1EAF7D7F8CE66C4D8750775A2A18AE22521C47C94EA5A6B4CA375E"
 MARKER_REJECTION_RVA = 0x2F5982
 HOOK_RVA = 0x2F5AD6
 RETURN_RVA = 0x2F5ADD
@@ -30,10 +28,6 @@ def jump(source: int, target: int) -> bytes:
 def authority_stub() -> bytes:
     code = bytes.fromhex(
         "8b45b8"          # load the authenticated local-only account identity
-        "a900000040"      # test the private authenticated reconnect marker
-        "7407"            # leave normal admissions connectionless
-        "8b55e8"          # load the gateway's encoded native client number
-        "66895314"        # expose it only to GenerateClientID on reconnect
         "25ffffffbf"      # remove private reconnect marker from the account
         "89430c"          # retain normalized account identity
         "83a3cc000000f8"  # clear the composite local/admin/host bits
@@ -46,20 +40,6 @@ def authority_stub() -> bytes:
 def operations() -> tuple[tuple[int, bytes, bytes], ...]:
     code = authority_stub()
     return (
-        # A reconnect token contains the original K2 client number observed by
-        # the gateway. Reuse that still-retained allocation before game.dll
-        # resolves its existing CPlayer and map entry. Normal C0 admissions
-        # keep a zero connection field and never enter this lookup.
-        (
-            GENERATE_ID_RECONNECT_NUMBER_RVA,
-            bytes.fromhex("80780a007506"),
-            bytes.fromhex("381075089090"),
-        ),
-        (
-            GENERATE_ID_REUSE_RVA,
-            bytes.fromhex("66395008"),
-            bytes.fromhex("eb129090"),
-        ),
         # Enter the proven local constructor even for a creator-marked C0.
         (MARKER_REJECTION_RVA, bytes.fromhex("0f859a020000"), b"\x90" * 6),
         (HOOK_RVA, bytes.fromhex("838bcc00000007"), jump(HOOK_RVA, CAVE_RVA) + b"\x90\x90"),
