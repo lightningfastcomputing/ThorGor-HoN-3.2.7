@@ -45,11 +45,11 @@ def make_authorized_local_c0(
     # K2/game.dll need a stable, unique account identity to associate a new
     # transport with a disconnected CPlayer.  Keep it negative when interpreted
     # as int32 so retail profile/avatar lookup still treats this as a local user.
-    native_account_id = (
-        0x80000000
-        | account_id
-        | (RECONNECT_ACCOUNT_MARKER if is_reconnect else 0)
-    )
+    # The private marker authenticates the gateway-assigned connection token.
+    # K2 removes it before game.dll sees the account.  It is required on the
+    # first admission as well as reconnect so stock GenerateClientID stores the
+    # same persistent token in its allocation record on both sides of a drop.
+    native_account_id = 0x80000000 | account_id | RECONNECT_ACCOUNT_MARKER
     struct.pack_into("<I", rewritten, packet.account_id_offset, native_account_id)
     if connection_id is not None:
         connection_id_offset = (

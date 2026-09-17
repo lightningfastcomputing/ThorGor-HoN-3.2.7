@@ -1,11 +1,11 @@
 {
   "id": "dedicated.reconnect_client_identity",
   "binary": "game.dll",
-  "version": "3.2.7.1-native-account-reconnect-v9",
+  "version": "3.2.7.1-stock-persistent-token-reconnect-v10",
   "source_sha256": "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B",
-  "output_sha256": "B82E4946AD23DDCE6CEC96E6255C28B5B97B155E136175146C3A6AD1C10C2984",
-  "reason": "Match the retained player by authenticated account, atomically move its IGame map entry to K2's fresh number, and continue through the newly inserted tree node.",
-  "observed_failure": "v16 rekeyed the map but restored EBX to the erased node; the stock success path dereferenced that freed iterator, selected invalid ownership state, and later crashed the slave.",
+  "output_sha256": "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B",
+  "reason": "Preserve game.dll's stock account-and-client-number reconnect path after K2 reclaims the original client number through its persistent connection token.",
+  "observed_failure": "Changing CPlayer client numbers and map keys after admission broke team and hero ownership: player2 inherited the host hero, the host received defeat, and the slave later terminated.",
   "discovered": "2026-09-11",
   "evidence": ["docs/RECONNECT.md", "tests/test_native_lobby_authority.py"],
   "implementation": {"kind": "stable_builder", "path": "patches/builders/reconnect_client_identity.py"}

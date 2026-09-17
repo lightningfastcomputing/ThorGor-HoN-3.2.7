@@ -963,6 +963,8 @@ def main(argv=None) -> int:
     retired_route_deadlines: dict[tuple[str, int], float] = {}
     retired_route_by_cookie: dict[str, tuple[str, int]] = {}
     native_client_number_by_cookie: dict[str, int] = {}
+    connection_token_by_cookie: dict[str, int] = {}
+    next_connection_token = 1
     admission_traces: dict[tuple[str, int], dict[str, object]] = {}
     route_traces: dict[tuple[str, int], dict[str, object]] = {}
     route_trace_dir = BASE_DIR / args.route_trace_dir
@@ -1007,7 +1009,7 @@ def main(argv=None) -> int:
     )
     source_path = Path(__file__).resolve()
     source_digest = hashlib.sha256(source_path.read_bytes()).hexdigest()[:12]
-    log(f"SOURCE path={source_path} sha256={source_digest} reconnect_transport=atomic-player-map-transfer-v17")
+    log(f"SOURCE path={source_path} sha256={source_digest} reconnect_transport=stock-persistent-token-v18")
     if args.preset:
         log(f"PRESET {args.preset}")
     if args.joiner_team_chat_fallback:
@@ -1733,13 +1735,29 @@ def main(argv=None) -> int:
                     )
                     is_reconnect = connect.cookie in retired_route_by_cookie
                     reconnect_client_number = native_client_number_by_cookie.get(connect.cookie)
+                    connection_token = connection_token_by_cookie.get(connect.cookie)
+                    if connection_token is None:
+                        used_connection_tokens = set(connection_token_by_cookie.values())
+                        for _ in range(0xFFFF):
+                            candidate = next_connection_token
+                            next_connection_token = 1 if candidate == 0xFFFF else candidate + 1
+                            if candidate not in used_connection_tokens:
+                                connection_token = candidate
+                                connection_token_by_cookie[connect.cookie] = candidate
+                                break
+                        if connection_token is None:
+                            log(
+                                f"C0_AUTH_REJECT client={addr[0]}:{addr[1]} "
+                                "reason=persistent connection token space exhausted"
+                            )
+                            continue
                     data = make_authorized_local_c0(
                         data,
                         connect,
                         is_match_host=is_match_host,
                         is_reconnect=is_reconnect,
                         account_id=account_id,
-                        connection_id=None,
+                        connection_id=connection_token,
                     )
                     # Retire any older endpoint for this identity and transfer
                     # its proxy-only team/chat metadata to the returning route.
@@ -1777,10 +1795,10 @@ def main(argv=None) -> int:
                         f"C0_AUTH_LOCALIZED client={addr[0]}:{addr[1]} "
                         f"flag_offset={connect.flag_offset} host_id_preserved=0x{connect.host_id:08X} "
                         f"wire_connection_id=0x{connect.connection_id:04X} "
-                        "slave_connection_id=0x0000 "
+                        f"slave_connection_id=0x{connection_token:04X} "
                         f"reconnect={int(is_reconnect)} "
                         f"native_client_number={reconnect_client_number!r} "
-                        f"native_account_id=0x{(0x80000000 | account_id | (0x40000000 if is_reconnect else 0)):08X}"
+                        f"native_account_id=0x{(0xC0000000 | account_id):08X}"
                     )
                 elif (
                     args.require_c0_auth

@@ -15,19 +15,16 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
         self.assertIn(capacity.output_sha256, VERIFIED_GAME_DLL_SHA256S)
         self.assertIn(reconnect.output_sha256, VERIFIED_GAME_DLL_SHA256S)
 
-    def test_reconnect_uses_atomic_native_player_map_transfer(self):
+    def test_reconnect_preserves_stock_game_player_identity(self):
         reconnect = PatchCatalog().get("dedicated.reconnect_client_identity")
         self.assertFalse(reconnect.operations)
         self.assertEqual(reconnect_client_identity.SOURCE_SHA256, reconnect.source_sha256[0])
         self.assertEqual(reconnect_client_identity.OUTPUT_SHA256, reconnect.output_sha256)
-        self.assertLessEqual(
-            len(reconnect_client_identity.reconnect_stub()),
-            reconnect_client_identity.CAVE_SIZE,
-        )
+        self.assertEqual(reconnect_client_identity.OUTPUT_SHA256, reconnect_client_identity.SOURCE_SHA256)
 
-    def test_k2_hook_separates_normal_admission_from_reconnect(self):
+    def test_k2_hook_authenticates_persistent_connection_token(self):
         stub = creator_authority.authority_stub()
-        self.assertTrue(stub.startswith(bytes.fromhex("8B45B825FFFFFFBF")))
+        self.assertTrue(stub.startswith(bytes.fromhex("8B45B8A90000004074078B55E866895314")))
         self.assertLessEqual(len(stub), 0x40)
 
     def test_k2_allocator_stays_on_stock_fresh_number_path(self):

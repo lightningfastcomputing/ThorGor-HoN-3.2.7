@@ -17,28 +17,19 @@ lobby portraits with the Chiprel fallback. The K2 admission patch preserves this
 in `CClientConnection + 0x0c` and no longer clears it before CPlayer initialization.
 Both the initial connection and the returning C0 receive the same value.
 
-game.dll retains the verified account predicate: it compares `CPlayer + 0x258` with
-`CClientConnection + 0x0c`. Once that selects the retained player, the v16 reconnect
-hook transfers the player to K2's freshly allocated client number before entering the
-stock success path.
+The gateway also assigns a stable nonzero uint16 connection token to each authenticated
+cookie. A private account marker tells the K2 hook that this token is gateway-owned;
+K2 copies it into `CClientConnection + 0x14` and removes the marker before game.dll sees
+the account. The same token is sent on the initial admission and reconnect.
 
 Ghidra analysis of `CHostServer::GenerateClientID(unsigned short &, int)` established
-that this allocator runs before `game.dll` receives the connection. Forcing it to return
-the disconnected player's still-registered number creates two K2 connection objects for
-one transport ID. The live v15 test confirmed that collision terminates the slave before
-game.dll receives a reconnect packet. K2 therefore remains on its stock fresh-allocation
-path for every admission.
+the retail reconnect contract. Its 12-byte allocation record contains the native client
+number, account ID, uint16 connection token, and active flag. A nonzero token searches
+only inactive records; if both token and account match, stock K2 returns the original
+native client number. Otherwise it allocates normally and stores the token for later.
 
-Only a route that the authenticated gateway has retired is marked as reconnecting. The
-gateway uses a private account marker which K2 removes before game admission. Live v14
-evidence showed the allocation record survives: returning player2 received fresh number
-2 while retained player2 and the `IGame + 0xfc` map entry remained number 1.
-
-Changing only `CPlayer + 0x6c` was incomplete because the native player map remained
-keyed by the old number. v16 uses the game's own iterator, range-erase, and map-insert
-routines to atomically remove the old node, insert the same retained `CPlayer *` under
-the fresh number, and then update `CPlayer + 0x6c`. This keeps K2 transport identity,
-game lookup identity, and local player ownership synchronized.
+game.dll is therefore left on its verified stock account-and-number predicates. No
+`CPlayer`, player-map, team, or hero ownership field is changed during reconnect.
 
 The server-capacity patch remains a separate prerequisite so each stage has an exact,
 verified input and output hash.
@@ -92,3 +83,14 @@ node returned by `map::operator[]` (`mapped-value address - 0x10`). The stock su
 path therefore resolves the retained player through the live replacement node. The
 native emulation test now asserts this iterator transfer in addition to the map key,
 mapped player pointer, player number, register state, and stack state.
+
+The following live test proved that even a structurally valid map rekey was the wrong
+layer: player2 inherited the host's hero, the host received a defeat result, and the
+slave terminated. v17 remains historical evidence only.
+
+## v18 stock persistent-token reconnect
+
+Build v18 removes the game-side identity mutation entirely. It uses the stock K2
+inactive-record lookup with one authenticated token that exists before the initial
+allocation and survives the proxy route change. This preserves player2's native number,
+player-map key, team membership, selected hero, and host ownership as one identity.

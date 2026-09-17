@@ -47,7 +47,7 @@ class LobbyAuthorityTests(unittest.TestCase):
                 self.assertEqual(changed[:parsed.flag_offset], original[:parsed.flag_offset])
                 self.assertEqual(
                     struct.unpack_from("<I", changed, parsed.account_id_offset)[0],
-                    0x80000017,
+                    0xC0000017,
                 )
                 self.assertEqual(changed[parsed.account_id_offset + 4:], original[parsed.account_id_offset + 4:])
         for offset in (-1, 4):
@@ -122,7 +122,7 @@ class LobbyAuthorityTests(unittest.TestCase):
                 self.assertEqual(rewritten[parsed.flag_offset] & 1, int(creator))
                 self.assertEqual(
                     struct.unpack_from("<I", rewritten, parsed.account_id_offset)[0],
-                    0x80000000 | account,
+                    0xC0000000 | account,
                 )
                 self.assertEqual(state["pending_host_account_id"], 1)
 

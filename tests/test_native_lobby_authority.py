@@ -67,21 +67,44 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
             struct.unpack("<H", self.vm.mem_read(self.client + 0x14, 2))[0],
         )
 
-    def test_actual_hook_leaves_normal_connection_field_cleared(self):
+    def test_actual_hook_accepts_only_gateway_marked_persistent_token(self):
         for marker in (0, 1):
             for flags in (0, 7, 0x100, 0xFFFFFFFF):
                 with self.subTest(marker=marker, flags=flags):
                     expected = flags & ~7 | (7 if marker else 0)
                     self.assertEqual(
-                        self.admit(marker, flags, connection_id=0xC5F8),
-                        (expected, 0x80000007, 0),
+                        self.admit(marker, flags, native_account_id=0xC0000007, connection_id=0xC5F8),
+                        (expected, 0x80000007, 0xC5F8),
                     )
 
-    def test_actual_hook_normalizes_marked_reconnect_without_transport_token(self):
+    def test_actual_hook_rejects_unmarked_client_connection_token(self):
         self.assertEqual(
-            self.admit(0, 0, native_account_id=0xC0000007, connection_id=0x8001),
+            self.admit(0, 0, native_account_id=0x80000007, connection_id=0x8001),
             (0, 0x80000007, 0),
         )
+
+    def test_stock_generate_client_id_reclaims_inactive_matching_token(self):
+        host = self.client
+        connection_id = self.client + 0x1000
+        records = self.client + 0x2000
+        return_address = self.client + 0x3000
+        self.vm.mem_write(host + 0x164, struct.pack("<I", records))
+        self.vm.mem_write(host + 0x168, struct.pack("<I", records + 24))
+        self.vm.mem_write(
+            records,
+            struct.pack("<IIHBB", 0, 0x80000002, 0x101, 1, 0)
+            + struct.pack("<IIHBB", 1, 0x80000003, 0x102, 0, 0),
+        )
+        self.vm.mem_write(connection_id, struct.pack("<H", 0x102))
+        self.vm.mem_write(
+            self.stack,
+            struct.pack("<III", return_address, connection_id, 0x80000003),
+        )
+        self.vm.reg_write(reg.UC_X86_REG_ECX, host)
+        self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
+        self.vm.emu_start(self.base + 0x2F1B80, return_address, count=100)
+        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EAX), 1)
+        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), self.stack + 12)
 
     def test_stock_generate_client_id_allocates_when_no_retained_identity_matches(self):
         host = self.client
@@ -152,82 +175,11 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
             self.game[offset:offset + 11],
             bytes.fromhex("8B82580200003B470C757A"),
         )
-        guard_offset = pe.get_offset_from_rva(reconnect.HOOK_RVA)
+        number_offset = pe.get_offset_from_rva(0x333DD)
         self.assertEqual(
-            self.game[guard_offset:guard_offset + 8],
-            reconnect.relative(0xE9, reconnect.HOOK_RVA, reconnect.CAVE_RVA) + b"\x90" * 3,
+            self.game[number_offset:number_offset + 8],
+            bytes.fromhex("8B406C3B47087416"),
         )
-        cave_offset = pe.get_offset_from_rva(reconnect.CAVE_RVA)
-        self.assertEqual(
-            self.game[cave_offset:cave_offset + len(reconnect.reconnect_stub())],
-            reconnect.reconnect_stub(),
-        )
-
-    def test_reconnect_atomically_rekeys_retained_player_to_fresh_number(self):
-        pe = pefile.PE(data=self.game)
-        base = pe.OPTIONAL_HEADER.ImageBase
-        self.vm.mem_map(base, (pe.OPTIONAL_HEADER.SizeOfImage + 4095) & ~4095)
-        self.vm.mem_write(base, pe.get_memory_mapped_image())
-
-        player = self.client + 0x1000
-        node = self.client + 0x2000
-        successor = self.client + 0x2100
-        game = self.client + 0x3000
-        mapped_value = self.client + 0x4000
-        self.vm.mem_write(player + 0x6C, struct.pack("<I", 1))
-        self.vm.mem_write(self.client + 0x08, struct.pack("<I", 2))
-        self.vm.mem_write(self.frame + 0x08, struct.pack("<I", game))
-        self.vm.mem_write(mapped_value, bytes(4))
-        self.vm.reg_write(reg.UC_X86_REG_EAX, player)
-        self.vm.reg_write(reg.UC_X86_REG_EBX, node)
-        self.vm.reg_write(reg.UC_X86_REG_EDI, self.client)
-        self.vm.reg_write(reg.UC_X86_REG_EBP, self.frame)
-        self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
-        calls = []
-
-        def native_map_calls(vm, address, size, data):
-            esp = vm.reg_read(reg.UC_X86_REG_ESP)
-            if address == base + reconnect.ITERATOR_NEXT_RVA:
-                iterator = vm.reg_read(reg.UC_X86_REG_EDX)
-                vm.mem_write(iterator, struct.pack("<I", successor))
-                return_address = struct.unpack("<I", vm.mem_read(esp, 4))[0]
-                calls.append(("next", iterator))
-                vm.reg_write(reg.UC_X86_REG_ESP, esp + 4)
-                vm.reg_write(reg.UC_X86_REG_EIP, return_address)
-            elif address == base + reconnect.ERASE_RANGE_RVA:
-                return_address, result, first, last = struct.unpack(
-                    "<IIII", vm.mem_read(esp, 16)
-                )
-                calls.append(("erase", vm.reg_read(reg.UC_X86_REG_EDI), first, last))
-                vm.mem_write(result, struct.pack("<I", last))
-                vm.reg_write(reg.UC_X86_REG_ESP, esp + 16)
-                vm.reg_write(reg.UC_X86_REG_EIP, return_address)
-            elif address == base + reconnect.MAP_INDEX_RVA:
-                key_pointer = vm.reg_read(reg.UC_X86_REG_ESI)
-                key = struct.unpack("<I", vm.mem_read(key_pointer, 4))[0]
-                calls.append(("insert", vm.reg_read(reg.UC_X86_REG_ECX), key))
-                return_address = struct.unpack("<I", vm.mem_read(esp, 4))[0]
-                vm.reg_write(reg.UC_X86_REG_EAX, mapped_value)
-                vm.reg_write(reg.UC_X86_REG_ESP, esp + 4)
-                vm.reg_write(reg.UC_X86_REG_EIP, return_address)
-
-        hook = self.vm.hook_add(uc.UC_HOOK_CODE, native_map_calls)
-        self.vm.emu_start(base + reconnect.HOOK_RVA, base + reconnect.SUCCESS_RVA, count=200)
-        self.vm.hook_del(hook)
-
-        self.assertEqual(
-            calls,
-            [
-                ("next", self.stack - 32 - 16 + 8),
-                ("erase", game + 0xFC, node, successor),
-                ("insert", game + 0xFC, 2),
-            ],
-        )
-        self.assertEqual(struct.unpack("<I", self.vm.mem_read(player + 0x6C, 4))[0], 2)
-        self.assertEqual(struct.unpack("<I", self.vm.mem_read(mapped_value, 4))[0], player)
-        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EBX), mapped_value - 0x10)
-        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EIP), base + reconnect.SUCCESS_RVA)
-        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), self.stack)
 
     def test_exact_hashes_idempotence_and_rejected_input(self):
         self.assertEqual(sha256(self.image), authority.OUTPUT_SHA256)

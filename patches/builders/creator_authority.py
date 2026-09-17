@@ -12,7 +12,7 @@ from pathlib import Path
 from thorgor.patches.engine import _rva_to_file, sha256
 
 SOURCE_SHA256 = "25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026"
-OUTPUT_SHA256 = "B0CFEA2ACE1EAF7D7F8CE66C4D8750775A2A18AE22521C47C94EA5A6B4CA375E"
+OUTPUT_SHA256 = "6EDFBD33C35617BD1E3D4D209AE52370267C66755D621893917D8182C814A9AA"
 MARKER_REJECTION_RVA = 0x2F5982
 HOOK_RVA = 0x2F5AD6
 RETURN_RVA = 0x2F5ADD
@@ -28,6 +28,10 @@ def jump(source: int, target: int) -> bytes:
 def authority_stub() -> bytes:
     code = bytes.fromhex(
         "8b45b8"          # load the authenticated local-only account identity
+        "a900000040"      # trusted gateway supplied a persistent connection token
+        "7407"            # never accept an unmarked client token
+        "8b55e8"          # load the parsed uint16 connection token
+        "66895314"        # expose it to stock GenerateClientID
         "25ffffffbf"      # remove private reconnect marker from the account
         "89430c"          # retain normalized account identity
         "83a3cc000000f8"  # clear the composite local/admin/host bits
