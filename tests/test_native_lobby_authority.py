@@ -83,7 +83,7 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
             (0, 0x80000007, 0),
         )
 
-    def test_stock_generate_client_id_reclaims_inactive_matching_token(self):
+    def test_generate_client_id_reclaims_exact_inactive_native_number(self):
         host = self.client
         connection_id = self.client + 0x1000
         records = self.client + 0x2000
@@ -92,10 +92,10 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         self.vm.mem_write(host + 0x168, struct.pack("<I", records + 24))
         self.vm.mem_write(
             records,
-            struct.pack("<IIHBB", 0, 0x80000002, 0x101, 1, 0)
-            + struct.pack("<IIHBB", 1, 0x80000003, 0x102, 0, 0),
+            struct.pack("<IIHBB", 0, 0x80000002, 0, 1, 0)
+            + struct.pack("<IIHBB", 1, 0x80000003, 0, 0, 0),
         )
-        self.vm.mem_write(connection_id, struct.pack("<H", 0x102))
+        self.vm.mem_write(connection_id, struct.pack("<H", 0x8001))
         self.vm.mem_write(
             self.stack,
             struct.pack("<III", return_address, connection_id, 0x80000003),

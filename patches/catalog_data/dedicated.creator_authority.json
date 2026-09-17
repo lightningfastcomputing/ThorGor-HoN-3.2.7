@@ -1,11 +1,11 @@
 {
   "id": "dedicated.creator_authority",
   "binary": "k2.dll",
-  "version": "3.2.7.1-v77+creator-authority+persistent-token-reconnect",
+  "version": "3.2.7.1-v77+creator-authority+retired-native-number-reconnect",
   "source_sha256": "25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026",
-  "output_sha256": "6EDFBD33C35617BD1E3D4D209AE52370267C66755D621893917D8182C814A9AA",
-  "reason": "Authenticate the gateway's persistent connection token, preserve normalized account identity, and let stock GenerateClientID reclaim the disconnected allocation.",
-  "observed_failure": "Fresh reconnect allocation forced game.dll to mutate live player ownership, while forcing an active record match bypassed K2's safety check. Stock K2 requires the same nonzero token on initial admission and reconnect and only reuses an inactive matching record.",
+  "output_sha256": "FF053A133261FD565B6656AE24F5182AA2423195EA9B77C304128045BBD33A6B",
+  "reason": "Keep initial K2 allocation stock, then authenticate and reclaim the exact inactive native client number during reconnect.",
+  "observed_failure": "Assigning a nonzero persistent token during initial local admission crashes the slave before native client assignment. Reconnect must instead target the retired record only after its native number is known.",
   "discovered": "2026-09-07",
   "evidence": ["docs/LOBBY_AUTHORITY.md", "tests/test_lobby_authority.py", "tests/test_native_lobby_authority.py"],
   "implementation": {"kind": "stable_builder", "path": "patches/builders/creator_authority.py"}

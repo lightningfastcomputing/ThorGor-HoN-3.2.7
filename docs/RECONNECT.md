@@ -94,3 +94,15 @@ Build v18 removes the game-side identity mutation entirely. It uses the stock K2
 inactive-record lookup with one authenticated token that exists before the initial
 allocation and survives the proxy route change. This preserves player2's native number,
 player-map key, team membership, selected hero, and host ownership as one identity.
+
+Live testing rejected that design: a nonzero token during the special local initial
+admission crashed the slave before K2 assigned the creator a native client number.
+
+## v19 retired-native-number reconnect
+
+Build v19 restores the proven stock initial admission. After K2 reports the assigned
+native client number, the gateway retains it with the authenticated cookie. A returning
+client receives an authenticated private token whose low byte names that exact native
+number. K2 still requires the record to be inactive and the account identity to match;
+only the stock token comparison is replaced by the exact native-number comparison.
+This prevents a reconnect for player2 from selecting the active host/player record.

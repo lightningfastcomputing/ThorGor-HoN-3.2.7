@@ -34,9 +34,10 @@ together. Creator reconnect with the original key retains authority; an
 empty-key JOIN remains an ordinary player.
 
 For reconnect correlation, the proxy writes a stable negative local-only account
-identity and a persistent uint16 connection token into C0. The K2 hook accepts the
-token only with the private authenticated marker, then stock GenerateClientID stores
-it on initial admission and reclaims the inactive native client record after a drop.
+identity while leaving initial admission on K2's stock zero-token path. It retains the
+native client number reported by K2. Only a returning client receives a private token
+naming that number. The K2 hook accepts it only with the authenticated reconnect marker,
+then GenerateClientID reclaims the matching inactive record after also checking account.
 
 ## Capacity dependency
 
@@ -48,7 +49,7 @@ normal five-versus-five lobby.
 ## Reproducibility
 
 - K2 input: `25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026`
-- K2 output: `6EDFBD33C35617BD1E3D4D209AE52370267C66755D621893917D8182C814A9AA`
+- K2 output: `FF053A133261FD565B6656AE24F5182AA2423195EA9B77C304128045BBD33A6B`
 - game.dll input: `D345F8537ED9FD5C6705F8F1A9FA6663C5F4AE4476CD328B2D8F1074C044CF99`
 - game.dll output: `929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B`
 

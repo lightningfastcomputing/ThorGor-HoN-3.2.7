@@ -27,11 +27,11 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
         self.assertTrue(stub.startswith(bytes.fromhex("8B45B8A90000004074078B55E866895314")))
         self.assertLessEqual(len(stub), 0x40)
 
-    def test_k2_allocator_stays_on_stock_fresh_number_path(self):
+    def test_k2_allocator_changes_only_retired_record_number_compare(self):
         patched_rvas = {rva for rva, _, _ in creator_authority.operations()}
         self.assertNotIn(0x2F1B95, patched_rvas)
         self.assertNotIn(0x2F1BA7, patched_rvas)
-        self.assertNotIn(0x2F1BAD, patched_rvas)
+        self.assertIn(0x2F1BAD, patched_rvas)
 
 
 if __name__ == "__main__":

@@ -12,13 +12,14 @@ from pathlib import Path
 from thorgor.patches.engine import _rva_to_file, sha256
 
 SOURCE_SHA256 = "25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026"
-OUTPUT_SHA256 = "6EDFBD33C35617BD1E3D4D209AE52370267C66755D621893917D8182C814A9AA"
+OUTPUT_SHA256 = "FF053A133261FD565B6656AE24F5182AA2423195EA9B77C304128045BBD33A6B"
 MARKER_REJECTION_RVA = 0x2F5982
 HOOK_RVA = 0x2F5AD6
 RETURN_RVA = 0x2F5ADD
 CAVE_RVA = 0x70D740
 PROMOTION_RVA = 0x2F8E1E
 ACCOUNT_RESET_RVA = 0x2F8E50
+RECONNECT_NUMBER_COMPARE_RVA = 0x2F1BAD
 
 
 def jump(source: int, target: int) -> bytes:
@@ -54,6 +55,13 @@ def operations() -> tuple[tuple[int, bytes, bytes], ...]:
         # The local admission branch used to overwrite the parsed identity
         # immediately before GenerateClientID/CPlayer initialization.
         (ACCOUNT_RESET_RVA, bytes.fromhex("897d0c"), b"\x90" * 3),
+        # GenerateClientID already restricts this search to retired records and
+        # subsequently verifies the account ID.  For a gateway-authenticated
+        # reconnect, compare the retained native client number with the low
+        # byte of the encoded reconnect token instead of comparing the record's
+        # initial (zero) transport token.  Initial admissions never receive the
+        # private marker/token and therefore stay on the stock allocation path.
+        (RECONNECT_NUMBER_COMPARE_RVA, bytes.fromhex("663950087409"), bytes.fromhex("3810740B9090")),
     )
 
 
