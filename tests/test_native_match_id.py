@@ -4,7 +4,7 @@ from thorgor.game_manager.native_match_id import (
     VERIFIED_GAME_DLL_SHA256S,
     read_native_player_map,
 )
-from thorgor.patches.builders import creator_authority, reconnect_client_identity
+from thorgor.patches.builders import creator_authority
 from thorgor.patches.catalog import PatchCatalog
 
 
@@ -18,26 +18,25 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
         self.assertIn(capacity.output_sha256, VERIFIED_GAME_DLL_SHA256S)
         self.assertIn(reconnect.output_sha256, VERIFIED_GAME_DLL_SHA256S)
 
-    def test_reconnect_preserves_stock_game_player_identity(self):
+    def test_reconnect_uses_v14_account_selection_and_adopts_fresh_transport(self):
         reconnect = PatchCatalog().get("dedicated.reconnect_client_identity")
-        self.assertFalse(reconnect.operations)
-        self.assertEqual(reconnect_client_identity.SOURCE_SHA256, reconnect.source_sha256[0])
-        self.assertEqual(reconnect_client_identity.OUTPUT_SHA256, reconnect.output_sha256)
-        self.assertEqual(reconnect_client_identity.OUTPUT_SHA256, reconnect_client_identity.SOURCE_SHA256)
+        account_match, client_number_adoption = reconnect.operations
+        self.assertEqual(account_match.replacement, bytes.fromhex("8B82580200003B470C757A"))
+        self.assertEqual(client_number_adoption.replacement, bytes.fromhex("8B570889506CEB16"))
+        self.assertEqual(client_number_adoption.offset + 8 + 0x16, 0x333FB)
 
-    def test_k2_hook_and_capture_fit_reserved_caves(self):
+    def test_v14_k2_hook_fits_reserved_cave(self):
         stub = creator_authority.authority_stub()
+        self.assertTrue(stub.startswith(bytes.fromhex("8B45B825FFFFFFBF89430C")))
         self.assertLessEqual(len(stub), 0x40)
-        self.assertLessEqual(len(creator_authority.capture_stub()), 0x40)
-        self.assertLessEqual(len(creator_authority.allocator_stub()), 0x140)
-        self.assertLessEqual(len(creator_authority.connection_lookup_guard_stub()), 0x40)
 
-    def test_stock_allocator_is_unchanged_and_local_call_is_wrapped(self):
+    def test_v14_leaves_stock_allocator_and_transport_lookup_untouched(self):
         patched_rvas = {rva for rva, _, _ in creator_authority.operations()}
         self.assertNotIn(0x2F1B95, patched_rvas)
         self.assertNotIn(0x2F1BA7, patched_rvas)
         self.assertNotIn(0x2F1BAD, patched_rvas)
-        self.assertIn(creator_authority.ALLOCATOR_CALL_RVA, patched_rvas)
+        self.assertNotIn(0x2F8E63, patched_rvas)
+        self.assertNotIn(0x70D4EA, patched_rvas)
 
     def test_passive_player_map_walk_preserves_native_candidate_order(self):
         class FakeProcess:

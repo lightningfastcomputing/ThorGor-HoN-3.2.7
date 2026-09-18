@@ -1,11 +1,11 @@
 {
   "id": "dedicated.creator_authority",
   "binary": "k2.dll",
-  "version": "3.2.7.1-v77+creator-authority+token-first-transport-lookup-v22",
+  "version": "3.2.7.1-v77+creator-authority+account-reconnect-v23-baseline",
   "source_sha256": "25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026",
-  "output_sha256": "A4F9856A53A01D212CAE03EA1746F6594904F8D255956AD6D849ABD467281A77",
-  "reason": "Preserve authenticated reconnect identity and test transport token/state before ReadPackets compares an address string.",
-  "observed_failure": "V21 still raised 'invalid string position' at k2+0x78A6. The v21 dump identifies the first linked record as the live host (account 2/client 0/token 0), whose address string was already unsafe. The incoming player2 reconnect carried token 0x8001. Native lookup required token and address equality but compared the string first. V22 performs the equivalent token-first short circuit, then the state guard, before touching the string.",
+  "output_sha256": "B0CFEA2ACE1EAF7D7F8CE66C4D8750775A2A18AE22521C47C94EA5A6B4CA375E",
+  "reason": "Restore the proven v14 native admission baseline while preserving a normalized authenticated account for game-layer player selection.",
+  "observed_failure": "Later K2 allocation and transport-lookup hooks repeatedly terminated the slave before admission. V23 deliberately returns to the v14 binary contract that completed reconnect admission.",
   "discovered": "2026-09-07",
   "evidence": ["docs/LOBBY_AUTHORITY.md", "tests/test_lobby_authority.py", "tests/test_native_lobby_authority.py"],
   "implementation": {"kind": "stable_builder", "path": "patches/builders/creator_authority.py"}

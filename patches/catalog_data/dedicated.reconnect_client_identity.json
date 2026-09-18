@@ -1,12 +1,25 @@
 {
   "id": "dedicated.reconnect_client_identity",
   "binary": "game.dll",
-  "version": "3.2.7.1-stock-player-identity-v20",
+  "version": "3.2.7.1-native-account-reconnect-v23-baseline",
   "source_sha256": "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B",
-  "output_sha256": "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B",
-  "reason": "Preserve stock account-and-client-number reconnect predicates while K2 preserves the authenticated identity and safely retires the old transport number.",
-  "observed_failure": "Changing CPlayer client numbers and map keys after admission broke team and hero ownership: player2 inherited the host hero, the host received defeat, and the slave later terminated.",
+  "output_sha256": "614EA87B07858531A6F741CB33ED8B9922F5A7D9EA8EE1DC40351437C3A1C01A",
+  "reason": "Restore the proven v14 account-based reconnect selection and adopt K2's fresh transport number only after selecting the retained player.",
+  "observed_failure": "V14 completed the reconnect flow but selected the host player. This baseline is restored intact before correcting selection with live evidence.",
   "discovered": "2026-09-11",
   "evidence": ["docs/RECONNECT.md", "tests/test_native_lobby_authority.py"],
-  "implementation": {"kind": "stable_builder", "path": "patches/builders/reconnect_client_identity.py"}
+  "operations": [
+    {
+      "address": "rva",
+      "offset": "0x333A3",
+      "expected": "8B82580200003B470C757A",
+      "replacement": "8B82580200003B470C757A"
+    },
+    {
+      "address": "rva",
+      "offset": "0x333DD",
+      "expected": "8B406C3B47087416",
+      "replacement": "8B570889506CEB16"
+    }
+  ]
 }
