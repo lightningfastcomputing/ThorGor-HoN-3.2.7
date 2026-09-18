@@ -1,11 +1,11 @@
 {
   "id": "dedicated.creator_authority",
   "binary": "k2.dll",
-  "version": "3.2.7.1-v77+creator-authority+account-reconnect-v23-baseline",
+  "version": "3.2.7.1-v77+creator-authority+captured-account-v24",
   "source_sha256": "25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026",
-  "output_sha256": "B0CFEA2ACE1EAF7D7F8CE66C4D8750775A2A18AE22521C47C94EA5A6B4CA375E",
-  "reason": "Restore the proven v14 native admission baseline while preserving a normalized authenticated account for game-layer player selection.",
-  "observed_failure": "Later K2 allocation and transport-lookup hooks repeatedly terminated the slave before admission. V23 deliberately returns to the v14 binary contract that completed reconnect admission.",
+  "output_sha256": "BA14F2931FF6F5FB9377FAECECA2F3A96A53436D61CD7984D002A5F24616B35C",
+  "reason": "Keep the proven v23 reconnect flow and preserve the parsed authenticated account before K2 reuses its stack local.",
+  "observed_failure": "The v23 live trace showed both retained CPlayers stored as account 1 although the gateway sent accounts 2 and 3. Reconnect therefore selected the first map entry (the host) and moved player2's fresh transport number onto it. V24 captures only the earlier parsed account; allocation, lookup, routing, and game.dll remain v23.",
   "discovered": "2026-09-07",
   "evidence": ["docs/LOBBY_AUTHORITY.md", "tests/test_lobby_authority.py", "tests/test_native_lobby_authority.py"],
   "implementation": {"kind": "stable_builder", "path": "patches/builders/creator_authority.py"}

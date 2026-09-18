@@ -50,6 +50,12 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         self.client, self.frame, self.stack = 0x108000, 0x118000, 0x117000
 
     def admit(self, marker, flags, native_account_id=0x80000007, connection_id=7):
+        self.vm.reg_write(reg.UC_X86_REG_EBP, self.frame)
+        self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
+        self.vm.reg_write(reg.UC_X86_REG_EAX, native_account_id)
+        self.vm.reg_write(reg.UC_X86_REG_EDX, 0x119000)
+        self.vm.emu_start(self.base + authority.CAPTURE_RVA,
+                          self.base + authority.CAPTURE_RVA + 5, count=100)
         self.vm.reg_write(reg.UC_X86_REG_EBX, self.client)
         self.vm.reg_write(reg.UC_X86_REG_EBP, self.frame)
         self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
@@ -81,6 +87,12 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
             self.admit(0, 0, native_account_id=0xC0000007, connection_id=0x8001),
             (0, 0x80000007, 0),
         )
+
+    def test_distinct_authenticated_accounts_survive_reused_stack_local(self):
+        for account in (2, 3, 7, 0x3fffffff):
+            with self.subTest(account=account):
+                native = 0x80000000 | account
+                self.assertEqual(self.admit(0, 0, native_account_id=native)[1], native)
 
     def test_stock_generate_client_id_allocates_when_no_retained_identity_matches(self):
         host = self.client

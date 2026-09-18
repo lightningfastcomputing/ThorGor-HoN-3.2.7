@@ -27,8 +27,9 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
 
     def test_v14_k2_hook_fits_reserved_cave(self):
         stub = creator_authority.authority_stub()
-        self.assertTrue(stub.startswith(bytes.fromhex("8B45B825FFFFFFBF89430C")))
+        self.assertTrue(stub.startswith(bytes.fromhex("8B8538FDFFFF25FFFFFFBF89430C")))
         self.assertLessEqual(len(stub), 0x40)
+        self.assertLessEqual(len(creator_authority.account_capture_stub()), 0x40)
 
     def test_v14_leaves_stock_allocator_and_transport_lookup_untouched(self):
         patched_rvas = {rva for rva, _, _ in creator_authority.operations()}
