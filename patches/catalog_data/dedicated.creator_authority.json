@@ -1,11 +1,11 @@
 {
   "id": "dedicated.creator_authority",
   "binary": "k2.dll",
-  "version": "3.2.7.1-v77+creator-authority+retired-native-number-reconnect",
+  "version": "3.2.7.1-v77+creator-authority+safe-transport-lookup-v21",
   "source_sha256": "25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026",
-  "output_sha256": "FF053A133261FD565B6656AE24F5182AA2423195EA9B77C304128045BBD33A6B",
-  "reason": "Keep initial K2 allocation stock, then authenticate and reclaim the exact inactive native client number during reconnect.",
-  "observed_failure": "Assigning a nonzero persistent token during initial local admission crashes the slave before native client assignment. Reconnect must instead target the retired record only after its native number is known.",
+  "output_sha256": "BA40A63B4F0AA20A93C058A08699A10F9BE3A46CC10AB4DC702AF9C0A79CF5BD",
+  "reason": "Preserve authenticated reconnect identity and skip retired transports before ReadPackets compares their already-destroyed address strings.",
+  "observed_failure": "The v20 live reconnect dump raised the C++ exception 'invalid string position' at k2+0x78A6. Ghidra traced the call from ReadPackets through k2+0x70D50D: connection lookup compared the incoming address against CClientConnection+0x1AC before checking whether the retained connection was disconnected. State-zero transports remain linked for reconnect allocation, but their address string is no longer a live C++ object.",
   "discovered": "2026-09-07",
   "evidence": ["docs/LOBBY_AUTHORITY.md", "tests/test_lobby_authority.py", "tests/test_native_lobby_authority.py"],
   "implementation": {"kind": "stable_builder", "path": "patches/builders/creator_authority.py"}

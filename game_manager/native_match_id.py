@@ -55,6 +55,7 @@ BASE = ROOT
 DEFAULT_SHARED_STATE = BASE / "work" / "v31_registration_state.json"
 DEFAULT_STATUS = BASE / "work" / "native_matchid_bridge_v47_state.json"
 DEFAULT_LOG = BASE / "work" / "native_matchid_bridge_v47.log"
+DEFAULT_IDENTITY_TRACE = BASE / "work" / "reconnect_identity_events.jsonl"
 
 VERIFIED_GAME_DLL_SHA256 = "D345F8537ED9FD5C6705F8F1A9FA6663C5F4AE4476CD328B2D8F1074C044CF99"
 VERIFIED_GAME_DLL_SHA256S = frozenset((
@@ -70,6 +71,14 @@ VERIFIED_GAME_DLL_SHA256S = frozenset((
 GAME_SINGLETON_PTR_RVA = 0x9163C
 CGAME_GAMEINFO_OFFSET = 0x78
 CGAMEINFO_MATCHID_OFFSET = 0x84
+# Native reconnect selection walks this MSVC std::map in-order. These fields
+# are observed only; the bridge never writes player identity or ownership.
+CGAME_PLAYER_MAP_HEAD_OFFSET = 0x100
+TREE_NODE_PLAYER_OFFSET = 0x10
+CPLAYER_NATIVE_CLIENT_NUMBER_OFFSET = 0x6C
+CPLAYER_ACCOUNT_ID_OFFSET = 0x258
+CPLAYER_CONNECTION_STATUS_OFFSET = 0x35A
+CPLAYER_FLAGS_OFFSET = 0x35C
 SENTINELS = {0x00000000, 0xFFFFFFFF}
 
 
@@ -83,6 +92,18 @@ def append_log(path: Path, message: str) -> None:
     print(line, flush=True)
     with path.open("a", encoding="utf-8") as fh:
         fh.write(line + "\n")
+
+
+def append_identity_trace(path: Path, event: str, **values: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "timestamp": datetime.now().astimezone().isoformat(timespec="milliseconds"),
+        "source": "native_player_map",
+        "event": event,
+        **values,
+    }
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n")
 
 
 def atomic_json_write(path: Path, payload: dict) -> None:
@@ -264,6 +285,15 @@ class RemoteProcess:
             raise win_error(f"ReadProcessMemory(pid={self.pid}, address=0x{address:08X}) failed")
         return int(value.value)
 
+    def read_u8(self, address: int) -> int:
+        value = ctypes.c_uint8()
+        got = ctypes.c_size_t()
+        if not kernel32.ReadProcessMemory(
+            self.handle, ctypes.c_void_p(address), ctypes.byref(value), 1, ctypes.byref(got)
+        ) or got.value != 1:
+            raise win_error(f"ReadProcessMemory(pid={self.pid}, address=0x{address:08X}) failed")
+        return int(value.value)
+
     def write_u32(self, address: int, value: int) -> None:
         data = ctypes.c_uint32(value & 0xFFFFFFFF)
         wrote = ctypes.c_size_t()
@@ -275,6 +305,55 @@ class RemoteProcess:
 
 def plausible_32bit_pointer(value: int) -> bool:
     return 0x00010000 <= value < 0x80000000
+
+
+def read_native_player_map(proc: RemoteProcess, game: int, limit: int = 64) -> list[dict]:
+    """Return reconnect candidates in the native selector's exact map order."""
+    head = proc.read_u32(game + CGAME_PLAYER_MAP_HEAD_OFFSET)
+    if not plausible_32bit_pointer(head):
+        return []
+    node = proc.read_u32(head)
+    players: list[dict] = []
+    visited: set[int] = set()
+    while node != head and plausible_32bit_pointer(node) and len(players) < limit:
+        if node in visited:
+            raise RuntimeError(f"CGame player map contains a cycle at 0x{node:08X}")
+        visited.add(node)
+        player = proc.read_u32(node + TREE_NODE_PLAYER_OFFSET)
+        if plausible_32bit_pointer(player):
+            account = proc.read_u32(player + CPLAYER_ACCOUNT_ID_OFFSET)
+            players.append({
+                "ordinal": len(players),
+                "node": f"0x{node:08X}",
+                "player": f"0x{player:08X}",
+                "native_client_number": proc.read_u32(
+                    player + CPLAYER_NATIVE_CLIENT_NUMBER_OFFSET
+                ),
+                "native_account_id": account,
+                "account_id_low30": account & 0x3FFFFFFF,
+                "connection_status": proc.read_u8(
+                    player + CPLAYER_CONNECTION_STATUS_OFFSET
+                ),
+                "flags": proc.read_u32(player + CPLAYER_FLAGS_OFFSET),
+            })
+
+        right = proc.read_u32(node + 0x08)
+        if right != head:
+            node = right
+            while proc.read_u32(node) != head:
+                node = proc.read_u32(node)
+        else:
+            parent = proc.read_u32(node + 0x04)
+            while parent != head and node == proc.read_u32(parent + 0x08):
+                node = parent
+                parent = proc.read_u32(parent + 0x04)
+            node = parent
+    return players
+
+
+def inspect_native_players(pid: int, game: int) -> list[dict]:
+    with RemoteProcess(pid) as proc:
+        return read_native_player_map(proc, game)
 
 
 def inspect_native_match_id(pid: int) -> dict:
@@ -326,6 +405,7 @@ def main(argv=None) -> int:
     ap.add_argument("--state-file", type=Path, default=DEFAULT_SHARED_STATE)
     ap.add_argument("--status-file", type=Path, default=DEFAULT_STATUS)
     ap.add_argument("--log-file", type=Path, default=DEFAULT_LOG)
+    ap.add_argument("--identity-trace", type=Path, default=DEFAULT_IDENTITY_TRACE)
     ap.add_argument("--poll", type=float, default=0.25)
     ap.add_argument("--allow-unknown-game-dll", action="store_true")
     ap.add_argument("--force-positive-overwrite", action="store_true")
@@ -345,6 +425,8 @@ def main(argv=None) -> int:
 
     verified_modules: dict[tuple[int, str], str] = {}
     last_signature = None
+    last_player_signatures: dict[int, str] = {}
+    last_player_errors: dict[int, str] = {}
     while True:
         wanted = desired_match_id(args.state_file)
         pids = dedicated_hon_pids()
@@ -379,6 +461,34 @@ def main(argv=None) -> int:
                     action, info = synchronize_pid(pid, wanted, args.force_positive_overwrite)
                     info["game_dll_sha256"] = dll_hash
                     result = {"action": action, **info}
+                    try:
+                        players = inspect_native_players(pid, info["cgame"])
+                        result["native_players"] = players
+                        player_signature = json.dumps(players, sort_keys=True, separators=(",", ":"))
+                        if last_player_signatures.get(pid) != player_signature:
+                            append_identity_trace(
+                                args.identity_trace,
+                                "native_player_map_snapshot",
+                                pid=pid,
+                                match_id=wanted,
+                                game=f"0x{info['cgame']:08X}",
+                                players=players,
+                            )
+                            last_player_signatures[pid] = player_signature
+                        last_player_errors.pop(pid, None)
+                    except Exception as player_exc:
+                        error_text = repr(player_exc)
+                        result["native_players_error"] = error_text
+                        if last_player_errors.get(pid) != error_text:
+                            append_identity_trace(
+                                args.identity_trace,
+                                "native_player_map_read_error",
+                                pid=pid,
+                                match_id=wanted,
+                                game=f"0x{info['cgame']:08X}",
+                                error=error_text,
+                            )
+                            last_player_errors[pid] = error_text
                     status["results"].append(result)
                     signature = (pid, wanted, action, info.get("native_match_id"), info.get("confirmed_match_id"))
                     if signature != last_signature:

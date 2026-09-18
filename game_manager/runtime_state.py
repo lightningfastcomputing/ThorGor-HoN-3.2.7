@@ -20,6 +20,7 @@ WORK_FILES = (
     "v31_registration_state.bridge.tmp",
     "v31_registration_state.chat.tmp",
     "v42_run_id.txt",
+    "reconnect_identity_events.jsonl",
 )
 WORK_DIRECTORIES = (
     "manager_status_bridge_v42_captures",

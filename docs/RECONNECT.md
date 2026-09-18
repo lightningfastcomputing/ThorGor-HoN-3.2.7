@@ -1,44 +1,101 @@
 # Native reconnect identity
 
-HoN 3.2.7.1 normally locates a disconnected player by the retail account ID stored in
-`CPlayer + 0x258`, then verifies the native client number at `CPlayer + 0x6c` against
-`CClientConnection + 0x08`.
+## Current implementation: v21 candidate
 
-The local authentication path used to clear that account field: every player was
-recorded with account ID zero. Matching on the gateway's C0 connection ID was also
-incorrect because that value is not the server-assigned client number stored in
-`CPlayer + 0x6c`; the search skipped every player and returned
-`disconnect_game_in_progress`.
+The September 17 v20 live reconnect reached the slave but crashed it before C0
+admission. The matching minidump reports the C++ exception `invalid string
+position` at `k2.dll + 0x78A6`, called from `+0x70D50D` and ReadPackets at
+`+0x2F5DC2`. Ghidra confirms that native connection lookup compared the incoming
+address against `CClientConnection+0x1AC` before checking transport state.
+Disconnected transports remain linked for reconnect-number reclamation, but
+their address string has already been destroyed.
 
-The gateway now rewrites the authenticated account into a stable local-only native
-identity (`0x80000000 | account_id`). Interpreted as `int32` it is negative, so the
-retail profile/avatar path continues treating the player as local and does not replace
-lobby portraits with the Chiprel fallback. The K2 admission patch preserves this value
-in `CClientConnection + 0x0c` and no longer clears it before CPlayer initialization.
-Both the initial connection and the returning C0 receive the same value.
+V21 skips state-zero transports at `+0x70D4EA`, before the string comparison.
+Live transports execute the displaced instructions and the rest of native
+lookup unchanged. The patch therefore fixes the observed pre-admission crash
+without changing account selection, player-map ownership, team, hero, or state
+delivery. The native bridge also records the server's player map in selector
+order whenever it changes, including client number, account ID, connection
+state, and flags. This diagnostic is read-only.
 
-The gateway also assigns a stable nonzero uint16 connection token to each authenticated
-cookie. A private account marker tells the K2 hook that this token is gateway-owned;
-K2 copies it into `CClientConnection + 0x14` and removes the marker before game.dll sees
-the account. The same token is sent on the initial admission and reconnect.
+The September 17 v19 crash dump (`crash_3.2.7.1_0029.dmp`, 11:39:30) places
+the access violation at `k2.dll + 0x286B2B`, inside CPacket::ReadInt, reached from
+`+0x2F8C26` and the C0 admission call at `+0x2F5ADE`. The hook at `+0x2F5AD6`
+clobbered EDX, which held the packet pointer. It replaced it with the client
+allocation address from `[ebp-0x18]`; ReadInt then treated client number `-1`
+as a vtable and read address `0x4f`. The failure preceded GenerateClientID.
 
-Ghidra analysis of `CHostServer::GenerateClientID(unsigned short &, int)` established
-the retail reconnect contract. Its 12-byte allocation record contains the native client
-number, account ID, uint16 connection token, and active flag. A nonzero token searches
-only inactive records; if both token and account match, stock K2 returns the original
-native client number. Otherwise it allocates normally and stores the token for later.
+Two native stack-lifetime mistakes also corrupted identity:
 
-game.dll is therefore left on its verified stock account-and-number predicates. No
-`CPlayer`, player-map, team, or hero ownership field is changed during reconnect.
+- `[ebp-0x18]` starts as the parsed connection token, but is reused by version
+  parsing and then by the client allocation at `+0x2F59D6`.
+- `[ebp-0x48]` starts as the account ID, but overlaps the bool result of the
+  map insertion whose output begins at `[ebp-0x4c]`. First admissions can thus
+  store native account `0x80000001` for different authenticated players. This
+  explains how an account-based reconnect search could select the host.
 
-The server-capacity patch remains a separate prerequisite so each stage has an exact,
-verified input and output hash.
+V20/V21 reserve eight private stack bytes and capture both parsed values at
+`+0x2F555C`, before either local is reused. The later authority hook preserves
+all registers, including EDX, and copies the saved account into the connection.
+The private reconnect marker is removed before game.dll sees the identity.
 
-The native match-ID bridge recognizes the stock and capacity-stage hashes. If it
-rejects the loaded DLL, the dedicated process keeps
-the `0xFFFFFFFF` sentinel. Clients then probe reconnect availability with that invalid
-match ID, and the gateway correctly returns zero time remaining, so no reconnect dialog
-can appear.
+Initial admissions retain stock zero-token allocation. For a reconnect the
+gateway encodes the observed original native number as `0x8000 | number`.
+The local AuthSuccess allocator wrapper verifies the **full** allocation-record
+number and authenticated account, then checks every linked CClientConnection.
+Reclaim is permitted only when any matching transport has state zero and the
+same account. An active or mismatched transport prevents reclaim, with no
+partial mutation. Failed reclaim clears the private token and falls back to
+stock fresh allocation, allowing the stock game identity check to reject a
+number mismatch instead of stealing another player's connection.
+
+Allocation-record byte `+0x0a` is initialized from `token == 0`; it is **not** an
+active/inactive flag. V19's assumption about this field was wrong. ThorGor's
+multiplayer patch also retains disconnected transports in the linked list.
+After validating the complete list, V21 sets only those retired transports'
+client-number fields to `-1`, so native lookup and targeted delivery find the
+replacement connection. The allocation record, retained CPlayer, player-map
+key, team, and hero remain unchanged. GenerateClientID itself remains stock.
+
+The gateway retains the reconnect decision across C0 retransmissions, rotates
+transport even when the public UDP endpoint is reused, and recognizes the
+creator's `69 01` prefix before client assignment `50`. This allows client
+number zero to be captured too.
+
+### Installation and validation
+
+Run `INSTALL_RECONNECT_V21.bat` from this checkout. It resolves its own location,
+uses Python on PATH and HON_HOME (or the normal installed game directory),
+stops the existing stack, installs and verifies the patches, resets volatile
+state, and launches this checkout's dashboard. Older numbered launchers remain
+historical and may reference the previous workspace. Start a **new match**;
+old native player objects already contain the previous build's corrupt account
+identity and cannot be repaired by changing the gateway alone.
+
+Expected K2 SHA-256:
+`BA40A63B4F0AA20A93C058A08699A10F9BE3A46CC10AB4DC702AF9C0A79CF5BD`
+
+Expected game.dll SHA-256 (unchanged capacity patch):
+`929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B`
+
+Run the tests with Python, unicorn and pefile installed and
+`THORGOR_TEST_HON_HOME` set to a game installation containing the stock DLL
+backups. The native suite builds patched copies in temporary directories;
+it does not alter the installed game. Tests execute the actual x86 capture,
+authority hook, allocator wrapper, native connection lookup, and stock game
+identity predicates. The game predicate test models the unrelated empty-string
+constructor because its CRT imports are not linked in the emulator.
+
+Live acceptance is still required: start two players, leave as player2 during
+an active match, reconnect, verify each player's hero/team/control, and continue
+playing beyond the earlier delayed-crash window. Repeat the leave/reconnect,
+then test the creator leaving and returning. Unit/native emulation success is
+not an end-to-end live-match result.
+
+## Historical experiments
+
+The entries below describe earlier attempts and their then-current assumptions.
+The v21 analysis above supersedes the inactive-record and persistent-token claims.
 
 ## v14 flow milestone
 

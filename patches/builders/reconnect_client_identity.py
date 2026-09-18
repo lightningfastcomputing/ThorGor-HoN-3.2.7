@@ -1,10 +1,9 @@
 """Keep game.dll's stock player identity path for reconnects.
 
-The engine already supports reconnect correctly when K2 returns the original
-native client number. ThorGor now supplies a persistent, authenticated K2
-connection token on the first admission and again after a drop, so no player
-map, team ownership, hero ownership, or CPlayer client number may be rewritten
-inside game.dll.
+The stock reconnect predicates require both the original account and native
+client number. The paired K2 admission patch preserves those values and retires
+the disconnected transport's number before reuse. No player map, team ownership,
+hero ownership, or CPlayer client number is rewritten inside game.dll.
 """
 from __future__ import annotations
 

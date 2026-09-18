@@ -11,6 +11,7 @@ from thorgor.protocols.game_protocol import (
     make_reconnect_info_reply,
     parse_reconnect_info_request,
     parse_server_client_assignment,
+    reconnect_number_for_admission,
     reserve_loopback_source,
     reserve_identity_source,
 )
@@ -30,12 +31,29 @@ class BrowserOccupancyTests(unittest.TestCase):
             + b"\0"
         )
         self.assertEqual(parse_server_client_assignment(packet), 7)
+        self.assertEqual(parse_server_client_assignment(packet[:7] + b"\x69\x01" + packet[7:]), 7)
+        host = packet[:10] + struct.pack("<I", 0) + packet[14:]
+        self.assertEqual(parse_server_client_assignment(host[:7] + b"\x69\x01" + host[7:]), 0)
         for malformed in (
             b"",
             packet[:7] + b"\x51" + packet[8:],
             packet[:10] + struct.pack("<I", 256) + b"\0",
+            packet[:7] + b"\x69\x00" + packet[7:],
+            packet[:7] + b"\x51arbitrary" + packet[7:],
+            packet[:7] + b"\x69\x01" + packet[7:12],
         ):
             self.assertIsNone(parse_server_client_assignment(malformed))
+
+    def test_reconnect_c0_retry_keeps_identity_after_old_route_is_released(self):
+        first = reconnect_number_for_admission("leaver", None, retired=True, native_number=1)
+        retry = reconnect_number_for_admission("leaver", ("leaver", first), retired=False, native_number=1)
+        self.assertEqual((first, retry), (1, 1))
+        self.assertIsNone(reconnect_number_for_admission("other", ("leaver", first), retired=False, native_number=1))
+        self.assertIsNone(reconnect_number_for_admission("host", ("host", None), retired=False, native_number=0))
+        self.assertEqual(reconnect_number_for_admission("host", ("host", None), retired=True, native_number=0), 0)
+        for number in (None, -1, 128):
+            with self.assertRaises(ValueError):
+                reconnect_number_for_admission("leaver", None, retired=True, native_number=number)
     def test_live_lobby_tracks_authenticated_players(self):
         for count in range(1, 11):
             connections = [player(f"cookie-{index}") for index in range(count)]

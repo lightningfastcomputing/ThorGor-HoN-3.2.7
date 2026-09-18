@@ -10,7 +10,7 @@ def main() -> int:
     for service in ("master", "chat", "game-manager", "native-match-id", "manager-process", "udp-shim", "dashboard", "accounts", "cleanup", "reset-state", "remote-setup", "remote-client"):
         sub.add_parser(service, help=f"run the {service} service")
     patches = sub.add_parser("patches", help="inspect or apply named binary patches")
-    patches.add_argument("action", choices=("list", "show", "apply", "install"))
+    patches.add_argument("action", choices=("list", "show", "apply", "install", "verify"))
     patches.add_argument("patch_id", nargs="?")
     patches.add_argument("source", nargs="?")
     patches.add_argument("target", nargs="?")

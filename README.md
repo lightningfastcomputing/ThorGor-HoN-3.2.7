@@ -4,6 +4,16 @@ An isolated Heroes of Newerth 3.2.7.1 LAN backend with master/authentication,
 chat, public games, dedicated-server management, matchmaking, and reproducible
 binary patching.
 
+## Reconnect v21 candidate
+
+This checkout contains the reconnect admission repair described in
+[docs/RECONNECT.md](docs/RECONNECT.md). Run `INSTALL_RECONNECT_V21.bat` from
+this checkout to install the verified patches and launch its dashboard.
+Start a fresh match: earlier builds stored incorrect native account identities.
+V21 also prevents the v20 pre-admission slave crash and records read-only native
+player-map snapshots in `var/work/reconnect_identity_events.jsonl`. The full 84-test
+suite passes; a two-client live match must still confirm reconnect ownership.
+
 ## Requirements
 
 - Windows 10 or 11 with Windows PowerShell.

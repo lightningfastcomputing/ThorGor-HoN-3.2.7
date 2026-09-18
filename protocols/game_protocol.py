@@ -398,10 +398,33 @@ def parse_server_team_chat(data: bytes) -> tuple[int, bytes] | None:
 
 def parse_server_client_assignment(data: bytes) -> int | None:
     """Return the native client number from K2's reliable NETCMD 0x50."""
-    if len(data) < 15 or data[:3] != b"\x00\x00\x03" or data[7] != 0x50:
+    if len(data) < 15 or data[:3] != b"\x00\x00\x03":
         return None
-    client_number = struct.unpack_from("<I", data, 10)[0]
+    offset = 7
+    # AuthSuccess prepends NETCMD_GAME_HOST + bool for the creator. Do not
+    # search arbitrary payload bytes: 0x50 can occur in strings or snapshots.
+    if data[offset:offset + 2] == b"\x69\x01":
+        offset += 2
+    if len(data) < offset + 8 or data[offset] != 0x50:
+        return None
+    client_number = struct.unpack_from("<I", data, offset + 3)[0]
     return client_number if client_number <= 0xFF else None
+
+
+def reconnect_number_for_admission(
+    cookie: str,
+    previous: tuple[str, int | None] | None,
+    *,
+    retired: bool,
+    native_number: int | None,
+) -> int | None:
+    """Keep the same admission identity across C0 retransmissions."""
+    if not retired:
+        return previous[1] if previous is not None and previous[0] == cookie else None
+    if native_number is None or not 0 <= native_number < 0x80:
+        raise ValueError("missing retained native client number")
+    return native_number
+
 
 def make_visible_team_chat_packet(
     sequence: int,
@@ -963,6 +986,7 @@ def main(argv=None) -> int:
     retired_route_deadlines: dict[tuple[str, int], float] = {}
     retired_route_by_cookie: dict[str, tuple[str, int]] = {}
     native_client_number_by_cookie: dict[str, int] = {}
+    route_admission: dict[tuple[str, int], tuple[str, int | None]] = {}
     admission_traces: dict[tuple[str, int], dict[str, object]] = {}
     route_traces: dict[tuple[str, int], dict[str, object]] = {}
     route_trace_dir = BASE_DIR / args.route_trace_dir
@@ -1007,7 +1031,7 @@ def main(argv=None) -> int:
     )
     source_path = Path(__file__).resolve()
     source_digest = hashlib.sha256(source_path.read_bytes()).hexdigest()[:12]
-    log(f"SOURCE path={source_path} sha256={source_digest} reconnect_transport=retired-native-number-v19")
+    log(f"SOURCE path={source_path} sha256={source_digest} reconnect_transport=safe-transport-lookup-v21")
     if args.preset:
         log(f"PRESET {args.preset}")
     if args.joiner_team_chat_fallback:
@@ -1061,6 +1085,7 @@ def main(argv=None) -> int:
         routes.remove(client_addr)
         route_activity.pop(client_addr, None)
         route_connect.pop(client_addr, None)
+        route_admission.pop(client_addr, None)
         route_counters.pop(client_addr, None)
         route_challenge_at.pop(client_addr, None)
         retired_route_deadlines.pop(client_addr, None)
@@ -1731,19 +1756,17 @@ def main(argv=None) -> int:
                         f"C0_WIRE client={addr[0]}:{addr[1]} user={connect.username!r} "
                         f"bytes={len(data)} flag_offset={connect.flag_offset} hex={data.hex()}"
                     )
-                    is_reconnect = connect.cookie in retired_route_by_cookie
-                    reconnect_client_number = native_client_number_by_cookie.get(connect.cookie)
-                    connection_token = None
-                    if is_reconnect:
-                        if reconnect_client_number is None or not 0 <= reconnect_client_number < 0x80:
-                            log(
-                                f"C0_AUTH_REJECT client={addr[0]}:{addr[1]} "
-                                "reason=missing retained native client number"
-                            )
-                            continue
-                        # High bit identifies a private authenticated reconnect;
-                        # the low byte names the exact retired K2 client record.
-                        connection_token = 0x8000 | reconnect_client_number
+                    try:
+                        reconnect_client_number = reconnect_number_for_admission(
+                            connect.cookie, route_admission.get(addr),
+                            retired=connect.cookie in retired_route_by_cookie,
+                            native_number=native_client_number_by_cookie.get(connect.cookie),
+                        )
+                    except ValueError as exc:
+                        log(f"C0_AUTH_REJECT client={addr[0]}:{addr[1]} reason={exc}")
+                        continue
+                    is_reconnect = reconnect_client_number is not None
+                    connection_token = (0x8000 | reconnect_client_number) if is_reconnect else None
                     data = make_authorized_local_c0(
                         data,
                         connect,
@@ -1758,6 +1781,11 @@ def main(argv=None) -> int:
                         if previous_addr != addr and previous_connect.cookie == connect.cookie:
                             remember_player_metadata(previous_addr)
                             retire_player_identity(previous_addr)
+                    if retired_route_by_cookie.get(connect.cookie) == addr:
+                        # A restarted client can reuse its public UDP endpoint;
+                        # it still needs a fresh private transport/source IP.
+                        close_route(addr, "reconnect_same_endpoint")
+                        retired_route_by_cookie[connect.cookie] = addr
                     route_connect[addr] = connect
                     if connect.cookie in retired_route_by_cookie:
                         # Bind the replacement while the departed socket is
@@ -1765,6 +1793,7 @@ def main(argv=None) -> int:
                         # different UDP port for K2's new transport.
                         get_or_create_route(addr)
                         release_retired_transport(connect.cookie, addr)
+                    route_admission[addr] = (connect.cookie, reconnect_client_number)
                     if account_id is not None:
                         reconnect_deadlines_by_account.pop(account_id, None)
                     restore_player_metadata(addr, connect)
