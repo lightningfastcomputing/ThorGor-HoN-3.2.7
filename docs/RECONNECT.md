@@ -1,6 +1,19 @@
 # Native reconnect identity
 
-## Current implementation: v21 candidate
+## Current implementation: v22 candidate
+
+The September 18 v21 test produced `crash_3.2.7.1_0032.dmp` at the same native
+string comparison. The identity snapshots immediately before the crash were
+correct: account 2/client 0 remained the host and account 3/client 1 remained
+player2. Dump reconstruction shows the first lookup record was the live host,
+not the disconnected player2. Its token was zero, the incoming reconnect token
+was `0x8001`, and its address string was already unsafe. Native lookup checked
+the address before checking the token even though both had to match.
+
+V22 performs the equivalent predicate in a safe order: token mismatch skips the
+record immediately, state zero skips it next, and only a matching live transport
+reaches the original address comparison. This prevents unrelated host and old
+player transports from exposing stale strings during a reconnect probe.
 
 The September 17 v20 live reconnect reached the slave but crashed it before C0
 admission. The matching minidump reports the C++ exception `invalid string
@@ -64,7 +77,7 @@ number zero to be captured too.
 
 ### Installation and validation
 
-Run `INSTALL_RECONNECT_V21.bat` from this checkout. It resolves its own location,
+Run `INSTALL_RECONNECT_V22.bat` from this checkout. It resolves its own location,
 uses Python on PATH and HON_HOME (or the normal installed game directory),
 stops the existing stack, installs and verifies the patches, resets volatile
 state, and launches this checkout's dashboard. Older numbered launchers remain
@@ -73,7 +86,7 @@ old native player objects already contain the previous build's corrupt account
 identity and cannot be repaired by changing the gateway alone.
 
 Expected K2 SHA-256:
-`BA40A63B4F0AA20A93C058A08699A10F9BE3A46CC10AB4DC702AF9C0A79CF5BD`
+`A4F9856A53A01D212CAE03EA1746F6594904F8D255956AD6D849ABD467281A77`
 
 Expected game.dll SHA-256 (unchanged capacity patch):
 `929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B`
@@ -95,7 +108,7 @@ not an end-to-end live-match result.
 ## Historical experiments
 
 The entries below describe earlier attempts and their then-current assumptions.
-The v21 analysis above supersedes the inactive-record and persistent-token claims.
+The v22 analysis above supersedes the inactive-record and persistent-token claims.
 
 ## v14 flow milestone
 

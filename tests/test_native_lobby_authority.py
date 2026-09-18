@@ -122,9 +122,11 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
 
     def test_packet_lookup_skips_retired_transport_before_address_compare(self):
         retired = 0x120000
+        self.vm.mem_write(retired + 0x14, struct.pack("<H", 0x8001))
         self.vm.mem_write(retired + 0x8228, struct.pack("<I", 0))
         self.vm.reg_write(reg.UC_X86_REG_ESI, retired)
         self.vm.reg_write(reg.UC_X86_REG_EDI, 0x130000)
+        self.vm.reg_write(reg.UC_X86_REG_EBX, 0x8001)
         self.vm.emu_start(
             self.base + authority.CONNECTION_LOOKUP_RVA,
             self.base + authority.CONNECTION_LOOKUP_NEXT_RVA,
@@ -137,10 +139,12 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
 
     def test_packet_lookup_preserves_displaced_instructions_for_live_transport(self):
         live, packet = 0x120000, 0x130000
+        self.vm.mem_write(live + 0x14, struct.pack("<H", 0x8001))
         self.vm.mem_write(live + 0x8228, struct.pack("<I", 4))
         self.vm.mem_write(packet + 0x14, struct.pack("<I", 0x13572468))
         self.vm.reg_write(reg.UC_X86_REG_ESI, live)
         self.vm.reg_write(reg.UC_X86_REG_EDI, packet)
+        self.vm.reg_write(reg.UC_X86_REG_EBX, 0x8001)
         self.vm.emu_start(
             self.base + authority.CONNECTION_LOOKUP_RVA,
             self.base + authority.CONNECTION_LOOKUP_RESUME_RVA,
@@ -151,6 +155,23 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         self.assertEqual(
             self.vm.reg_read(reg.UC_X86_REG_EIP),
             self.base + authority.CONNECTION_LOOKUP_RESUME_RVA,
+        )
+
+    def test_packet_lookup_rejects_token_mismatch_before_state_or_string_access(self):
+        connection = 0x300000
+        self.vm.mem_map(connection, 0x1000)
+        self.vm.mem_write(connection + 0x14, struct.pack("<H", 0))
+        self.vm.reg_write(reg.UC_X86_REG_ESI, connection)
+        self.vm.reg_write(reg.UC_X86_REG_EDI, 0x130000)
+        self.vm.reg_write(reg.UC_X86_REG_EBX, 0x8001)
+        self.vm.emu_start(
+            self.base + authority.CONNECTION_LOOKUP_RVA,
+            self.base + authority.CONNECTION_LOOKUP_NEXT_RVA,
+            count=100,
+        )
+        self.assertEqual(
+            self.vm.reg_read(reg.UC_X86_REG_EIP),
+            self.base + authority.CONNECTION_LOOKUP_NEXT_RVA,
         )
 
     def allocate(self, token, account, records, clients=(), stop_at_stock=False):
@@ -404,6 +425,39 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
             self.assertEqual(legacy[offset:offset + len(expected)], expected)
             legacy[offset:offset + len(replacement)] = replacement
         old_hash = "660FE63534A41D67AF44D53405FA526C022A649AE9A31327DA2C739A2232F819"
+        self.assertEqual(sha256(legacy), old_hash)
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            (home / "k2.dll").write_bytes(legacy)
+            (home / "k2.dll.thorgor_stock_3.2.7.1").write_bytes(
+                (self.home / "k2.dll.thorgor_stock_3.2.7.1").read_bytes())
+            install_k2(home)
+            self.assertEqual((home / "k2.dll").read_bytes(), self.image)
+            self.assertEqual((home / f"k2.dll.thorgor_before_{old_hash.lower()}").read_bytes(), legacy)
+
+    def test_v21_upgrade_preserves_old_dll_and_rebuilds_v22(self):
+        from thorgor.patches.engine import _rva_to_file
+        baseline = (self.work / "k2.dll.thorgor_v77_baseline").read_bytes()
+        legacy = bytearray(baseline)
+        for rva, expected, replacement in authority.operations():
+            if rva == authority.CONNECTION_LOOKUP_CAVE_RVA:
+                old = bytearray(bytes.fromhex("83be2882000000"))
+                old.extend(bytes.fromhex("0f84"))
+                old.extend(struct.pack(
+                    "<i",
+                    authority.CONNECTION_LOOKUP_NEXT_RVA
+                    - (authority.CONNECTION_LOOKUP_CAVE_RVA + len(old) + 4),
+                ))
+                old.extend(bytes.fromhex("89f88b5014"))
+                old.extend(authority.jump(
+                    authority.CONNECTION_LOOKUP_CAVE_RVA + len(old),
+                    authority.CONNECTION_LOOKUP_RESUME_RVA,
+                ))
+                replacement = bytes(old).ljust(0x40, b"\0")
+            offset = _rva_to_file(legacy, rva)
+            self.assertEqual(legacy[offset:offset + len(expected)], expected)
+            legacy[offset:offset + len(replacement)] = replacement
+        old_hash = "BA40A63B4F0AA20A93C058A08699A10F9BE3A46CC10AB4DC702AF9C0A79CF5BD"
         self.assertEqual(sha256(legacy), old_hash)
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)

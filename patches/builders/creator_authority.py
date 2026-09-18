@@ -12,7 +12,7 @@ from pathlib import Path
 from thorgor.patches.engine import _rva_to_file, sha256
 
 SOURCE_SHA256 = "25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026"
-OUTPUT_SHA256 = "BA40A63B4F0AA20A93C058A08699A10F9BE3A46CC10AB4DC702AF9C0A79CF5BD"
+OUTPUT_SHA256 = "A4F9856A53A01D212CAE03EA1746F6594904F8D255956AD6D849ABD467281A77"
 MARKER_REJECTION_RVA = 0x2F5982
 HOOK_RVA = 0x2F5AD6
 RETURN_RVA = 0x2F5ADD
@@ -142,16 +142,20 @@ def allocator_stub() -> bytes:
 
 
 def connection_lookup_guard_stub() -> bytes:
-    """Avoid comparing a destroyed address string on a retired transport.
+    """Avoid comparing destroyed address strings on irrelevant transports.
 
-    The linked-transport lookup runs before C0 admission.  State-zero records
-    can remain linked after disconnect, but their K2 string at +0x1AC has
-    already been destroyed.  Calling basic_string::compare on it raises
-    ``invalid string position``.  A disconnected transport cannot own an
-    incoming datagram, so skip it before touching that string.
+    The linked-transport lookup runs before C0 admission and requires both the
+    connection token and source address to match. K2 normally compares the
+    address first. During reconnect, older connections can remain linked after
+    their address string is no longer valid, including the live match host.
+    Compare the always-live uint16 token first, then state, and touch the string
+    only for a matching live transport. This preserves the original predicate.
     """
-    code = bytearray(bytes.fromhex("83be2882000000"))  # cmp [esi+0x8228],0
-    code.extend(bytes.fromhex("0f84"))
+    code = bytearray(bytes.fromhex("66395e14"))        # cmp [esi+0x14],bx
+    code.extend(bytes.fromhex("0f85"))                 # token mismatch -> next
+    code.extend(struct.pack("<i", CONNECTION_LOOKUP_NEXT_RVA - (CONNECTION_LOOKUP_CAVE_RVA + len(code) + 4)))
+    code.extend(bytes.fromhex("83be2882000000"))      # cmp [esi+0x8228],0
+    code.extend(bytes.fromhex("0f84"))                 # disconnected -> next
     code.extend(struct.pack("<i", CONNECTION_LOOKUP_NEXT_RVA - (CONNECTION_LOOKUP_CAVE_RVA + len(code) + 4)))
     code.extend(bytes.fromhex("89f88b5014"))          # displaced instructions
     code.extend(jump(CONNECTION_LOOKUP_CAVE_RVA + len(code), CONNECTION_LOOKUP_RESUME_RVA))
@@ -179,9 +183,9 @@ def operations() -> tuple[tuple[int, bytes, bytes], ...]:
         (ALLOCATOR_CALL_RVA, bytes.fromhex("e8188dffff"),
          b"\xe8" + struct.pack("<i", ALLOCATOR_CAVE_RVA - ALLOCATOR_CALL_RVA - 5)),
         (ALLOCATOR_CAVE_RVA, bytes(0x140), allocator_stub().ljust(0x140, b"\0")),
-        # ReadPackets performs this lookup before C0 admission. Retired
-        # transports remain linked, but their address strings are no longer
-        # valid C++ objects and must never reach basic_string::compare.
+        # ReadPackets performs this lookup before C0 admission. Old transports
+        # remain linked after their address strings become unsafe. Short-circuit
+        # the token/state predicates before basic_string::compare.
         (CONNECTION_LOOKUP_RVA, bytes.fromhex("89f88b5014"),
          jump(CONNECTION_LOOKUP_RVA, CONNECTION_LOOKUP_CAVE_RVA)),
         (CONNECTION_LOOKUP_CAVE_RVA, bytes(0x40),
