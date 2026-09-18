@@ -1,11 +1,11 @@
 {
   "id": "dedicated.reconnect_client_identity",
   "binary": "game.dll",
-  "version": "3.2.7.1-native-account-reconnect-v23-baseline",
+  "version": "3.2.7.1-native-account-reconnect-v25-hero-control",
   "source_sha256": "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B",
-  "output_sha256": "614EA87B07858531A6F741CB33ED8B9922F5A7D9EA8EE1DC40351437C3A1C01A",
-  "reason": "Restore the proven v14 account-based reconnect selection and adopt K2's fresh transport number only after selecting the retained player.",
-  "observed_failure": "V14 completed the reconnect flow but selected the host player. This baseline is restored intact before correcting selection with live evidence.",
+  "output_sha256": "CF565B4EAF39FB52ABB925C24E61E96F06B3547417671D733A530E8C28C9AF93",
+  "reason": "Preserve the verified v24 account-selected reconnect and synchronize the retained hero's controlling client number with the freshly assigned transport.",
+  "observed_failure": "V24 reconnects player2 to the correct retained CPlayer without disturbing the host, but CPlayer::AssignHero originally copied the old client number into IHeroEntity+0x444. After K2 assigns a fresh number, CanReceiveOrdersFrom rejects every command until that hero owner field is synchronized.",
   "discovered": "2026-09-11",
   "evidence": ["docs/RECONNECT.md", "tests/test_native_lobby_authority.py"],
   "operations": [
@@ -19,7 +19,55 @@
       "address": "rva",
       "offset": "0x333DD",
       "expected": "8B406C3B47087416",
-      "replacement": "8B570889506CEB16"
+      "replacement": "E9AF22FEFF909090"
+    },
+    {
+      "address": "rva",
+      "offset": "0x15691",
+      "expected": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+      "replacement": "8B570889506C508B0D94430721EB25"
+    },
+    {
+      "address": "rva",
+      "offset": "0x156C5",
+      "expected": "CCCCCCCCCCCCCCCCCCCCCC",
+      "replacement": "8B098B4920FF7074EB04CC"
+    },
+    {
+      "address": "rva",
+      "offset": "0x156D3",
+      "expected": "CCCCCCCCCCCCCCCCCCCCCCCCCC",
+      "replacement": "8B11FF52085985C07448EB07CC"
+    },
+    {
+      "address": "rva",
+      "offset": "0x156E6",
+      "expected": "CCCCCCCCCCCCCCCCCCCC",
+      "replacement": "8B108BC8EB09CCCCCCCC"
+    },
+    {
+      "address": "rva",
+      "offset": "0x156F5",
+      "expected": "CCCCCCCCCCCCCCCCCCCCCC",
+      "replacement": "6805570121FFA2B0000000"
+    },
+    {
+      "address": "rva",
+      "offset": "0x15705",
+      "expected": "CCCCCCCCCCCCCCCCCCCCCC",
+      "replacement": "85C0741CEB08CCCCCCCCCC"
+    },
+    {
+      "address": "rva",
+      "offset": "0x15713",
+      "expected": "CCCCCCCCCCCCCCCCCCCCCCCCCC",
+      "replacement": "8B5708899044040000EB07CCCC"
+    },
+    {
+      "address": "rva",
+      "offset": "0x15725",
+      "expected": "CCCCCCCCCCCCCCCCCCCCCC",
+      "replacement": "E9D1DC0100CCCCCCCCCCCC"
     }
   ]
 }

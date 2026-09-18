@@ -166,21 +166,46 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         guard_offset = pe.get_offset_from_rva(0x333DD)
         self.assertEqual(
             self.game[guard_offset:guard_offset + 8],
-            bytes.fromhex("8B570889506CEB16"),
+            bytes.fromhex("E9AF22FEFF909090"),
         )
 
         self.vm.mem_map(base, (pe.OPTIONAL_HEADER.SizeOfImage + 4095) & ~4095)
         self.vm.mem_write(base, pe.get_memory_mapped_image())
         player = self.client + 0x1000
+        hero = self.client + 0x2000
+        entity_registry_import = self.client + 0x3000
+        game_shared = self.client + 0x3100
+        registry = self.client + 0x3200
+        registry_vtable = self.client + 0x3300
+        hero_vtable = self.client + 0x3400
+        get_entity = self.client + 0x3500
+        get_as_hero = self.client + 0x3600
+        hero_index = 0x1234
+
         self.vm.mem_write(player + 0x6C, struct.pack("<I", 1))
+        self.vm.mem_write(player + 0x74, struct.pack("<I", hero_index))
         self.vm.mem_write(self.client + 0x08, struct.pack("<I", 2))
+        self.vm.mem_write(hero + 0x444, struct.pack("<I", 1))
+        self.vm.mem_write(base + 0x74394, struct.pack("<I", entity_registry_import))
+        self.vm.mem_write(entity_registry_import, struct.pack("<I", game_shared))
+        self.vm.mem_write(game_shared + 0x20, struct.pack("<I", registry))
+        self.vm.mem_write(registry, struct.pack("<I", registry_vtable))
+        self.vm.mem_write(registry_vtable + 0x08, struct.pack("<I", get_entity))
+        self.vm.mem_write(hero, struct.pack("<I", hero_vtable))
+        self.vm.mem_write(hero_vtable + 0xB0, struct.pack("<I", get_as_hero))
+        self.vm.mem_write(get_entity, b"\xB8" + struct.pack("<I", hero) + bytes.fromhex("C20400"))
+        self.vm.mem_write(get_as_hero, b"\xB8" + struct.pack("<I", hero) + b"\xC3")
         self.vm.reg_write(reg.UC_X86_REG_EAX, player)
         self.vm.reg_write(reg.UC_X86_REG_EDI, self.client)
-        self.vm.emu_start(base + 0x333DD, base + 0x333FB, count=4)
+        self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
+        self.vm.emu_start(base + 0x333DD, base + 0x333FB, count=100)
         self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EIP), base + 0x333FB)
         self.assertEqual(struct.unpack("<I", self.vm.mem_read(self.client + 0x08, 4))[0], 2)
         adopted = struct.unpack("<I", self.vm.mem_read(player + 0x6C, 4))[0]
         self.assertEqual(adopted, 2)
+        hero_owner = struct.unpack("<I", self.vm.mem_read(hero + 0x444, 4))[0]
+        self.assertEqual(hero_owner, 2)
+        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), self.stack)
 
     def test_exact_hashes_idempotence_and_rejected_input(self):
         self.assertEqual(sha256(self.image), authority.OUTPUT_SHA256)

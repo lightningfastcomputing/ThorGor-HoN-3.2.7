@@ -1,9 +1,8 @@
-"""Keep game.dll's stock player identity path for reconnects.
+"""Document the verified reconnect input stage.
 
-The stock reconnect predicates require both the original account and native
-client number. The paired K2 admission patch preserves those values and retires
-the disconnected transport's number before reuse. No player map, team ownership,
-hero ownership, or CPlayer client number is rewritten inside game.dll.
+The catalog applies the v25 instruction-level changes. Its narrow control repair
+keeps v24 player selection and transport behavior, then synchronizes the hero's
+owner-client field after the retained CPlayer adopts K2's fresh client number.
 """
 from __future__ import annotations
 

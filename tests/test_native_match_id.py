@@ -18,12 +18,14 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
         self.assertIn(capacity.output_sha256, VERIFIED_GAME_DLL_SHA256S)
         self.assertIn(reconnect.output_sha256, VERIFIED_GAME_DLL_SHA256S)
 
-    def test_reconnect_uses_v14_account_selection_and_adopts_fresh_transport(self):
+    def test_reconnect_preserves_account_selection_and_reconciles_hero_control(self):
         reconnect = PatchCatalog().get("dedicated.reconnect_client_identity")
-        account_match, client_number_adoption = reconnect.operations
+        account_match, control_hook, *control_caves = reconnect.operations
         self.assertEqual(account_match.replacement, bytes.fromhex("8B82580200003B470C757A"))
-        self.assertEqual(client_number_adoption.replacement, bytes.fromhex("8B570889506CEB16"))
-        self.assertEqual(client_number_adoption.offset + 8 + 0x16, 0x333FB)
+        self.assertEqual(control_hook.replacement, bytes.fromhex("E9AF22FEFF909090"))
+        self.assertEqual(control_caves[0].replacement[:6], bytes.fromhex("8B570889506C"))
+        self.assertTrue(any(bytes.fromhex("899044040000") in op.replacement for op in control_caves))
+        self.assertEqual(control_caves[-1].replacement[:5], bytes.fromhex("E9D1DC0100"))
 
     def test_v14_k2_hook_fits_reserved_cave(self):
         stub = creator_authority.authority_stub()
