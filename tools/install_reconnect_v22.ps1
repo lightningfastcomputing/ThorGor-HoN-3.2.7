@@ -28,9 +28,18 @@ try {
         @('-m', 'thorgor', 'patches', 'verify', '--hon-home', $gameDirectory),
         @('-m', 'thorgor', 'reset-state')
     )) {
+        # Windows PowerShell converts native stderr into ErrorRecord objects.
+        # With the script-wide Stop policy that used to abort at the word
+        # "Traceback" and discard the actual exception. Capture the complete
+        # command output and exit code before restoring strict error handling.
+        $savedPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
         $result = & $python @arguments 2>&1
-        $lines.Add(($result | Out-String))
-        if ($LASTEXITCODE -ne 0) { throw ($result | Out-String) }
+        $exitCode = $LASTEXITCODE
+        $ErrorActionPreference = $savedPreference
+        $text = ($result | ForEach-Object { $_.ToString() }) | Out-String
+        $lines.Add("COMMAND: python $($arguments -join ' ')`n$text")
+        if ($exitCode -ne 0) { throw "python exited $exitCode`n$text" }
     }
     $dashboard = Start-Process -FilePath $python `
         -ArgumentList '-m', 'thorgor', 'dashboard' `
