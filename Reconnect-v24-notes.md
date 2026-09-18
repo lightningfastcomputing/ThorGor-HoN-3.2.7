@@ -22,3 +22,18 @@ selected by account 3 and adopt the fresh transport number without modifying
 the host CPlayer.
 
 Install with `INSTALL_RECONNECT_V24.bat` while all HoN clients are closed.
+
+## Live milestone verification
+
+Verified on 2026-09-18 with a two-client match:
+
+- player2 disconnected, logged back in, and reconnected to the running match;
+- player2 was rebound to the correct retained player rather than the host;
+- the host remained connected and was not displaced;
+- the dedicated slave remained running throughout reconnect;
+- the reconnecting client loaded the match successfully.
+
+Known remaining defect: the reconnected player2 client cannot yet issue working
+hero-control commands. This milestone freezes the correct transport and player
+identity behavior. Future work must preserve it and address only post-reconnect
+hero ownership/input authorization.
