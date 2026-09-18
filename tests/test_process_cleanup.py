@@ -4,11 +4,21 @@ from unittest.mock import patch
 
 from thorgor.game_manager.process_cleanup import (
     cleanup_stale_processes,
+    discover_processes,
     discover_listener_processes,
 )
 
 
 class ProcessCleanupTests(unittest.TestCase):
+    @patch("thorgor.game_manager.process_cleanup.os.name", "nt")
+    @patch("thorgor.game_manager.process_cleanup.subprocess.run")
+    def test_cim_access_denied_falls_back_to_listener_inventory(self, run):
+        run.return_value = subprocess.CompletedProcess(
+            [], 1, "", "Get-CimInstance Win32_Process: Access denied"
+        )
+
+        self.assertEqual(discover_processes(), ())
+
     @patch("thorgor.game_manager.process_cleanup.os.name", "nt")
     @patch("thorgor.game_manager.process_cleanup.subprocess.run")
     def test_discovers_stack_listener_when_command_line_is_hidden(self, run):

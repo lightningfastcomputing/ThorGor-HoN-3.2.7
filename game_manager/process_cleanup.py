@@ -65,7 +65,11 @@ def discover_processes() -> tuple[tuple[int, str, str], ...]:
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "Windows process inventory failed")
+        # Some otherwise-admin-capable Windows installations deny CIM process
+        # inventory. Listener discovery below is deliberately independent and
+        # still identifies the ThorGor services by their private bound ports.
+        # Treat CIM as enrichment, not a prerequisite for cleanup/install.
+        return ()
     rows = []
     for row in csv.DictReader(io.StringIO(result.stdout.lstrip("\ufeff\r\n"))):
         try:
