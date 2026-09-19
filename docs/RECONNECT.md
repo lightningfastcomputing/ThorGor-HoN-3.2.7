@@ -1,6 +1,27 @@
 # Native reconnect identity
 
-## Current implementation: v22 candidate
+## Current implementation: v28 retained player-entity control
+
+V28 restores the verified v25 reconnect route: the returning account selects
+the correct retained CPlayer and hero, the host remains connected, and the
+slave remains alive. It removes the rejected v26/v27 shared player-map lookup
+hook entirely; ordinary lobby admission and slot selection are stock again.
+
+Ghidra shows that `CPlayer::Initialize` copies the client number into both
+`CPlayer+0x6C` and a separate in-game player entity at
+`CPlayer+0x254 -> entity+0x23C`. V25 correctly refreshed the CPlayer and the
+hero's `+0x444` order owner, but left the retained player entity bound to the
+retired transport. V28 updates that field inside the already verified account-
+selected reconnect success stub. It does not mutate the player map, team, lobby
+admission, or any shared lookup routine.
+
+Install with `INSTALL_RECONNECT_V28.bat`. Expected game.dll SHA-256:
+`0A4DE1ED10D75747BFF73A0D86DB8D1975783C2EB3F719FEB60CFEA82DB7F1D4`.
+
+Live acceptance remains required: reconnect player2 in a fresh match, move the
+correct hero, level an ability, then repeat the disconnect/reconnect cycle.
+
+## Historical v22 analysis
 
 The September 18 v21 test produced `crash_3.2.7.1_0032.dmp` at the same native
 string comparison. The identity snapshots immediately before the crash were

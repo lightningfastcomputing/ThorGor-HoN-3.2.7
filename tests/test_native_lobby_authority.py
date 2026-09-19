@@ -180,12 +180,15 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         hero_vtable = self.client + 0x3400
         get_entity = self.client + 0x3500
         get_as_hero = self.client + 0x3600
+        player_entity = self.client + 0x3700
         hero_index = 0x1234
 
         self.vm.mem_write(player + 0x6C, struct.pack("<I", 1))
         self.vm.mem_write(player + 0x74, struct.pack("<I", hero_index))
+        self.vm.mem_write(player + 0x254, struct.pack("<I", player_entity))
         self.vm.mem_write(self.client + 0x08, struct.pack("<I", 2))
         self.vm.mem_write(hero + 0x444, struct.pack("<I", 1))
+        self.vm.mem_write(player_entity + 0x23C, struct.pack("<I", 1))
         self.vm.mem_write(base + 0x74394, struct.pack("<I", entity_registry_import))
         self.vm.mem_write(entity_registry_import, struct.pack("<I", game_shared))
         self.vm.mem_write(game_shared + 0x20, struct.pack("<I", registry))
@@ -205,6 +208,10 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         self.assertEqual(adopted, 2)
         hero_owner = struct.unpack("<I", self.vm.mem_read(hero + 0x444, 4))[0]
         self.assertEqual(hero_owner, 2)
+        player_entity_owner = struct.unpack(
+            "<I", self.vm.mem_read(player_entity + 0x23C, 4)
+        )[0]
+        self.assertEqual(player_entity_owner, 2)
         self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), self.stack)
 
     def test_exact_hashes_idempotence_and_rejected_input(self):

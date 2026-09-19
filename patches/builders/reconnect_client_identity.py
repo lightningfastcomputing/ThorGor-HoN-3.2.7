@@ -1,8 +1,9 @@
 """Document the verified reconnect input stage.
 
-The catalog applies the v25 instruction-level changes. Its narrow control repair
-keeps v24 player selection and transport behavior, then synchronizes the hero's
-owner-client field after the retained CPlayer adopts K2's fresh client number.
+The catalog applies the v28 instruction-level changes. Its narrow control repair
+keeps the verified v25 player selection and transport behavior, then synchronizes
+both the hero owner and retained player entity after the CPlayer adopts K2's
+fresh client number. It does not alter shared player lookup or lobby admission.
 """
 from __future__ import annotations
 
