@@ -1,25 +1,32 @@
 # Native reconnect identity
 
-## Current implementation: v28 retained player-entity control
+## Current implementation: v29 gameplay command identity
 
-V28 restores the verified v25 reconnect route: the returning account selects
+V29 preserves the frozen v28 reconnect route: the returning account selects
 the correct retained CPlayer and hero, the host remains connected, and the
 slave remains alive. It removes the rejected v26/v27 shared player-map lookup
 hook entirely; ordinary lobby admission and slot selection are stock again.
 
-Ghidra shows that `CPlayer::Initialize` copies the client number into both
-`CPlayer+0x6C` and a separate in-game player entity at
-`CPlayer+0x254 -> entity+0x23C`. V25 correctly refreshed the CPlayer and the
-hero's `+0x444` order owner, but left the retained player entity bound to the
-retired transport. V28 updates that field inside the already verified account-
-selected reconnect success stub. It does not mutate the player map, team, lobby
-admission, or any shared lookup routine.
+The v28 live trace shows the retained CPlayer correctly adopts fresh client 2,
+while its player-map node intentionally remains under historical key 1. The
+gameplay packet dispatcher therefore discarded client 2's movement and ability
+packets before order authorization. V29 leaves that map and the shared lookup
+unchanged. It adds a fallback only inside `CGameServer::ProcessGameDataFromClient`:
+after a stock miss, retained player values are scanned for a live `+0x6C` matching
+the packet sender. Lobby admission never calls this fallback.
 
-Install with `INSTALL_RECONNECT_V28.bat`. Expected game.dll SHA-256:
-`0A4DE1ED10D75747BFF73A0D86DB8D1975783C2EB3F719FEB60CFEA82DB7F1D4`.
+Install with `INSTALL_RECONNECT_V29.bat`. Expected game.dll SHA-256:
+`19FA43B44D07FE1C88EAC199D8E80BEEA635078887203A40BBB4FF0EB8FF4BDB`.
 
 Live acceptance remains required: reconnect player2 in a fresh match, move the
 correct hero, level an ability, then repeat the disconnect/reconnect cycle.
+
+The first v29 live test confirmed that player2's commands now reach the correct
+retained hero and the host remains connected. Remaining defect: the returning
+client initially lacks assets for roughly three to five seconds, then processes
+controls with extreme latency and frame skipping. V29 is frozen as the first
+correct-player, control-restored milestone; subsequent work must isolate the
+reconnect timing/catch-up path without broadening the command lookup.
 
 ## Historical v22 analysis
 

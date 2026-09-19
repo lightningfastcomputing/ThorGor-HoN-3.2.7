@@ -1,11 +1,11 @@
 {
   "id": "dedicated.reconnect_client_identity",
   "binary": "game.dll",
-  "version": "3.2.7.1-native-account-reconnect-v28-player-entity-control",
+  "version": "3.2.7.1-native-account-reconnect-v29-gameplay-command-identity",
   "source_sha256": "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B",
-  "output_sha256": "0A4DE1ED10D75747BFF73A0D86DB8D1975783C2EB3F719FEB60CFEA82DB7F1D4",
-  "reason": "Preserve the verified v25 reconnect route and synchronize both the retained hero and the retained in-game player entity with K2's freshly assigned transport number.",
-  "observed_failure": "V25 reconnects player2 to the correct hero without disturbing the host, but movement and ability commands remain disabled. CPlayer::Initialize normally writes the connection client number to the player entity at CPlayer+0x254 -> entity+0x23C; the reconnect path did not refresh it.",
+  "output_sha256": "19FA43B44D07FE1C88EAC199D8E80BEEA635078887203A40BBB4FF0EB8FF4BDB",
+  "reason": "Preserve the verified v28 reconnect and resolve a retained player by its live client number only inside CGameServer::ProcessGameDataFromClient after the stock sender lookup misses.",
+  "observed_failure": "V28 reconnects player2 to the correct retained player and hero without disturbing the host, but movement and ability packets are discarded before authorization because the gameplay dispatcher queries the historical player-map key with the fresh transport number.",
   "discovered": "2026-09-11",
   "evidence": ["docs/RECONNECT.md", "tests/test_native_lobby_authority.py"],
   "operations": [
@@ -86,6 +86,24 @@
       "offset": "0x15756",
       "expected": "CCCCCCCCCCCCCCCCCCCC",
       "replacement": "59E99FDC0100CCCCCCCC"
+    },
+    {
+      "address": "file_offset",
+      "offset": "0x1F0",
+      "expected": "F02A0700",
+      "replacement": "002C0700"
+    },
+    {
+      "address": "rva",
+      "offset": "0x47907",
+      "expected": "8B4D303BC87507",
+      "replacement": "E9F4C102009090"
+    },
+    {
+      "address": "rva",
+      "offset": "0x73B00",
+      "expected": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "replacement": "8B4D303BC80F85630000008BD08B083BCA0F845C0000008B791085FF0F840C0000008B5F6C3B5D440F84400000008B79083BFA0F84130000008BCF8B393BFA0F84D2FFFFFF8BCFE9EFFFFFFF8B79043BFA0F841C0000003B4F080F85070000008BCFE9E5FFFFFF8BCFE9A9FFFFFFE9A23DFDFFE9963DFDFF"
     }
   ]
 }

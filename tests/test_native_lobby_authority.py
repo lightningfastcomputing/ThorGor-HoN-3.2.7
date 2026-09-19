@@ -214,6 +214,40 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         self.assertEqual(player_entity_owner, 2)
         self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), self.stack)
 
+    def test_gameplay_dispatcher_resolves_only_retained_live_client_on_stock_miss(self):
+        pe = pefile.PE(data=self.game)
+        base = pe.OPTIONAL_HEADER.ImageBase
+        self.vm.mem_map(base, (pe.OPTIONAL_HEADER.SizeOfImage + 4095) & ~4095)
+        self.vm.mem_write(base, pe.get_memory_mapped_image())
+
+        game = self.client + 0x4000
+        head = self.client + 0x5000
+        node = self.client + 0x5100
+        player = self.client + 0x5200
+        frame = self.frame
+        self.vm.mem_write(game + 0x100, struct.pack("<I", head))
+        self.vm.mem_write(head, struct.pack("<III", node, node, node))
+        self.vm.mem_write(node, struct.pack("<III", head, head, head))
+        self.vm.mem_write(node + 0x10, struct.pack("<I", player))
+        self.vm.mem_write(player + 0x6C, struct.pack("<I", 2))
+
+        def dispatch(sender, stock_result):
+            self.vm.mem_write(frame + 0x30, struct.pack("<I", stock_result))
+            self.vm.mem_write(frame + 0x44, struct.pack("<I", sender))
+            self.vm.reg_write(reg.UC_X86_REG_EAX, head)
+            self.vm.reg_write(reg.UC_X86_REG_ESI, game)
+            self.vm.reg_write(reg.UC_X86_REG_EBP, frame)
+            self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
+            self.vm.emu_start(base + 0x47907, base + 0x4791D, count=1000)
+            return (
+                struct.unpack("<I", self.vm.mem_read(frame + 0x30, 4))[0],
+                self.vm.reg_read(reg.UC_X86_REG_EDI),
+            )
+
+        self.assertEqual(dispatch(2, head), (player, player))
+        self.assertEqual(dispatch(3, head), (0, 0))
+        self.assertEqual(dispatch(1, node), (player, player))
+
     def test_exact_hashes_idempotence_and_rejected_input(self):
         self.assertEqual(sha256(self.image), authority.OUTPUT_SHA256)
         self.assertEqual(

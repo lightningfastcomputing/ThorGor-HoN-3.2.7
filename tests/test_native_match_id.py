@@ -18,9 +18,11 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
         self.assertIn(capacity.output_sha256, VERIFIED_GAME_DLL_SHA256S)
         self.assertIn(reconnect.output_sha256, VERIFIED_GAME_DLL_SHA256S)
 
-    def test_reconnect_preserves_account_selection_and_reconciles_entity_control(self):
+    def test_reconnect_preserves_identity_and_repairs_gameplay_command_lookup(self):
         reconnect = PatchCatalog().get("dedicated.reconnect_client_identity")
-        account_match, control_hook, *control_caves = reconnect.operations
+        account_match, control_hook, *remaining = reconnect.operations
+        control_caves = remaining[:-3]
+        section_growth, command_hook, command_cave = remaining[-3:]
         self.assertEqual(account_match.replacement, bytes.fromhex("8B82580200003B470C757A"))
         self.assertEqual(control_hook.replacement, bytes.fromhex("E9AF22FEFF909090"))
         self.assertEqual(control_caves[0].replacement[:6], bytes.fromhex("8B570889506C"))
@@ -28,6 +30,12 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
         self.assertTrue(any(bytes.fromhex("89913C020000") in op.replacement for op in control_caves))
         resume = next(op for op in control_caves if op.offset == 0x15725)
         self.assertEqual(resume.replacement[:5], bytes.fromhex("E9D1DC0100"))
+        self.assertEqual(section_growth.address, "file_offset")
+        self.assertEqual(section_growth.offset, 0x1F0)
+        self.assertEqual(command_hook.offset, 0x47907)
+        self.assertEqual(command_hook.replacement, bytes.fromhex("E9F4C102009090"))
+        self.assertEqual(command_cave.offset, 0x73B00)
+        self.assertIn(bytes.fromhex("8B5F6C3B5D44"), command_cave.replacement)
 
     def test_v14_k2_hook_fits_reserved_cave(self):
         stub = creator_authority.authority_stub()
