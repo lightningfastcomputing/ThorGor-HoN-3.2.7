@@ -1,10 +1,10 @@
-"""Document the verified reconnect identity and connected-state stages.
+"""Document the verified reconnect identity and snapshot stages.
 
-The catalog applies the v31 instruction-level changes. It retains the verified
-v29 identity handoff and gameplay-only lookup, then mirrors the native
-CPlayer::Connected state transition in the successful account-matched reconnect
-branch. Shared lookup, team rosters, ordinary lobby admission and initial team
-joining stay untouched.
+The catalog applies the v32 instruction-level changes. It retains v31's verified
+identity handoff, gameplay-only lookup and native CPlayer::Connected transition,
+then adds the same stock-first fallback inside ProcessClientSnapshot. Shared
+lookup, team rosters, ordinary lobby admission and initial team joining stay
+untouched.
 """
 from __future__ import annotations
 

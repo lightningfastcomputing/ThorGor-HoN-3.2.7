@@ -7,6 +7,7 @@ from thorgor.game_manager.native_match_id import (
 from thorgor.patches.builders import creator_authority
 from thorgor.patches.catalog import PatchCatalog
 from tools.build_reconnect_connected_state_stub import build as build_connected_state_stub
+from tools.build_reconnect_snapshot_identity_stub import build as build_snapshot_identity_stub
 
 
 class NativeMatchIdVerificationTests(unittest.TestCase):
@@ -22,8 +23,14 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
     def test_reconnect_preserves_identity_and_restores_connected_state(self):
         reconnect = PatchCatalog().get("dedicated.reconnect_client_identity")
         account_match, control_hook, *remaining = reconnect.operations
-        control_caves = remaining[:-4]
-        section_growth, command_hook, command_cave, connected_state_cave = remaining[-4:]
+        by_offset = {operation.offset: operation for operation in remaining}
+        control_caves = [operation for operation in remaining if 0x15691 <= operation.offset <= 0x15756]
+        section_growth = next(operation for operation in remaining if operation.address == "file_offset")
+        command_hook = by_offset[0x47907]
+        command_cave = by_offset[0x73B00]
+        connected_state_cave = by_offset[0x73C00]
+        snapshot_hook = by_offset[0x2DD32]
+        snapshot_cave = by_offset[0x73D00]
         self.assertEqual(account_match.replacement, bytes.fromhex("8B82580200003B470C757A"))
         self.assertEqual(control_hook.replacement, bytes.fromhex("E91E080400909090"))
         self.assertEqual(control_caves[0].replacement[:6], bytes.fromhex("8B570889506C"))
@@ -42,6 +49,9 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
         self.assertIn(bytes.fromhex("6681A05A030000FEFF"), connected_state_cave.replacement)
         self.assertIn(bytes.fromhex("6683885A03000040"), connected_state_cave.replacement)
         self.assertIn(bytes.fromhex("C780A4030000FFFFFFFF"), connected_state_cave.replacement)
+        self.assertEqual(snapshot_hook.replacement, bytes.fromhex("E9C95F04009090"))
+        self.assertEqual(snapshot_cave.replacement, build_snapshot_identity_stub())
+        self.assertIn(bytes.fromhex("39786C"), snapshot_cave.replacement)
 
     def test_v14_k2_hook_fits_reserved_cave(self):
         stub = creator_authority.authority_stub()

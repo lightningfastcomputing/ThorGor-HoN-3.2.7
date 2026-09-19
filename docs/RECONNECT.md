@@ -1,6 +1,22 @@
 # Native reconnect identity
 
-## Current implementation: v31 native connected-state restoration
+## Current implementation: v32 client-snapshot identity
+
+V31 restored the native connected state and remained stable in live testing.
+Player2 rejoined the correct hero without evicting the host or crashing the
+slave. The remaining five-second control delay produced a definitive native
+error for every real-time input snapshot:
+
+`CGameServer::ProcessClientSnapshot() - Received snapshot with invalid client number 2`
+
+The live player-map trace simultaneously showed account 3 retained correctly
+with `CPlayer+0x6c == 2` and disconnected bit 0 cleared. Ghidra confirmed
+`ProcessClientSnapshot` performs another historical-key lookup before reading
+input state. V32 preserves its stock lookup and, only when that lookup misses,
+walks retained player values for a unique `CPlayer+0x6c` matching the packet's
+live client number. No shared lookup or map mutation is introduced.
+
+## Previous implementation: v31 native connected-state restoration
 
 The v29 milestone is frozen at tag
 `reconnect-v29-control-restored-latency-wip`. It proved the reconnecting client
@@ -48,8 +64,8 @@ unchanged. It adds a fallback only inside `CGameServer::ProcessGameDataFromClien
 after a stock miss, retained player values are scanned for a live `+0x6C` matching
 the packet sender. Lobby admission never calls this fallback.
 
-Install with `INSTALL_RECONNECT_V31.bat`. Expected game.dll SHA-256:
-`36D20B56BFDB7B1B4988BCA5727B1AECB928979575DB59FBF38698CB63C3916C`.
+Install with `INSTALL_RECONNECT_V32.bat`. Expected game.dll SHA-256:
+`D103A500E0ADA6E10F9F15EF8E22C4E5582AD8F7BE50FF109ABDC8E5F9ABBB30`.
 
 Live acceptance remains required: reconnect player2 in a fresh match, move the
 correct hero, level an ability, then repeat the disconnect/reconnect cycle.

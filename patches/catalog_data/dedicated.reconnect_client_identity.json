@@ -1,11 +1,11 @@
 {
   "id": "dedicated.reconnect_client_identity",
   "binary": "game.dll",
-  "version": "3.2.7.1-native-account-reconnect-v31-connected-state",
+  "version": "3.2.7.1-native-account-reconnect-v32-client-snapshot-identity",
   "source_sha256": "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B",
-  "output_sha256": "36D20B56BFDB7B1B4988BCA5727B1AECB928979575DB59FBF38698CB63C3916C",
-  "reason": "Preserve the verified v29 reconnect identity and command path, then apply the exact field changes made by CPlayer::Connected so the retained player returns to the slave's normal per-frame client stream.",
-  "observed_failure": "V29 restores player2 to the correct hero and accepts commands, but leaves CPlayer status bit 0 set. The server frame loop therefore treats player2 as disconnected, skips normal per-frame delivery, and exposes controls only through periodic catch-up bursts.",
+  "output_sha256": "D103A500E0ADA6E10F9F15EF8E22C4E5582AD8F7BE50FF109ABDC8E5F9ABBB30",
+  "reason": "Preserve v31's stable reconnect and native connected state, then resolve only ProcessClientSnapshot stock lookup misses by the retained player's fresh live client number.",
+  "observed_failure": "V31 reconnects player2 correctly and remains stable, but ProcessClientSnapshot rejects every real-time control snapshot as invalid client number 2 because the player map intentionally retains its historical key. Controls appear only through a delayed fallback path.",
   "discovered": "2026-09-11",
   "evidence": ["docs/RECONNECT.md", "tests/test_native_lobby_authority.py"],
   "operations": [
@@ -91,7 +91,7 @@
       "address": "file_offset",
       "offset": "0x1F0",
       "expected": "F02A0700",
-      "replacement": "002C0700"
+      "replacement": "002E0700"
     },
     {
       "address": "rva",
@@ -110,6 +110,18 @@
       "offset": "0x73C00",
       "expected": "0000000000000000000000000000000000000000000000000000000000000000",
       "replacement": "6681A05A030000FEFF6683885A03000040C780A4030000FFFFFFFFE9711AFAFF"
+    },
+    {
+      "address": "rva",
+      "offset": "0x2DD32",
+      "expected": "85C9894D607541",
+      "replacement": "E9C95F04009090"
+    },
+    {
+      "address": "rva",
+      "offset": "0x73D00",
+      "expected": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "replacement": "85C90F85650000008BD68B0E3BCA0F84610000008B411085C00F840900000039786C0F84430000008B41083BC20F84130000008BC88B013BC20F84CDFFFFFF8BC8E9EFFFFFFF8B41043BC20F84240000003B48080F850A0000008BC88B4104E9E5FFFFFF8BC8E9A1FFFFFF8BC8894D60E905A0FBFF31C9894D60E9BA9FFBFF"
     }
   ]
 }
