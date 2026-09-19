@@ -1,11 +1,11 @@
 {
   "id": "dedicated.reconnect_client_identity",
   "binary": "game.dll",
-  "version": "3.2.7.1-native-account-reconnect-v29-gameplay-command-identity",
+  "version": "3.2.7.1-native-account-reconnect-v31-connected-state",
   "source_sha256": "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B",
-  "output_sha256": "19FA43B44D07FE1C88EAC199D8E80BEEA635078887203A40BBB4FF0EB8FF4BDB",
-  "reason": "Preserve the verified v28 reconnect and resolve a retained player by its live client number only inside CGameServer::ProcessGameDataFromClient after the stock sender lookup misses.",
-  "observed_failure": "V28 reconnects player2 to the correct retained player and hero without disturbing the host, but movement and ability packets are discarded before authorization because the gameplay dispatcher queries the historical player-map key with the fresh transport number.",
+  "output_sha256": "36D20B56BFDB7B1B4988BCA5727B1AECB928979575DB59FBF38698CB63C3916C",
+  "reason": "Preserve the verified v29 reconnect identity and command path, then apply the exact field changes made by CPlayer::Connected so the retained player returns to the slave's normal per-frame client stream.",
+  "observed_failure": "V29 restores player2 to the correct hero and accepts commands, but leaves CPlayer status bit 0 set. The server frame loop therefore treats player2 as disconnected, skips normal per-frame delivery, and exposes controls only through periodic catch-up bursts.",
   "discovered": "2026-09-11",
   "evidence": ["docs/RECONNECT.md", "tests/test_native_lobby_authority.py"],
   "operations": [
@@ -19,7 +19,7 @@
       "address": "rva",
       "offset": "0x333DD",
       "expected": "8B406C3B47087416",
-      "replacement": "E9AF22FEFF909090"
+      "replacement": "E91E080400909090"
     },
     {
       "address": "rva",
@@ -104,6 +104,12 @@
       "offset": "0x73B00",
       "expected": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
       "replacement": "8B4D303BC80F85630000008BD08B083BCA0F845C0000008B791085FF0F840C0000008B5F6C3B5D440F84400000008B79083BFA0F84130000008BCF8B393BFA0F84D2FFFFFF8BCFE9EFFFFFFF8B79043BFA0F841C0000003B4F080F85070000008BCFE9E5FFFFFF8BCFE9A9FFFFFFE9A23DFDFFE9963DFDFF"
+    },
+    {
+      "address": "rva",
+      "offset": "0x73C00",
+      "expected": "0000000000000000000000000000000000000000000000000000000000000000",
+      "replacement": "6681A05A030000FEFF6683885A03000040C780A4030000FFFFFFFFE9711AFAFF"
     }
   ]
 }

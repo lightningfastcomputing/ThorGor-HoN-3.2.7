@@ -6,6 +6,7 @@ from thorgor.game_manager.native_match_id import (
 )
 from thorgor.patches.builders import creator_authority
 from thorgor.patches.catalog import PatchCatalog
+from tools.build_reconnect_connected_state_stub import build as build_connected_state_stub
 
 
 class NativeMatchIdVerificationTests(unittest.TestCase):
@@ -18,13 +19,13 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
         self.assertIn(capacity.output_sha256, VERIFIED_GAME_DLL_SHA256S)
         self.assertIn(reconnect.output_sha256, VERIFIED_GAME_DLL_SHA256S)
 
-    def test_reconnect_preserves_identity_and_repairs_gameplay_command_lookup(self):
+    def test_reconnect_preserves_identity_and_restores_connected_state(self):
         reconnect = PatchCatalog().get("dedicated.reconnect_client_identity")
         account_match, control_hook, *remaining = reconnect.operations
-        control_caves = remaining[:-3]
-        section_growth, command_hook, command_cave = remaining[-3:]
+        control_caves = remaining[:-4]
+        section_growth, command_hook, command_cave, connected_state_cave = remaining[-4:]
         self.assertEqual(account_match.replacement, bytes.fromhex("8B82580200003B470C757A"))
-        self.assertEqual(control_hook.replacement, bytes.fromhex("E9AF22FEFF909090"))
+        self.assertEqual(control_hook.replacement, bytes.fromhex("E91E080400909090"))
         self.assertEqual(control_caves[0].replacement[:6], bytes.fromhex("8B570889506C"))
         self.assertTrue(any(bytes.fromhex("899044040000") in op.replacement for op in control_caves))
         self.assertTrue(any(bytes.fromhex("89913C020000") in op.replacement for op in control_caves))
@@ -36,6 +37,11 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
         self.assertEqual(command_hook.replacement, bytes.fromhex("E9F4C102009090"))
         self.assertEqual(command_cave.offset, 0x73B00)
         self.assertIn(bytes.fromhex("8B5F6C3B5D44"), command_cave.replacement)
+        self.assertEqual(connected_state_cave.offset, 0x73C00)
+        self.assertEqual(connected_state_cave.replacement, build_connected_state_stub())
+        self.assertIn(bytes.fromhex("6681A05A030000FEFF"), connected_state_cave.replacement)
+        self.assertIn(bytes.fromhex("6683885A03000040"), connected_state_cave.replacement)
+        self.assertIn(bytes.fromhex("C780A4030000FFFFFFFF"), connected_state_cave.replacement)
 
     def test_v14_k2_hook_fits_reserved_cave(self):
         stub = creator_authority.authority_stub()

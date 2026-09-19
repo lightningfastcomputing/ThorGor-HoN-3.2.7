@@ -4,15 +4,16 @@ An isolated Heroes of Newerth 3.2.7.1 LAN backend with master/authentication,
 chat, public games, dedicated-server management, matchmaking, and reproducible
 binary patching.
 
-## Reconnect v29 candidate
+## Reconnect v31 candidate
 
 This checkout contains the reconnect admission repair described in
-[docs/RECONNECT.md](docs/RECONNECT.md). Run `INSTALL_RECONNECT_V29.bat` from
+[docs/RECONNECT.md](docs/RECONNECT.md). Run `INSTALL_RECONNECT_V31.bat` from
 this checkout to install the verified patches and launch its dashboard.
 Start a fresh match: earlier builds stored incorrect native account identities.
-V29 preserves the frozen lobby-safe v28 milestone and repairs sender resolution
-only inside the gameplay packet dispatcher. The rejected v26/v27 shared lookup
-experiment remains absent. Read-only native player-map snapshots remain available
+V31 preserves the frozen, stable v29 identity path and repairs the retained
+player's native connected state without changing lobby or team membership.
+The rejected v26/v27 shared lookup and v30 roster-mutation experiments remain
+absent. Read-only native player-map snapshots remain available
 in `var/work/reconnect_identity_events.jsonl`. The full 72-test suite passes; a
 two-client live match must confirm movement and ability control.
 

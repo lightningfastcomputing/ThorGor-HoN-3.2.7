@@ -166,7 +166,7 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         guard_offset = pe.get_offset_from_rva(0x333DD)
         self.assertEqual(
             self.game[guard_offset:guard_offset + 8],
-            bytes.fromhex("E9AF22FEFF909090"),
+            bytes.fromhex("E91E080400909090"),
         )
 
         self.vm.mem_map(base, (pe.OPTIONAL_HEADER.SizeOfImage + 4095) & ~4095)
@@ -182,10 +182,12 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         get_as_hero = self.client + 0x3600
         player_entity = self.client + 0x3700
         hero_index = 0x1234
-
         self.vm.mem_write(player + 0x6C, struct.pack("<I", 1))
+        self.vm.mem_write(player + 0x70, struct.pack("<I", 2))
         self.vm.mem_write(player + 0x74, struct.pack("<I", hero_index))
         self.vm.mem_write(player + 0x254, struct.pack("<I", player_entity))
+        self.vm.mem_write(player + 0x35A, struct.pack("<H", 0x0101))
+        self.vm.mem_write(player + 0x3A4, struct.pack("<I", 123456))
         self.vm.mem_write(self.client + 0x08, struct.pack("<I", 2))
         self.vm.mem_write(hero + 0x444, struct.pack("<I", 1))
         self.vm.mem_write(player_entity + 0x23C, struct.pack("<I", 1))
@@ -201,7 +203,7 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         self.vm.reg_write(reg.UC_X86_REG_EAX, player)
         self.vm.reg_write(reg.UC_X86_REG_EDI, self.client)
         self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
-        self.vm.emu_start(base + 0x333DD, base + 0x333FB, count=100)
+        self.vm.emu_start(base + 0x333DD, base + 0x333FB, count=300)
         self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EIP), base + 0x333FB)
         self.assertEqual(struct.unpack("<I", self.vm.mem_read(self.client + 0x08, 4))[0], 2)
         adopted = struct.unpack("<I", self.vm.mem_read(player + 0x6C, 4))[0]
@@ -212,6 +214,12 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
             "<I", self.vm.mem_read(player_entity + 0x23C, 4)
         )[0]
         self.assertEqual(player_entity_owner, 2)
+        status = struct.unpack("<H", self.vm.mem_read(player + 0x35A, 2))[0]
+        self.assertEqual(status, 0x0140)
+        self.assertEqual(
+            struct.unpack("<I", self.vm.mem_read(player + 0x3A4, 4))[0],
+            0xFFFFFFFF,
+        )
         self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), self.stack)
 
     def test_gameplay_dispatcher_resolves_only_retained_live_client_on_stock_miss(self):

@@ -1,6 +1,39 @@
 # Native reconnect identity
 
-## Current implementation: v29 gameplay command identity
+## Current implementation: v31 native connected-state restoration
+
+The v29 milestone is frozen at tag
+`reconnect-v29-control-restored-latency-wip`. It proved the reconnecting client
+is mapped to the correct retained player and hero and that gameplay commands
+reach that player without evicting the host. Its remaining defect was extreme
+latency and frame skipping after reconnect.
+
+Live route telemetry isolated that defect. Before disconnect, player2 received
+roughly 20--23 game-state packets per second. After reconnect, player2 continued
+to send roughly 30--32 packets per second to the slave, but received almost no
+normal state deltas and only a roughly 2 KiB catch-up burst every five seconds.
+The input path was healthy; the slave still considered the retained CPlayer
+disconnected during its per-frame update.
+
+Ghidra confirms why. The server frame loop tests bit 0 of `CPlayer+0x35a`; when
+that bit remains set, it skips the normal connected-client update path. The
+native `CPlayer::Connected(unsigned int)` implementation performs exactly three
+field changes:
+
+1. Clear disconnected bit 0 at `CPlayer+0x35a`.
+2. Set connected-transition bit `0x40` at `CPlayer+0x35a`.
+3. Set the disconnect deadline at `CPlayer+0x3a4` to `UINT32_MAX`.
+
+V31 mirrors only those changes in the already-proven account-matched reconnect
+branch, then continues through v29's identity and hero-owner handoff. It does
+not call team methods or mutate team rosters, shared lookup, lobby admission,
+host authority, or initial team joining.
+
+V30's team-roster mutation is rejected. Live testing showed that invoking those
+methods inside the reconnect callback crashed the slave. It is not accepted by
+the runtime verifier and is not part of v31.
+
+## Previous implementation: v29 gameplay command identity
 
 V29 preserves the frozen v28 reconnect route: the returning account selects
 the correct retained CPlayer and hero, the host remains connected, and the
@@ -15,8 +48,8 @@ unchanged. It adds a fallback only inside `CGameServer::ProcessGameDataFromClien
 after a stock miss, retained player values are scanned for a live `+0x6C` matching
 the packet sender. Lobby admission never calls this fallback.
 
-Install with `INSTALL_RECONNECT_V29.bat`. Expected game.dll SHA-256:
-`19FA43B44D07FE1C88EAC199D8E80BEEA635078887203A40BBB4FF0EB8FF4BDB`.
+Install with `INSTALL_RECONNECT_V31.bat`. Expected game.dll SHA-256:
+`36D20B56BFDB7B1B4988BCA5727B1AECB928979575DB59FBF38698CB63C3916C`.
 
 Live acceptance remains required: reconnect player2 in a fresh match, move the
 correct hero, level an ability, then repeat the disconnect/reconnect cycle.

@@ -1,10 +1,10 @@
-"""Document the verified reconnect input stage.
+"""Document the verified reconnect identity and connected-state stages.
 
-The catalog applies the v29 instruction-level changes. It retains the verified
-v28 identity handoff, then adds a fallback solely to the gameplay packet
-dispatcher. Stock sender lookup runs first; only its miss scans retained player
-values for the fresh live client number. Shared lookup and lobby admission stay
-untouched.
+The catalog applies the v31 instruction-level changes. It retains the verified
+v29 identity handoff and gameplay-only lookup, then mirrors the native
+CPlayer::Connected state transition in the successful account-matched reconnect
+branch. Shared lookup, team rosters, ordinary lobby admission and initial team
+joining stay untouched.
 """
 from __future__ import annotations
 
