@@ -254,15 +254,14 @@ transport even when the public UDP endpoint is reused, and recognizes the
 creator's `69 01` prefix before client assignment `50`. This allows client
 number zero to be captured too.
 
-### Installation and validation
+### Historical v22 installation notes
 
-Run `INSTALL_RECONNECT_V22.bat` from this checkout. It resolves its own location,
-uses Python on PATH and HON_HOME (or the normal installed game directory),
-stops the existing stack, installs and verifies the patches, resets volatile
-state, and launches this checkout's dashboard. Older numbered launchers remain
-historical and may reference the previous workspace. Start a **new match**;
-old native player objects already contain the previous build's corrupt account
-identity and cannot be repaired by changing the gateway alone.
+The former `INSTALL_RECONNECT_V22.bat` wrapper was removed during the v39 root
+cleanup. Numbered wrappers always applied the manifest currently checked out;
+they were not reproducible rollback packages. Restore the corresponding Git
+revision or tag when reproducing a historical build. A new match is required
+after changing native patches because existing player objects retain the prior
+build's identity state.
 
 Expected K2 SHA-256:
 `A4F9856A53A01D212CAE03EA1746F6594904F8D255956AD6D849ABD467281A77`
