@@ -47,49 +47,19 @@ launching; for example, `$env:HON_HOME = 'C:\intelprop\Heroes of Newerth'`.
 These commands use the current reconnect work branch and the default HoN path.
 Change `HON_HOME` when the game is installed elsewhere.
 
-Acquire the current build:
-
-```powershell
-git clone --branch refactored-architecture-reconnect-wip --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git "$env:USERPROFILE\thorgor"
-```
-
-Install or reinstall the verified reconnect v39 patches and start the stack:
-
-```powershell
-$env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor\INSTALL_RECONNECT_V39.bat"
-```
-
-Run an existing installation (patch verification is performed at startup):
-
-```powershell
-$env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor\START_STACK.bat"
-```
-
 Acquire, install, and run:
 
 ```powershell
 git clone --branch refactored-architecture-reconnect-wip --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git "$env:USERPROFILE\thorgor"; if ($LASTEXITCODE -eq 0) { $env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor\INSTALL_RECONNECT_V39.bat" }
 ```
 
-Update an existing checkout, reinstall v39, and run:
+Run the local installation:
 
 ```powershell
-git -C "$env:USERPROFILE\thorgor" pull --ff-only origin refactored-architecture-reconnect-wip; if ($LASTEXITCODE -eq 0) { $env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor\INSTALL_RECONNECT_V39.bat" }
+$env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor\START_STACK.bat"
 ```
 
-Configure and launch one remote HoN client (replace the example IP):
-
-```powershell
-$env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor\START_REMOTE_CLIENT.bat" '192.168.1.10'
-```
-
-Configure once and launch three remote HoN clients:
-
-```powershell
-$env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor\START_REMOTE_CLIENT_THREE_INSTANCES.bat" '192.168.1.10'
-```
-
-Open the account manager:
+Start the account manager:
 
 ```powershell
 & "$env:USERPROFILE\thorgor\START_ACCOUNT_MANAGER.bat"
