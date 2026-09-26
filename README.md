@@ -44,13 +44,22 @@ launching; for example, `$env:HON_HOME = 'C:\intelprop\Heroes of Newerth'`.
 
 ## PowerShell one-liners
 
-Acquire and install:
+These commands use the current reconnect work branch and the default HoN path.
+Change `HON_HOME` when the game is installed elsewhere.
+
+Acquire the current build:
 
 ```powershell
-git clone --branch refactored-architecture-2026-08-24 --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git "$env:USERPROFILE\thorgor"
+git clone --branch refactored-architecture-reconnect-wip --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git "$env:USERPROFILE\thorgor"
 ```
 
-Run an existing installation:
+Install or reinstall the verified reconnect v39 patches and start the stack:
+
+```powershell
+$env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor\INSTALL_RECONNECT_V39.bat"
+```
+
+Run an existing installation (patch verification is performed at startup):
 
 ```powershell
 $env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor\START_STACK.bat"
@@ -59,14 +68,38 @@ $env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\
 Acquire, install, and run:
 
 ```powershell
-git clone --branch refactored-architecture-2026-08-24 --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git "$env:USERPROFILE\thorgor"; if ($LASTEXITCODE -eq 0) { $env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor\START_STACK.bat" }
+git clone --branch refactored-architecture-reconnect-wip --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git "$env:USERPROFILE\thorgor"; if ($LASTEXITCODE -eq 0) { $env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor\INSTALL_RECONNECT_V39.bat" }
 ```
 
-`START_STACK.bat` verifies or installs the supported binary patches, clears
-volatile ThorGor state, and starts the dashboard and backend services.
+Update an existing checkout, reinstall v39, and run:
 
-Use `START_REMOTE_CLIENT_THREE_INSTANCES.bat` to enter the stack IP once,
-perform remote-client setup once, and launch three HoN clients together.
+```powershell
+git -C "$env:USERPROFILE\thorgor" pull --ff-only origin refactored-architecture-reconnect-wip; if ($LASTEXITCODE -eq 0) { $env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor\INSTALL_RECONNECT_V39.bat" }
+```
+
+Configure and launch one remote HoN client (replace the example IP):
+
+```powershell
+$env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor\START_REMOTE_CLIENT.bat" '192.168.1.10'
+```
+
+Configure once and launch three remote HoN clients:
+
+```powershell
+$env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor\START_REMOTE_CLIENT_THREE_INSTANCES.bat" '192.168.1.10'
+```
+
+Open the account manager:
+
+```powershell
+& "$env:USERPROFILE\thorgor\START_ACCOUNT_MANAGER.bat"
+```
+
+`INSTALL_RECONNECT_V39.bat` elevates when needed, stops old ThorGor processes,
+installs and verifies the supported binary patches, resets volatile state, and
+starts the dashboard. `START_STACK.bat` performs the same patch verification
+and state reset in the foreground during normal launches. Close all HoN clients
+before installing or updating patched DLLs.
 
 ## Local stack performance
 
