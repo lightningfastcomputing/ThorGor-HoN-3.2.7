@@ -4,18 +4,31 @@ An isolated Heroes of Newerth 3.2.7.1 LAN backend with master/authentication,
 chat, public games, dedicated-server management, matchmaking, and reproducible
 binary patching.
 
-## Reconnect v32 candidate
+## Reconnect v39 frozen milestone
 
 This checkout contains the reconnect admission repair described in
-[docs/RECONNECT.md](docs/RECONNECT.md). Run `INSTALL_RECONNECT_V32.bat` from
+[docs/RECONNECT.md](docs/RECONNECT.md). Run `INSTALL_RECONNECT_V39.bat` from
 this checkout to install the verified patches and launch its dashboard.
 Start a fresh match: earlier builds stored incorrect native account identities.
-V32 preserves v31's stable native connected-state repair and resolves real-time
-client snapshots by the retained player's fresh reconnect number.
+V39 preserves the complete live-proven v32 joiner reconnect path. Ghidra showed
+that creator departure independently queues K2's `StopServer` command because
+the creator occupies `CHostServer`'s special local-client field. V38 suppresses
+only that command on a server-manager-owned dedicated slave. The v38 live trace
+then showed player2 continuing to send while the slave sent zero state after
+creator departure. V39 adds the isolated, previously safe-tested v35 successor
+lookup so host migration can select that retained player despite its historical
+map key. Normal local-host shutdown, admission, and reconnect identity remain
+unchanged.
 The rejected v26/v27 shared lookup and v30 roster-mutation experiments remain
 absent. Read-only native player-map snapshots remain available
-in `var/work/reconnect_identity_events.jsonl`. The full 72-test suite passes; a
-two-client live match must confirm movement and ability control.
+in `var/work/reconnect_identity_events.jsonl`. The 77-test suite passes with
+two rejected-build checks intentionally skipped.
+
+Live testing confirmed that both creator and joiner now reconnect correctly and
+the slave survives either departure. One residual defect remains: creator
+departure freezes the joiner's existing state stream until the joiner performs
+their own disconnect/reconnect. This exact state is frozen locally as
+`reconnect-v39-both-accounts-reconnect-milestone`.
 
 ## Requirements
 

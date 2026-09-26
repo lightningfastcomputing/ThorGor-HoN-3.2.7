@@ -12,7 +12,7 @@ from pathlib import Path
 from thorgor.patches.engine import _rva_to_file, sha256
 
 SOURCE_SHA256 = "25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026"
-OUTPUT_SHA256 = "BA14F2931FF6F5FB9377FAECECA2F3A96A53436D61CD7984D002A5F24616B35C"
+OUTPUT_SHA256 = "CB12258566BA001B528F3A48E4C8CC795992DCB17333BCE5ABF8EF4E5DCCB24D"
 MARKER_REJECTION_RVA = 0x2F5982
 HOOK_RVA = 0x2F5AD6
 RETURN_RVA = 0x2F5ADD
@@ -21,6 +21,8 @@ PROMOTION_RVA = 0x2F8E1E
 ACCOUNT_RESET_RVA = 0x2F8E50
 CAPTURE_RVA = 0x2F555C
 CAPTURE_CAVE_RVA = 0x70D780
+LOCAL_CLIENT_STOP_RVA = 0x2F2E61
+LOCAL_CLIENT_STOP_CAVE_RVA = 0x70D7C0
 
 
 def jump(source: int, target: int) -> bytes:
@@ -54,6 +56,26 @@ def account_capture_stub() -> bytes:
     )
     return code + jump(CAPTURE_CAVE_RVA + len(code), CAPTURE_RVA + 5)
 
+
+def managed_local_client_stop_stub() -> bytes:
+    """Keep a manager-owned slave alive when its creator transport leaves.
+
+    Retail treats the creator as CHostServer's special local connection.  Its
+    removal queues ``StopServer`` after the game callback, even though the
+    match has retained the player for reconnect.  Manager-owned dedicated
+    slaves have their own lifecycle, so bypass that console command only when
+    the server-manager connection is enabled.  Non-managed/local hosting keeps
+    the exact retail StopServer behavior.
+    """
+    code = bytes.fromhex(
+        "80bfd002000000"  # cmp byte ptr [edi+0x2d0],0 (manager-owned server)
+        "750a"            # managed: jump to the keep-alive return below
+        "b8a4ac7315"      # displaced mov eax, L"StopServer"
+    )
+    code += jump(LOCAL_CLIENT_STOP_CAVE_RVA + len(code), LOCAL_CLIENT_STOP_RVA + 5)
+    code += jump(LOCAL_CLIENT_STOP_CAVE_RVA + len(code), 0x2F2EC8)
+    return code
+
 def operations() -> tuple[tuple[int, bytes, bytes], ...]:
     code = authority_stub()
     return (
@@ -71,6 +93,20 @@ def operations() -> tuple[tuple[int, bytes, bytes], ...]:
         # The local admission branch used to overwrite the parsed identity
         # immediately before GenerateClientID/CPlayer initialization.
         (ACCOUNT_RESET_RVA, bytes.fromhex("897d0c"), b"\x90" * 3),
+        # The creator is K2's special local client. Retail queues StopServer
+        # when that transport disappears, after game.dll has retained the
+        # player. Manager-owned ThorGor slaves must instead remain alive for
+        # the reconnect grace period.
+        (
+            LOCAL_CLIENT_STOP_RVA,
+            bytes.fromhex("b8a4ac7315"),
+            jump(LOCAL_CLIENT_STOP_RVA, LOCAL_CLIENT_STOP_CAVE_RVA),
+        ),
+        (
+            LOCAL_CLIENT_STOP_CAVE_RVA,
+            bytes(0x20),
+            managed_local_client_stop_stub().ljust(0x20, b"\0"),
+        ),
     )
 
 

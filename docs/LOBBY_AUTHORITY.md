@@ -19,7 +19,9 @@ The authority patch removes the marker rejection at `0x2F5982`, replaces the
 flag assignment with a bounded cave at `0x70D740`, and removes the fallback
 promotion. The cave clears low bits 0-2 and restores them only when marker bit
 zero is set. Higher connection flags and the existing linked-client hero-state
-code remain intact.
+code remain intact. V33 experimentally reduced creator authority to bit zero;
+live testing showed that this did not repair creator departure, so v35 restores
+the proven v32 authority behavior.
 
 ## Backend and proxy
 
@@ -49,7 +51,7 @@ normal five-versus-five lobby.
 ## Reproducibility
 
 - K2 input: `25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026`
-- K2 output: `FF053A133261FD565B6656AE24F5182AA2423195EA9B77C304128045BBD33A6B`
+- K2 output: `CB12258566BA001B528F3A48E4C8CC795992DCB17333BCE5ABF8EF4E5DCCB24D`
 - game.dll input: `D345F8537ED9FD5C6705F8F1A9FA6663C5F4AE4476CD328B2D8F1074C044CF99`
 - game.dll output: `929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B`
 

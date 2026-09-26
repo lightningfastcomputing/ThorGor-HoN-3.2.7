@@ -285,6 +285,168 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         self.assertEqual(resolve(3, 0, 0x2DD39), 0)
         self.assertEqual(resolve(2, player, 0x2DD7A), player)
 
+    def test_host_migration_cave_preserves_disconnect_target_and_selects_player(self):
+        pe = pefile.PE(data=self.game)
+        base = pe.OPTIONAL_HEADER.ImageBase
+        hook = pe.get_offset_from_rva(0x32FA3)
+        cave = pe.get_offset_from_rva(0x73D90)
+        disconnect = pe.get_offset_from_rva(0x32FB2)
+        self.assertEqual(self.game[hook:hook + 5], bytes.fromhex("E9E80D0400"))
+        self.assertEqual(
+            self.game[cave:cave + 24],
+            bytes.fromhex("8B45503B870001000075088B5E10E92BF2FBFFE923F2FBFF"),
+        )
+        self.assertEqual(self.game[disconnect:disconnect + 6], bytes.fromhex("8B90E8000000"))
+
+        self.vm.mem_map(base, (pe.OPTIONAL_HEADER.SizeOfImage + 4095) & ~4095)
+        self.vm.mem_write(base, pe.get_memory_mapped_image())
+        game = self.client + 0x4000
+        node = self.client + 0x5000
+        player = self.client + 0x5200
+        map_end = self.client + 0x5400
+        self.vm.mem_write(self.frame + 0x50, struct.pack("<I", map_end))
+        self.vm.mem_write(game + 0x100, struct.pack("<I", map_end))
+        self.vm.mem_write(node + 0x10, struct.pack("<I", player))
+        self.vm.reg_write(reg.UC_X86_REG_EDI, game)
+        self.vm.reg_write(reg.UC_X86_REG_ESI, node)
+        self.vm.reg_write(reg.UC_X86_REG_EBP, self.frame)
+        self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
+        self.vm.emu_start(base + 0x73D90, base + 0x32FCE, count=20)
+        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EBX), player)
+
+        stock_player = self.client + 0x5600
+        self.vm.mem_write(map_end + 0x10, struct.pack("<I", stock_player))
+        self.vm.mem_write(game + 0x100, struct.pack("<I", self.client + 0x5800))
+        self.vm.emu_start(base + 0x73D90, base + 0x32FCE, count=20)
+        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EBX), stock_player)
+
+        virtual_target = base + 0x26850
+        self.vm.mem_write(self.client + 0xE8, struct.pack("<I", virtual_target))
+        self.vm.reg_write(reg.UC_X86_REG_EAX, self.client)
+        self.vm.emu_start(base + 0x32FB2, base + 0x32FB8, count=1)
+        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EDX), virtual_target)
+
+    @unittest.skip("rejected v36 game-side host-migration experiment removed in v38")
+    def test_host_migration_promotes_valid_player_when_k2_lookup_is_null(self):
+        pe = pefile.PE(data=self.game)
+        base = pe.OPTIONAL_HEADER.ImageBase
+        hook = pe.get_offset_from_rva(0x32FE1)
+        cave = pe.get_offset_from_rva(0x73DB0)
+        self.assertEqual(self.game[hook:hook + 8], bytes.fromhex("E9CA0D0400909090"))
+        self.assertEqual(
+            self.game[cave:cave + 55],
+            bytes.fromhex(
+                "85C00F852200000085DB0F849FF2FBFF8B4E1083796CFF0F8492F2FBFF"
+                "66838B5A03000004E927F2FBFF85DB0F847DF2FBFFE902F2FBFF"
+            ),
+        )
+
+        self.vm.mem_map(base, (pe.OPTIONAL_HEADER.SizeOfImage + 4095) & ~4095)
+        self.vm.mem_write(base, pe.get_memory_mapped_image())
+        node = self.client + 0x5000
+        player = self.client + 0x5200
+        self.vm.mem_write(node + 0x10, struct.pack("<I", player))
+        self.vm.mem_write(player + 0x6C, struct.pack("<I", 2))
+        self.vm.mem_write(player + 0x35A, struct.pack("<H", 0x0040))
+        self.vm.reg_write(reg.UC_X86_REG_ESI, node)
+        self.vm.reg_write(reg.UC_X86_REG_EBX, player)
+        self.vm.reg_write(reg.UC_X86_REG_EAX, 0)
+        self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
+        self.vm.emu_start(base + 0x73DB0, base + 0x33001, count=50)
+        self.assertEqual(
+            struct.unpack("<H", self.vm.mem_read(player + 0x35A, 2))[0],
+            0x0044,
+        )
+
+        # A real K2 connection follows the untouched stock guard/update path.
+        self.vm.reg_write(reg.UC_X86_REG_ESI, node)
+        self.vm.reg_write(reg.UC_X86_REG_EBX, player)
+        self.vm.reg_write(reg.UC_X86_REG_EAX, self.client)
+        self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
+        self.vm.emu_start(base + 0x73DB0, base + 0x32FE9, count=50)
+        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EBX), player)
+
+        # A missing game-side player remains rejected and advances the iterator.
+        self.vm.reg_write(reg.UC_X86_REG_ESI, node)
+        self.vm.reg_write(reg.UC_X86_REG_EBX, 0)
+        self.vm.reg_write(reg.UC_X86_REG_EAX, 0)
+        self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
+        self.vm.emu_start(base + 0x73DB0, base + 0x3305F, count=50)
+        self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EBX), 0)
+
+    @unittest.skip("rejected v37 game-side creator-retention experiment removed in v38")
+    def test_active_creator_uses_retained_disconnect_lifecycle(self):
+        pe = pefile.PE(data=self.game)
+        creator_override = pe.get_offset_from_rva(0x32E99)
+        retain_branch = pe.get_offset_from_rva(0x32EA0)
+        self.assertEqual(self.game[creator_override:creator_override + 7], b"\x90" * 7)
+        self.assertEqual(self.game[retain_branch:retain_branch + 6], bytes.fromhex("0F84B6020000"))
+
+        # The retained-path branch now consumes the preceding stock slot test:
+        # an active player (+0x7c == -1) is retained regardless of host flag.
+        base = pe.OPTIONAL_HEADER.ImageBase
+        self.vm.mem_map(base, (pe.OPTIONAL_HEADER.SizeOfImage + 4095) & ~4095)
+        self.vm.mem_write(base, pe.get_memory_mapped_image())
+        player = self.client + 0x5200
+        self.vm.mem_write(player + 0x7C, struct.pack("<I", 0xFFFFFFFF))
+        self.vm.mem_write(player + 0x35C, struct.pack("<I", 0x00000004))
+        self.vm.reg_write(reg.UC_X86_REG_EDI, player)
+        self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
+        reached = []
+
+        def trace(emu, address, size, data):
+            reached.append(address)
+            if address in (base + 0x3315C, base + 0x32EA6):
+                emu.emu_stop()
+
+        self.vm.hook_add(
+            uc.UC_HOOK_CODE,
+            trace,
+            begin=base + 0x32E93,
+            end=base + 0x3315C,
+        )
+        self.vm.emu_start(base + 0x32E93, base + 0x33160, count=20)
+        self.assertIn(base + 0x3315C, reached)
+        self.assertNotIn(base + 0x32EA6, reached)
+
+    def test_manager_owned_creator_disconnect_does_not_queue_stop_server(self):
+        pe = pefile.PE(data=self.image)
+        hook = pe.get_offset_from_rva(authority.LOCAL_CLIENT_STOP_RVA)
+        cave = pe.get_offset_from_rva(authority.LOCAL_CLIENT_STOP_CAVE_RVA)
+        self.assertEqual(self.image[hook:hook + 5], bytes.fromhex("E95AA94100"))
+        self.assertEqual(
+            self.image[cave:cave + 24],
+            bytes.fromhex(
+                "80BFD002000000750AB8A4AC7315E99356BEFFE9F056BEFF"
+            ),
+        )
+
+        host = self.client + 0x6000
+        base = self.base
+
+        def destination(manager_owned):
+            self.vm.mem_write(host + 0x2D0, bytes([int(manager_owned)]))
+            self.vm.reg_write(reg.UC_X86_REG_EDI, host)
+            self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
+            reached = []
+
+            def trace(emu, address, size, data):
+                if address in (base + 0x2F2E66, base + 0x2F2EC8):
+                    reached.append(address)
+                    emu.emu_stop()
+
+            handle = self.vm.hook_add(uc.UC_HOOK_CODE, trace)
+            self.vm.emu_start(
+                base + authority.LOCAL_CLIENT_STOP_RVA,
+                base + 0x2F2ECD,
+                count=100,
+            )
+            self.vm.hook_del(handle)
+            return reached[0]
+
+        self.assertEqual(destination(False), base + 0x2F2E66)
+        self.assertEqual(destination(True), base + 0x2F2EC8)
+
     def test_exact_hashes_idempotence_and_rejected_input(self):
         self.assertEqual(sha256(self.image), authority.OUTPUT_SHA256)
         self.assertEqual(

@@ -1,11 +1,11 @@
 {
   "id": "dedicated.reconnect_client_identity",
   "binary": "game.dll",
-  "version": "3.2.7.1-native-account-reconnect-v32-client-snapshot-identity",
+  "version": "3.2.7.1-native-account-reconnect-v39-host-continuity",
   "source_sha256": "929FADD55C141946BC102704C06F41A4AAB74ABE1CC92DFE2E185C5A3B88C35B",
-  "output_sha256": "D103A500E0ADA6E10F9F15EF8E22C4E5582AD8F7BE50FF109ABDC8E5F9ABBB30",
-  "reason": "Preserve v31's stable reconnect and native connected state, then resolve only ProcessClientSnapshot stock lookup misses by the retained player's fresh live client number.",
-  "observed_failure": "V31 reconnects player2 correctly and remains stable, but ProcessClientSnapshot rejects every real-time control snapshot as invalid client number 2 because the player map intentionally retains its historical key. Controls appear only through a delayed fallback path.",
+  "output_sha256": "0DA7FA068C813328BCF89CADAAB0EB9C17B5963B9C27E49298D6D6DEFCC9D43B",
+  "reason": "Preserve the live-proven v32 reconnect/control path and let creator-departure host migration select the already-iterated retained player when its fresh client number no longer equals the historical map key.",
+  "observed_failure": "The v38 live trace proved both accounts reconnect correctly and the slave remains alive, but immediately after creator C3 player2 continues sending 30 packets per second while the slave sends player2 zero. Creator reconnect restores output only to the creator. The safe isolated v35 successor fallback was previously masked by K2 StopServer; v39 combines that fallback with v38 K2 lifecycle retention.",
   "discovered": "2026-09-11",
   "evidence": ["docs/RECONNECT.md", "tests/test_native_lobby_authority.py"],
   "operations": [
@@ -122,6 +122,18 @@
       "offset": "0x73D00",
       "expected": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
       "replacement": "85C90F85650000008BD68B0E3BCA0F84610000008B411085C00F840900000039786C0F84430000008B41083BC20F84130000008BC88B013BC20F84CDFFFFFF8BC8E9EFFFFFFF8B41043BC20F84240000003B48080F850A0000008BC88B4104E9E5FFFFFF8BC8E9A1FFFFFF8BC8894D60E905A0FBFF31C9894D60E9BA9FFBFF"
+    },
+    {
+      "address": "rva",
+      "offset": "0x32FA3",
+      "expected": "8B45503B87",
+      "replacement": "E9E80D0400"
+    },
+    {
+      "address": "rva",
+      "offset": "0x73D90",
+      "expected": "000000000000000000000000000000000000000000000000",
+      "replacement": "8B45503B870001000075088B5E10E92BF2FBFFE923F2FBFF"
     }
   ]
 }

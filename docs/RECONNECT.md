@@ -1,6 +1,106 @@
 # Native reconnect identity
 
-## Current implementation: v32 client-snapshot identity
+## Current implementation: v39 host continuity after creator departure
+
+The v38 live test was a major boundary: both creator and joiner reconnected to
+the correct heroes without killing the slave. Its packet trace also isolated
+the remaining freeze. At creator C3, player2 continued sending roughly 30
+packets per second, but the slave immediately sent player2 zero packets. After
+creator reconnect, output resumed only to the creator.
+
+V39 combines two narrow repairs whose individual behavior is already known:
+
+1. V38 keeps a manager-owned slave alive by suppressing K2's creator-only
+   `StopServer` command.
+2. The isolated v35 cave repairs only the host-migration player-map miss. It
+   reuses the `CPlayer` already being iterated when the fresh live client number
+   differs from the retained historical map key. RVA `0x32FB2`, the independent
+   ordinary-disconnect target corrupted by v34, remains byte-for-byte stock.
+
+The v36 null-connection shortcut and v37 broad creator-retention patch remain
+absent.
+
+Expected v39 hashes:
+
+- K2: `CB12258566BA001B528F3A48E4C8CC795992DCB17333BCE5ABF8EF4E5DCCB24D`
+- game.dll: `0DA7FA068C813328BCF89CADAAB0EB9C17B5963B9C27E49298D6D6DEFCC9D43B`
+
+## Previous implementation: v38 manager-owned creator retention
+
+The v37 live test showed game.dll completing creator removal before the slave
+exited roughly 120 ms later. Ghidra then exposed a separate K2 lifecycle rule:
+when the removed transport is `CHostServer`'s special local creator at offset
+`+0x180`, K2 invokes the game removal callback, frees that connection, and
+unconditionally queues the console command `StopServer`.
+
+V38 detours only the `StopServer` construction at K2 RVA `0x2F2E61`. If
+`CHostServer+0x2d0` says the slave is owned by the server manager, execution
+skips the command and returns through the original cleanup path. Otherwise the
+displaced retail instruction runs and local-host shutdown remains unchanged.
+The game removal callback and creator transport cleanup still execute.
+
+V38 removes the rejected v35-v37 game-side experiments and restores the
+live-proven v32 reconnect image. Expected hashes:
+
+- K2: `CB12258566BA001B528F3A48E4C8CC795992DCB17333BCE5ABF8EF4E5DCCB24D`
+- game.dll: `D103A500E0ADA6E10F9F15EF8E22C4E5582AD8F7BE50FF109ABDC8E5F9ABBB30`
+
+## Previous implementation: v36 host-connection registry fallback
+
+The 2026-09-26 v35 live test used the expected `0DA7FA...` game.dll. Player2
+successfully disconnected and reconnected as retained account 3, with live
+client number 2. When creator account 2/client 0 disconnected, the slave exited
+cleanly and player2 immediately stopped receiving state.
+
+V35 already guarantees a non-null retained CPlayer on the host-migration map
+miss. The live player trace proves that candidate's `CPlayer+0x6c` is 2, not
+`-1`. The only remaining rejecting successor guard is therefore
+`CHostServer::GetClient(2)`, which can return null because K2's connection
+registry remains keyed by the historical allocation after reconnect.
+
+V36 detours the complete guard block at RVA `0x32FE1` into cave RVA `0x73DB0`.
+A non-null K2 connection resumes the stock path at `0x32FE9`. On only a null
+connection result, the cave still requires v35's resolved player and a valid
+live number, marks the CPlayer host bit, and resumes stock host-ID assignment
+and broadcast at `0x33001`. It never touches `[eax+0xcc]` while EAX is null.
+Missing players and invalid live numbers still advance through the stock
+candidate loop.
+
+Expected v36 game.dll SHA-256:
+`BADCFCCA8A784FBD536FB0849EEA5B614BE41F344EDF9E176D8B498B69F58FA3`.
+The 75-test suite executes the null fallback, non-null stock path, rejected
+candidate path, v35 map fallback, and preserved ordinary-disconnect target.
+
+## Previous implementation: v35 isolated host-migration successor repair
+
+V35 retains the complete, live-confirmed v32 reconnect and control paths. Live
+testing disproved v33's K2-authority theory: reducing the creator's low flags did
+not prevent the slave from exiting when the creator left.
+
+The actual failure is in `CGameServer::RemoveClient`. When the departing client
+is the current host, the game walks the remaining player records to choose a new
+host. For each record it reads the fresh live client number at `CPlayer+0x6c`,
+then performs the stock player-map lookup by that number. V32 intentionally
+preserves the historical map key while updating `+0x6c` after reconnect, so a
+reconnected player2 is present and connected but the lookup misses. Stock code
+then rejects that player as a successor and, finding nobody else, shuts down the
+match.
+
+V35 changes only that map-miss branch. It reuses the `CPlayer` already being
+iterated; the following stock guards still require a live client connection, a
+non-null player, and a valid live client number. Admission, team membership,
+hero ownership, the shared map, realtime snapshots, and v32 reconnect identity
+remain unchanged.
+
+The first inline implementation of this idea, v34, is rejected. Its five-byte
+rewrite overlapped the first byte of the independent stock target at RVA
+`0x32FB2`. Ordinary player2 disconnection branches directly there, producing
+`crash_3.2.7.1_0035.dmp` at 17:44:03 before any reconnect attempt. V35 detours
+from RVA `0x32FA3` into an isolated cave and returns to the original hit/miss
+destinations. The six stock bytes at `0x32FB2` are hash-checked and executed by
+the native regression test.
+
+## Previous implementation: v32 client-snapshot identity
 
 V31 restored the native connected state and remained stable in live testing.
 Player2 rejoined the correct hero without evicting the host or crashing the
@@ -64,11 +164,13 @@ unchanged. It adds a fallback only inside `CGameServer::ProcessGameDataFromClien
 after a stock miss, retained player values are scanned for a live `+0x6C` matching
 the packet sender. Lobby admission never calls this fallback.
 
-Install with `INSTALL_RECONNECT_V32.bat`. Expected game.dll SHA-256:
-`D103A500E0ADA6E10F9F15EF8E22C4E5582AD8F7BE50FF109ABDC8E5F9ABBB30`.
+Install with `INSTALL_RECONNECT_V39.bat`. Expected game.dll SHA-256:
+`0DA7FA068C813328BCF89CADAAB0EB9C17B5963B9C27E49298D6D6DEFCC9D43B`.
+Expected K2 SHA-256:
+`CB12258566BA001B528F3A48E4C8CC795992DCB17333BCE5ABF8EF4E5DCCB24D`.
 
-Live acceptance remains required: reconnect player2 in a fresh match, move the
-correct hero, level an ability, then repeat the disconnect/reconnect cycle.
+Live acceptance remains required: verify player2 reconnect once, then disconnect
+and reconnect the creator while player2 remains in the running match.
 
 The first v29 live test confirmed that player2's commands now reach the correct
 retained hero and the host remains connected. Remaining defect: the returning

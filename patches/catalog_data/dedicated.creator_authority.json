@@ -1,11 +1,11 @@
 {
   "id": "dedicated.creator_authority",
   "binary": "k2.dll",
-  "version": "3.2.7.1-v77+creator-authority+captured-account-v24",
+  "version": "3.2.7.1-v77+creator-authority+captured-account-v38-managed-host-retention",
   "source_sha256": "25B1BB066FE3166BF83A4AA52D6FBB0B9FB972F43161F3D73DFA930090CE7026",
-  "output_sha256": "BA14F2931FF6F5FB9377FAECECA2F3A96A53436D61CD7984D002A5F24616B35C",
-  "reason": "Keep the proven v23 reconnect flow and preserve the parsed authenticated account before K2 reuses its stack local.",
-  "observed_failure": "The v23 live trace showed both retained CPlayers stored as account 1 although the gateway sent accounts 2 and 3. Reconnect therefore selected the first map entry (the host) and moved player2's fresh transport number onto it. V24 captures only the earlier parsed account; allocation, lookup, routing, and game.dll remain v23.",
+  "output_sha256": "CB12258566BA001B528F3A48E4C8CC795992DCB17333BCE5ABF8EF4E5DCCB24D",
+  "reason": "Preserve the live-proven identity/reconnect path and stop K2 from issuing StopServer solely because the manager-owned creator transport disconnected.",
+  "observed_failure": "The v37 live test proved game.dll retained the creator but the slave still exited about 120 ms later. Ghidra identified the independent cause in K2 CHostServer removal: when the departing client is the special local creator at CHostServer+0x180, K2 invokes game RemoveClient, frees the connection, and unconditionally queues the console command StopServer. V38 bypasses only that command for server-manager-owned dedicated slaves; unmanaged/local hosts retain stock shutdown behavior.",
   "discovered": "2026-09-07",
   "evidence": ["docs/LOBBY_AUTHORITY.md", "tests/test_lobby_authority.py", "tests/test_native_lobby_authority.py"],
   "implementation": {"kind": "stable_builder", "path": "patches/builders/creator_authority.py"}
