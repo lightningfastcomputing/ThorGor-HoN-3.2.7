@@ -55,6 +55,8 @@ class TeamChatUiOverlayTests(unittest.TestCase):
                 replacement = self.replacement(entry)
                 self.assertIn(b"[THORGOR_TEAM]", replacement)
                 self.assertIn(b"messageType = '5'" if entry != "ui/scripts/communicator.lua" else b"msgType = '5'", replacement)
+                self.assertIn(b"^y[T]", replacement)
+                self.assertNotIn(b"^y[TEAM]", replacement)
 
     def test_authenticated_sender_replaces_the_borrowed_transport_identity(self):
         replacement = self.replacement("ui/scripts/chat.lua")
@@ -75,11 +77,15 @@ class TeamChatUiOverlayTests(unittest.TestCase):
         )
         self.assertIn(b"color = playerColor", replacements)
         self.assertIn(b"icon = heroIcon", replacements)
-        self.assertIn(b"entity = 'THORGOR_PLAYER:'", replacements)
         self.assertIn(b"string.sub(entity, 1, 15) == 'THORGOR_PLAYER:'", replacements)
         self.assertIn(b"GameChat.thorgorPlayerVisuals[string.sub(entity, 16)]", replacements)
         self.assertIn(b"THORGOR_ICON:", replacements)
         self.assertIn(b"imagewidget:SetTexture(string.sub(entity, 14))", replacements)
+
+    def test_authenticated_sender_keeps_the_native_portrait_entity(self):
+        replacement = self.replacement("ui/scripts/chat.lua")
+        self.assertNotIn(b"entity = 'THORGOR_PLAYER:'", replacement)
+        self.assertNotIn(b"entity = 'THORGOR_COLOR:'", replacement)
 
     def test_multiple_replacements_are_applied_to_one_resource_entry(self):
         source = b"alpha beta gamma"

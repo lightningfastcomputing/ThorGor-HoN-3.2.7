@@ -433,14 +433,22 @@ def make_visible_team_chat_packet(
     return b"\x00\x00\x03" + struct.pack("<I", sequence & 0xFFFFFFFF) + payload
 
 
-def make_joiner_team_chat_visible(data: bytes) -> bytes | None:
+def make_joiner_team_chat_visible(
+    data: bytes,
+    sender_name: str | None = None,
+    sender_color: str | None = None,
+) -> bytes | None:
     """Convert a server-authorized joiner event for the UI team-chat shim."""
     parsed = parse_server_team_chat(data)
     if parsed is None:
         return None
     sender_number, message = parsed
     return make_visible_team_chat_packet(
-        struct.unpack_from("<I", data, 3)[0], sender_number, message
+        struct.unpack_from("<I", data, 3)[0],
+        sender_number,
+        message,
+        sender_name=sender_name,
+        sender_color=sender_color,
     )
 
 
@@ -1446,10 +1454,10 @@ def main(argv=None) -> int:
         server_sequence_offset[recipient_addr] = offset
         visible_sequence = (previous + 1) & 0xFFFFFFFF
         last_server_sequence[recipient_addr] = visible_sequence
-        # Player zero is the lobby creator and remains a valid CPlayer for the
-        # life of the match.  It is only a transport envelope: the UI replaces
-        # its display identity with the authenticated sender name in `marker`.
-        envelope_sender = 0
+        # Preserve the server-assigned client number. HoN already uses this
+        # identity to resolve the correct hero portrait for ordinary all chat;
+        # the authenticated marker replaces only the visible name and color.
+        envelope_sender = sender_number & 0xFF
         visible = make_visible_team_chat_packet(
             visible_sequence,
             envelope_sender,
@@ -2041,7 +2049,33 @@ def main(argv=None) -> int:
                         and connect is not None
                         and not connect.match_key
                     ):
-                        visible = make_joiner_team_chat_visible(data)
+                        sender_addr = (
+                            match[3]
+                            if match is not None
+                            else next(
+                                (
+                                    route_addr
+                                    for route_addr, player_number in route_player_number.items()
+                                    if player_number == sender_number
+                                ),
+                                None,
+                            )
+                        )
+                        visible = make_joiner_team_chat_visible(
+                            data,
+                            sender_name=(
+                                match[2]
+                                if match is not None
+                                else team_chat_sender_names.get(sender_number)
+                            ),
+                            sender_color=(
+                                player_slot_inline_color(
+                                    route_team.get(sender_addr), route_slot.get(sender_addr)
+                                )
+                                if sender_addr is not None
+                                else None
+                            ),
+                        )
                         if visible is not None:
                             data = visible
                             log(

@@ -78,6 +78,17 @@ class TeamChatVisibilityTests(unittest.TestCase):
         self.assertEqual(result[:7], source[:7])
         self.assertEqual(result[7:], b"\x5f\x02\x01[THORGOR_TEAM]hello\x00")
 
+    def test_rewrites_joiner_event_with_authenticated_visual_identity(self):
+        source = reliable(b"\x5f\x03\x07hello\x00", sequence=19)
+        result = make_joiner_team_chat_visible(
+            source, sender_name="player3", sender_color="!p"
+        )
+        self.assertEqual(result[:7], source[:7])
+        self.assertEqual(
+            result[7:],
+            b"\x5f\x02\x07[THORGOR_TEAM:706C6179657233:!p]hello\x00",
+        )
+
     def test_builds_mirrored_chat_for_a_joiners_reliable_stream(self):
         packet = make_visible_team_chat_packet(0x12345678, 1, b"hello")
         self.assertEqual(packet[:7], bytes.fromhex("00000378563412"))
@@ -86,7 +97,7 @@ class TeamChatVisibilityTests(unittest.TestCase):
     def test_authenticated_sender_name_is_carried_without_trusting_entity_number(self):
         packet = make_visible_team_chat_packet(
             0x12345678,
-            0,
+            2,
             b"hello",
             sender_name="Pl\u00e4yer Two",
             sender_color="!p",
@@ -94,7 +105,7 @@ class TeamChatVisibilityTests(unittest.TestCase):
         self.assertEqual(packet[:7], bytes.fromhex("00000378563412"))
         self.assertEqual(
             packet[7:],
-            b"\x5f\x02\x00[THORGOR_TEAM:506CC3A47965722054776F:!p]hello\x00",
+            b"\x5f\x02\x02[THORGOR_TEAM:506CC3A47965722054776F:!p]hello\x00",
         )
 
     def test_rewrites_data_and_ack_sequences(self):
