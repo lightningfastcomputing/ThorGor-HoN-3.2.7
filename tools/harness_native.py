@@ -26,6 +26,8 @@ V39_HASHES = {
     "k2.dll": "CB12258566BA001B528F3A48E4C8CC795992DCB17333BCE5ABF8EF4E5DCCB24D",
     "game/game.dll": "0DA7FA068C813328BCF89CADAAB0EB9C17B5963B9C27E49298D6D6DEFCC9D43B",
 }
+K2_VARIANTS = {"v39": V39_HASHES["k2.dll"],
+               "registry-continuity": "98138B1086092558014B4808D3AA75B00BA87450EA3112171F68CC3DC99048C2"}
 
 
 def preflight():
@@ -44,7 +46,7 @@ def preflight():
                 probe.bind((HOST, port))
 
 
-def stage_install(source, directory, event):
+def stage_install(source, directory, event, *, variant="v39"):
     from thorgor.patches.installer import file_hash, install_game_capacity, install_k2
 
     source = source.resolve(strict=True)
@@ -68,7 +70,16 @@ def stage_install(source, directory, event):
     hashes = {name: file_hash(install / name) for name in V39_HASHES}
     if hashes != V39_HASHES:
         raise ValueError("staged native DLLs do not match frozen v39")
-    event("native_binary_hashes", sha256={"hon.exe": file_hash(install / "hon.exe"), **hashes})
+    if variant == "registry-continuity":
+        from thorgor.patches.builders.managed_registry import build
+        build(install / "k2.dll", install / "k2.dll")
+    elif variant != "v39":
+        raise ValueError("unknown native variant")
+    hashes["k2.dll"] = file_hash(install / "k2.dll")
+    if hashes["k2.dll"] != K2_VARIANTS[variant]:
+        raise ValueError("staged native K2 variant mismatch")
+    event("native_binary_hashes", variant=variant,
+          sha256={"hon.exe": file_hash(install / "hon.exe"), **hashes})
     mod = "thorgor_harness_" + uuid.uuid4().hex
     shutil.copytree(install / "game", install / mod)
     return install, mod
@@ -238,6 +249,19 @@ def record_proxy(directory, event):
           samples=len(samples), accepted_c0=text.count("C0_AUTH_ACCEPT "),
           rejected_c0=text.count("C0_AUTH_REJECT "),
           native_assignments=text.count("NATIVE_CLIENT_ASSIGNED "))
+    route_pattern = (r"(?P<time>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) \| ROUTE_STATS "
+                     r"client=(?P<client>[\d.:]+) user='(?P<user>[^']*)' "
+                     r"upstream_port=(?P<upstream_port>\d+) "
+                     r"to_server=(?P<to_server>\d+)pkt/(?P<to_bytes>\d+)B "
+                     r"from_server=(?P<from_server>\d+)pkt/(?P<from_bytes>\d+)B")
+    route_samples = []
+    for match in re.finditer(route_pattern, text):
+        fields = match.groupdict()
+        for name in ("upstream_port", "to_server", "to_bytes", "from_server", "from_bytes"):
+            fields[name] = int(fields[name])
+        route_samples.append(fields)
+    event("native_proxy_route_windows", samples=route_samples[-80:],
+          routes=re.findall(r"ROUTE_OPEN client=([\d.:]+) upstream=([\d.:]+) target=([\d.:]+)", text))
 
 
 def record_native_logs(install, event):
@@ -251,7 +275,8 @@ def record_native_logs(install, event):
 
 
 def run_native(stack, directory, env, staged, master, chat, passwords, check, event, *,
-               admit_clients=False, gameplay=False, disconnect_creator=False):
+               admit_clients=False, gameplay=False, disconnect_creator=False,
+               native_variant="v39", expect_freeze=False):
     from thorgor.tools.harness import authenticate, start_process, wait_listener
     from thorgor.tools.harness_job import NativeJob
     install, mod = staged
@@ -351,14 +376,19 @@ def run_native(stack, directory, env, staged, master, chat, passwords, check, ev
             )
             stack.callback(lambda: event("gameplay_client_evidence",
                                         clients=[client_evidence(client) for client in clients]))
+            from thorgor.tools.harness_transport import TransportProbe
+            transport = check("verify_native_transport_inspector", lambda: TransportProbe(
+                slave, expected_hash=K2_VARIANTS[native_variant]))
+            event("native_transport_admitted", state=check("inspect_native_transport", transport.inspect))
             start_gameplay(slave, clients, check, event)
             samples = check("active_state_baseline", lambda: observe_state(
-                slave, clients, job, "baseline", event,
+                slave, clients, job, "baseline", event, transport=transport,
             ))
             check("both_clients_receive_ongoing_state", lambda: verify_baseline(samples))
             if disconnect_creator:
                 check("creator_departure_regression", lambda: creator_departure(
-                    slave, clients, job, check, event,
+                    slave, clients, job, check, event, transport=transport,
+                    expect_freeze=expect_freeze,
                 ))
     if {job.pid, slave} - job.pids():
         raise RuntimeError("native process exited during the smoke test")

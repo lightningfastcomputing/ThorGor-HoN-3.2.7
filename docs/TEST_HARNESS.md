@@ -96,18 +96,28 @@ slave's game context and player map.
 ```powershell
 py -m thorgor.tools.harness native-match --hon-home 'C:\intelprop\Heroes of Newerth' --gameplay --artifacts .\work\gameplay-baseline --report .\work\gameplay-baseline.json
 py -m thorgor.tools.harness native-match --hon-home 'C:\intelprop\Heroes of Newerth' --creator-disconnect --artifacts .\work\creator-regression --report .\work\creator-regression.json
+py -m thorgor.tools.harness native-match --hon-home 'C:\intelprop\Heroes of Newerth' --creator-disconnect --native-variant v39 --expect-freeze --artifacts .\work\frozen-control
+py -m thorgor.tools.harness native-match --hon-home 'C:\intelprop\Heroes of Newerth' --creator-disconnect --native-variant registry-continuity --artifacts .\work\repaired-continuity
 ```
 
 Both flags imply two-client admission. `--gameplay` requires native phase 6,
 two spawned hero entity indices, an advancing native clock, and independent
 complete snapshot frames for both clients over a five-second baseline.
 `--creator-disconnect` then sends creator C3 and observes the same joiner
-socket and native client number for another five seconds. Only continuing
+socket and native client number for another 15 seconds. Only continuing
 fresh snapshots pass. Frozen v39 deliberately returns exit code 1 with
 `creator_departure_result.classification = reproduced_freeze`. An incomplete
 baseline, partial-only snapshots, or decoder errors cannot establish this
 regression. Inspect the classification and cleanup events as well as the exit
 code; an arbitrary scenario failure is not proof of the freeze.
+
+`--expect-freeze` is an explicit expected-bug control, permitted only with
+v39 creator disconnection. It passes only when the frozen bug is reproduced;
+its success does not mean continuity works. All ordinary runs require correct
+behavior. `--native-variant registry-continuity` builds the separate successor
+from verified v39 in the disposable installation. The original v39 builders,
+installer default, and source installation remain unchanged. See the
+[registry diagnosis](NATIVE_CLIENT_REGISTRY.md) for the repair and evidence.
 
 The verified protocol sequence after admission is:
 
@@ -149,7 +159,18 @@ one-second windows classify sustained fresh frames as `continued_state`, or
 zero fresh frames with continued client sends and absent/complete-stale
 snapshots as `reproduced_freeze`. Other results are `inconclusive` and fail.
 Active players clear their admission-transition bit 0x40 after C5, so that bit
-is deliberately not required during the departure check.
+is deliberately not required during the departure check. Passing continuity
+requires fresh frames in every one of the 15 windows, with advancing native
+time and unchanged match ID, retained player pointer, client number, team,
+hero index/type, native connection pointer, and upstream endpoint. A brief
+early stall followed by healthy final windows still fails this gate.
+
+Hash-gated read-only transport inspection records the registry root and linked
+clients, native receive time and acknowledged frame, and the newly generated
+CSnapshot frame/time from the native snapshot pool. The report retains the
+last 80 per-route proxy counter windows and route endpoints without raw packets.
+This distinguishes generation, recipient enumeration, native transmission,
+and downstream delivery. Player state alone cannot establish any of them.
 
 Team chat, movement/ability input, graphical rendering, and reconnect recovery
 controls remain unverified by this scenario. No graphical instances or manual
@@ -179,6 +200,7 @@ with two independent simulated protocol clients. The frozen DLL hashes in
 [the v39 notes](../Reconnect-v39-notes.md) remain unchanged. The native server
 stays active while the already-connected joiner stops receiving snapshots
 after creator departure. See [autonomous progress](AUTONOMOUS_PROGRESS.md)
-for the latest run evidence and resume instructions. No reconnect repair is
-part of this harness milestone. A future repair should first compare the
-recipient routing, native identity, and host migration around the captured C3.
+for the latest run evidence and resume instructions. The separate managed
+registry successor preserves the surviving connection chain during head
+destruction. Reconnect identity and hero/control behavior are independently
+tested concerns; a snapshot-continuity pass alone does not prove them.

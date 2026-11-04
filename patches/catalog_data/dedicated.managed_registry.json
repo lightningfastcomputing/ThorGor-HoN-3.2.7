@@ -1,0 +1,12 @@
+{
+  "id": "dedicated.managed_registry",
+  "binary": "k2.dll",
+  "version": "3.2.7.1-v39+managed-registry-continuity",
+  "source_sha256": "CB12258566BA001B528F3A48E4C8CC795992DCB17333BCE5ABF8EF4E5DCCB24D",
+  "output_sha256": "98138B1086092558014B4808D3AA75B00BA87450EA3112171F68CC3DC99048C2",
+  "reason": "Preserve surviving linked client transports when a manager-owned slave removes its registry head.",
+  "observed_failure": "Frozen v39 clears CHostServer+180 after freeing the creator. Its linked transport loops then see an empty registry. Live native snapshots continue being generated, but the connected joiner receives none and its native receive/ACK counters stop advancing.",
+  "discovered": "2026-11-04",
+  "evidence": ["docs/NATIVE_CLIENT_REGISTRY.md", "tests/test_managed_registry.py", "docs/AUTONOMOUS_PROGRESS.md"],
+  "implementation": {"kind": "stable_builder", "path": "patches/builders/managed_registry.py"}
+}

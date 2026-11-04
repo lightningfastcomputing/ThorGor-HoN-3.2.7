@@ -124,11 +124,16 @@ def wait_listener(process, log_path, prefix):
 
 
 def run(scenario, hon_home=None, artifacts=None, admit_clients=False, gameplay=False,
-        disconnect_creator=False):
+        disconnect_creator=False, native_variant="v39", expect_freeze=False):
     native = scenario == "native-match"
+    if expect_freeze and (not native or not disconnect_creator or native_variant != "v39"):
+        raise ValueError("expected-bug mode requires frozen v39 creator departure")
     events = []
     report = {"scenario": scenario, "scope": "live HoN dedicated server" if native else "simulated backend protocol",
               "status": "failed", "events": events}
+    if native:
+        report.update(native_variant=native_variant,
+                      expectation="reproduce_frozen_bug" if expect_freeze else "correct_behavior")
 
     def event(name, **fields):
         record = {"time": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
@@ -157,7 +162,8 @@ def run(scenario, hon_home=None, artifacts=None, admit_clients=False, gameplay=F
         if native:
             from thorgor.tools.harness_native import preflight, run_native, stage_install
             check("native_preflight", preflight)
-            install = check("stage_native_install", lambda: stage_install(hon_home, directory, event))
+            install = check("stage_native_install", lambda: stage_install(
+                hon_home, directory, event, variant=native_variant))
             passwords["thorgorhost:1"] = secrets.token_hex(16)
 
         def provision():
@@ -181,7 +187,8 @@ def run(scenario, hon_home=None, artifacts=None, admit_clients=False, gameplay=F
         if native:
             run_native(stack, directory, env, install, master, chat, passwords, check, event,
                        admit_clients=admit_clients or gameplay or disconnect_creator,
-                       gameplay=gameplay or disconnect_creator, disconnect_creator=disconnect_creator)
+                       gameplay=gameplay or disconnect_creator, disconnect_creator=disconnect_creator,
+                       native_variant=native_variant, expect_freeze=expect_freeze)
         else:
             SCENARIOS[scenario](master, chat, passwords, check)
 
@@ -212,16 +219,22 @@ def main(argv=None):
                         help="admit two clients and require native active gameplay with heroes")
     parser.add_argument("--creator-disconnect", action="store_true",
                         help="verify active state delivery, then run the creator-departure regression")
+    parser.add_argument("--native-variant", choices=("v39", "registry-continuity"), default="v39",
+                        help="select frozen v39 or the separate managed-registry successor")
+    parser.add_argument("--expect-freeze", action="store_true",
+                        help="explicit expected-bug reproduction; requires v39 creator disconnection")
     parser.add_argument("--report", type=Path, help="also write the JSON result to this new file")
     args = parser.parse_args(argv)
     if (args.scenario == "native-match") != (args.hon_home is not None):
         parser.error("--hon-home is required for native-match and applies only to that scenario")
     if (args.admit_clients or args.gameplay or args.creator_disconnect) and args.scenario != "native-match":
         parser.error("native client and gameplay flags apply only to native-match")
+    if args.expect_freeze and (not args.creator_disconnect or args.native_variant != "v39"):
+        parser.error("--expect-freeze requires --creator-disconnect --native-variant v39")
     if args.artifacts:
         args.artifacts.mkdir(parents=True, exist_ok=False)
     report = run(args.scenario, args.hon_home, args.artifacts, args.admit_clients, args.gameplay,
-                 args.creator_disconnect)
+                 args.creator_disconnect, args.native_variant, args.expect_freeze)
     output = json.dumps(report, indent=2) + "\n"
     print(output, end="")
     if args.report:

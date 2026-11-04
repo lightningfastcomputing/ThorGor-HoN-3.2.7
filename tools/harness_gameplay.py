@@ -112,7 +112,7 @@ def start_gameplay(pid, clients, check, event):
     ))
 
 
-def observe_state(pid, clients, job, label, event, seconds=5):
+def observe_state(pid, clients, job, label, event, seconds=5, transport=None):
     samples = []
     before = [client_evidence(client) for client in clients]
     first_clock = inspect_gameplay(pid)["engine_time"]
@@ -126,6 +126,8 @@ def observe_state(pid, clients, job, label, event, seconds=5):
             raise RuntimeError("authoritative active server did not survive observation")
         current = [client_evidence(client) for client in clients]
         sample = {"second": number + 1, "engine_time": state["engine_time"],
+                  "pid": pid, "native_state": state,
+                  "native_transport": transport.inspect() if transport else None,
                   "clients": [{
                       "account_id": now["account_id"], "native_number": now["native_number"],
                       "snapshot_frames": now["snapshot_frames"] - old["snapshot_frames"],
@@ -151,10 +153,15 @@ def verify_baseline(samples):
         raise RuntimeError("both clients need ongoing complete snapshots before disconnection")
 
 
-def creator_departure(pid, clients, job, check, event):
+def creator_departure(pid, clients, job, check, event, transport=None, expect_freeze=False):
     creator, joiner = clients
     endpoint = joiner.socket.getsockname()
     before = inspect_gameplay(pid)
+    before_transport = transport.inspect() if transport else None
+    event("departure_expectation", expected="reproduced_freeze" if expect_freeze else "continued_state",
+          required_seconds=15, native_state=before,
+          native_transport=before_transport,
+          clients=[client_evidence(client) for client in clients] if transport else [])
     joiner_number = next(p["native_client_number"] for p in before["players"]
                          if p["account_id_low30"] == joiner.account_id)
     creator.disconnect()
@@ -164,7 +171,8 @@ def creator_departure(pid, clients, job, check, event):
             p["account_id_low30"] == creator.account_id and p["connection_status"] & 1
             for p in state["players"]), "creator_disconnected", event, timeout=5,
     ))
-    samples = observe_state(pid, [joiner], job, "after_creator_departure", event)
+    samples = observe_state(pid, [joiner], job, "after_creator_departure", event,
+                            seconds=15, transport=transport)
     if joiner.socket.getsockname() != endpoint:
         raise RuntimeError("joiner transport changed during observation")
     after = inspect_gameplay(pid)
@@ -174,10 +182,56 @@ def creator_departure(pid, clients, job, check, event):
                for p in after["players"]):
         raise RuntimeError("joiner native connection changed")
     classification = classify_departure(samples)
+    if classification == "continued_state" and not expect_freeze:
+        check("joiner_15s_continuity", lambda: verify_continuity(
+            samples, before, joiner.account_id, expected_transport=before_transport))
     event("creator_departure_result", classification=classification,
-          joiner_endpoint=list(endpoint), native_state=after)
-    if classification != "continued_state":
+          expected="reproduced_freeze" if expect_freeze else "continued_state",
+          observation_seconds=15, joiner_endpoint=list(endpoint), native_state=after)
+    expected = "reproduced_freeze" if expect_freeze else "continued_state"
+    if classification != expected:
         raise RuntimeError(f"creator-departure regression result {classification}")
+
+
+def player_identity(state, account_id):
+    player = next(p for p in state["players"] if p["account_id_low30"] == account_id)
+    return (state["native_match_id"], player["player"], player["native_client_number"],
+            player["team"], player["hero_index"], player["selected_hero"])
+
+
+def verify_continuity(samples, before, account_id, seconds=15, expected_transport=None):
+    if len(samples) < seconds:
+        raise RuntimeError("continuity observation was too short")
+    identity = player_identity(before, account_id)
+    clock = before["engine_time"]
+    first_transport = expected_transport or samples[0]["native_transport"]
+    server = first_transport["server"] if first_transport else None
+    endpoint, connection = None, None
+    if first_transport:
+        original = next(p for p in first_transport["clients"] if p["account_id_low30"] == account_id)
+        endpoint, connection = original["endpoint"], original["connection"]
+    for sample in samples:
+        state = sample["native_state"]
+        player = next(p for p in state["players"] if p["account_id_low30"] == account_id)
+        if (state["phase"] != 6 or player_identity(state, account_id) != identity or
+                player["connection_status"] & 1 or
+                not 0 < (state["engine_time"] - clock) & 0xFFFFFFFF < 0x80000000):
+            raise RuntimeError("native match or joiner identity/clock changed")
+        clock = state["engine_time"]
+        client = sample["clients"][0]
+        if client["snapshot_frames"] <= 0 or client["snapshot_errors"] or client["sent"] <= 0:
+            raise RuntimeError("joiner needs fresh authoritative state in every observation window")
+        native = sample["native_transport"]
+        if native:
+            if native["server"] != server:
+                raise RuntimeError("native server identity changed")
+            record = next((p for p in native["clients"] if p["account_id_low30"] == account_id), None)
+            if record is None or record["native_client_number"] != identity[2] or record["state"] != 4:
+                raise RuntimeError("joiner left the native transport registry")
+            if endpoint is None:
+                endpoint, connection = record["endpoint"], record["connection"]
+            if record["endpoint"] != endpoint or record["connection"] != connection:
+                raise RuntimeError("joiner native endpoint or transport object changed")
 
 
 def classify_departure(samples):

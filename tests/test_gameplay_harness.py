@@ -6,7 +6,9 @@ import zlib
 
 from thorgor.protocols.native_snapshot import MAX_SNAPSHOT, SnapshotReceiver
 from thorgor.tools.harness_clients import Identity, NativeClient
-from thorgor.tools.harness_gameplay import classify_departure, creator_departure, verify_baseline
+from thorgor.tools.harness_gameplay import (
+    classify_departure, creator_departure, verify_baseline, verify_continuity,
+)
 
 
 class SnapshotTests(unittest.TestCase):
@@ -74,6 +76,12 @@ class ClientTelemetryTests(unittest.TestCase):
 
 
 class DepartureOracleTests(unittest.TestCase):
+    def test_expected_bug_mode_cannot_hide_failure_of_a_repair(self):
+        from thorgor.tools.harness import run
+        with self.assertRaisesRegex(ValueError, "requires frozen v39"):
+            run("native-match", disconnect_creator=True, native_variant="registry-continuity",
+                expect_freeze=True)
+
     def samples(self, frames, **overrides):
         return [{"clients": [{"snapshot_frames": count, "snapshot_errors": 0,
                               "snapshot_packets": count, "snapshot_complete": count,
@@ -99,11 +107,16 @@ class DepartureOracleTests(unittest.TestCase):
         joiner = SimpleNamespace(account_id=2, socket=Mock())
         joiner.socket.getsockname.return_value = ("127.0.0.1", 12345)
         state = {"players": [{"account_id_low30": 2, "native_client_number": 1,
-                              "connection_status": 0x22}]}
+                              "connection_status": 0x22, "player": "0x10000", "team": 2,
+                              "hero_index": 4227, "selected_hero": 1407}],
+                 "native_match_id": 1, "phase": 6, "engine_time": 1000}
+        samples = self.samples([20] * 15)
+        for number, sample in enumerate(samples, 1):
+            sample.update(native_transport=None, native_state={**state, "engine_time": 1000 + 1000 * number})
         with patch("thorgor.tools.harness_gameplay.inspect_gameplay", return_value=state), \
                 patch("thorgor.tools.harness_gameplay.wait_state"), \
                 patch("thorgor.tools.harness_gameplay.observe_state",
-                      return_value=self.samples([20, 20, 20])):
+                      return_value=samples):
             creator_departure(123, [creator, joiner], Mock(), lambda name, fn: fn(), Mock())
             creator.disconnect.assert_called_once_with()
             state["players"][0]["connection_status"] |= 1
@@ -117,3 +130,20 @@ class DepartureOracleTests(unittest.TestCase):
                     good[:2] + [{"clients": [{"snapshot_frames": 20}, {"snapshot_frames": 0}]}]):
             with self.subTest(samples=bad), self.assertRaises(RuntimeError):
                 verify_baseline(bad)
+
+    def test_fifteen_second_gate_rejects_a_gap_even_when_final_windows_continue(self):
+        player = {"account_id_low30": 2, "native_client_number": 1, "connection_status": 0x22,
+                  "player": "0x10000", "team": 2, "hero_index": 4227, "selected_hero": 1407}
+        before = {"players": [player], "native_match_id": 1, "phase": 6, "engine_time": 1000}
+        samples = self.samples([20] * 15)
+        for number, sample in enumerate(samples, 1):
+            sample.update(native_transport=None, native_state={**before, "engine_time": 1000 + 1000 * number})
+        verify_continuity(samples, before, 2)
+        samples[1]["clients"][0]["snapshot_frames"] = 0
+        self.assertEqual(classify_departure(samples), "continued_state")
+        with self.assertRaisesRegex(RuntimeError, "every observation"):
+            verify_continuity(samples, before, 2)
+        samples[1]["clients"][0]["snapshot_frames"] = 20
+        samples[2]["native_state"] = {**before, "engine_time": 4000, "native_match_id": 2}
+        with self.assertRaisesRegex(RuntimeError, "identity/clock"):
+            verify_continuity(samples, before, 2)

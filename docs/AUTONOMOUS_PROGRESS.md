@@ -1,5 +1,57 @@
 # Autonomous development progress
 
+## Creator-freeze repair continuation from 371db03
+
+On 2026-11-04, fresh auth, lobby-authority, original native admission, and
+active gameplay all passed. Two additional disposable v39 creator-departure
+runs both failed with reproduced_freeze and completed cleanup. Machine-readable
+reports are under ../../outputs/creator-freeze-session/ (auth.json, lobby.json,
+admission.json, gameplay.json, v39-freeze-1.json, v39-freeze-2.json).
+
+Read-only live observation in registry-observer.jsonl isolated a native
+registry-root loss. Before C3, CHostServer+180 points to creator client 0,
+whose +8430 points to joiner client 1. After C3, the head is null while the
+joiner object remains in-game (state 4), same account and native number. Its
+last receive time and acknowledged frame stop advancing. Server frame/time
+and the native snapshot ring continue advancing. The v39 linked GetClient,
+input dispatch, state queue, and send loops all start at that same head.
+
+The retail cleanup at K2 RVA 2F2E4A frees the head and clears +180. The v38
+StopServer suppression keeps the slave alive but does not preserve the linked
+registry. This is supported by disassembly of the actual v39 DLL and the
+local older HoN source's K2_CLIENT RemoveClient implementation; the binary
+remains authoritative. No proxy route rewrite is needed to explain the loss.
+
+A separate managed_registry builder now produces candidate K2 SHA-256
+98138B1086092558014B4808D3AA75B00BA87450EA3112171F68CC3DC99048C2 from frozen
+v39. It saves/detaches the successor before destroying a managed head and
+preserves the successor as the registry root. Unmanaged cleanup remains stock.
+Five instruction-emulation tests pass, including freed-memory poisoning,
+multiple survivors, last/empty head, unmanaged behavior, and execution of the
+real snapshot-recipient dispatch loop after removal.
+
+The harness now separates --expect-freeze on explicit v39 from the desired
+continuity gate, which requires fresh snapshots in every one of 15 windows.
+Read-only transport evidence includes native endpoints, client registry,
+ACK/receive counters, and generated snapshot metadata. Per-route proxy windows
+are retained without credentials. Instrumented v39 reproduced the freeze for
+all 15 windows. Generated native snapshots advanced 2879 -> 3161 while its
+registry root was null and the proxy forwarded 20 joiner packets/second but
+received zero back. This proves generation continues and transmission stops
+because recipient enumeration loses the registry root.
+
+All three repaired fresh matches passed all 15 continuity windows, with
+20-21 fresh frames/second, stable native match/player/hero/connection/endpoint
+identities, advancing native acknowledgments, and cleanup. Reports are
+registry-repair-1.json, registry-repair-2.json, and registry-repair-3.json.
+The pre-repair expanded suite ran 105 tests, with 103 passing and two historical
+skips. The final repair suite ran 107 tests: 105 passed, two historical cases
+skipped. See repair-suite.txt. No candidate was promoted based on command
+acceptance alone. The registry repair is independently verified and ready for
+its local milestone commit.
+Next: expand independent departure/reconnect and movement scenarios. All work remains
+local; the normal installer still selects frozen v39.
+
 ## Starting point
 
 Work continues from local commit a917b55 on dev/autonomous-harness.
