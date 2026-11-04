@@ -952,6 +952,7 @@ def main(argv=None) -> int:
         client_sock.ioctl(socket.SIO_UDP_CONNRESET, False)
     client_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     client_sock.bind((args.listen_host, args.listen_port))
+    print(f"Listening: UDP {args.listen_host}:{client_sock.getsockname()[1]}", flush=True)
     client_sock.setblocking(False)
 
     target = (args.target_host, args.target_port)

@@ -83,10 +83,8 @@ def lobby_authority(master, chat, passwords, check):
 SCENARIOS = {"auth": authenticate, "lobby-authority": lobby_authority}
 
 
-def start_service(stack, directory, env, service, db_args, event):
+def start_process(stack, directory, env, service, command, event):
     log_path = directory / f"{service}.stdout"
-    command = [sys.executable, "-u", "-m", "thorgor", service,
-               "--host", LOOPBACK, "--port", "0", *db_args]
     with log_path.open("wb") as log:
         process = subprocess.Popen(command, cwd=ROOT, env=env, stdin=subprocess.DEVNULL,
                                    stdout=log, stderr=subprocess.STDOUT)
@@ -102,7 +100,19 @@ def start_service(stack, directory, env, service, db_args, event):
 
     stack.callback(stop)
     event(f"{service}_started", pid=process.pid)
+    return process, log_path
+
+
+def start_service(stack, directory, env, service, db_args, event, *, port=0):
+    process, log_path = start_process(
+        stack, directory, env, service, [sys.executable, "-u", "-m", "thorgor", service,
+        "--host", LOOPBACK, "--port", str(port), *db_args], event,
+    )
     prefix = f"Listening: {'http://' if service == 'master' else 'TCP '}{LOOPBACK}:"
+    return wait_listener(process, log_path, prefix)
+
+
+def wait_listener(process, log_path, prefix):
     pattern = re.compile(re.escape(prefix) + r"([1-9][0-9]*)\r?\n")
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline and process.poll() is None:
@@ -110,17 +120,22 @@ def start_service(stack, directory, env, service, db_args, event):
         if match:
             return int(match[1])
         time.sleep(0.05)
-    raise RuntimeError(f"{service} did not publish its bound loopback port")
+    raise RuntimeError("service did not publish its bound loopback port")
 
 
-def run(scenario):
+def run(scenario, hon_home=None, artifacts=None, admit_clients=False):
+    native = scenario == "native-match"
     events = []
-    report = {"scenario": scenario, "scope": "simulated backend protocol",
+    report = {"scenario": scenario, "scope": "live HoN dedicated server" if native else "simulated backend protocol",
               "status": "failed", "events": events}
 
     def event(name, **fields):
-        events.append({"time": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
-                       "name": name, **fields})
+        record = {"time": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+                  "name": name, **fields}
+        events.append(record)
+        if artifacts is not None:
+            with (artifacts / "events.jsonl").open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(record) + "\n")
 
     def check(name, operation):
         event(name, status="running")
@@ -138,6 +153,11 @@ def run(scenario):
         env = {**os.environ, "THORGOR_DATA_HOME": str(directory)}
         database = directory / "accounts.db"
         passwords = {name: secrets.token_urlsafe(24) for name in ("creator", "joiner")}
+        if native:
+            from thorgor.tools.harness_native import preflight, run_native, stage_install
+            check("native_preflight", preflight)
+            install = check("stage_native_install", lambda: stage_install(hon_home, directory, event))
+            passwords["thorgorhost:1"] = secrets.token_hex(16)
 
         def provision():
             for username, password in passwords.items():
@@ -150,11 +170,18 @@ def run(scenario):
                 )
 
         check("provision_accounts", provision)
+        master_args = ["--database", str(database)]
+        if native:
+            master_args += ["--server-list-ip", LOOPBACK]
         master = check("start_master", lambda: start_service(
-            stack, directory, env, "master", ["--database", str(database)], event))
+            stack, directory, env, "master", master_args, event, port=80 if native else 0))
         chat = check("start_chat", lambda: start_service(
-            stack, directory, env, "chat", ["--db", str(database)], event))
-        SCENARIOS[scenario](master, chat, passwords, check)
+            stack, directory, env, "chat", ["--db", str(database)], event, port=11031 if native else 0))
+        if native:
+            run_native(stack, directory, env, install, master, chat, passwords, check, event,
+                       admit_clients=admit_clients)
+        else:
+            SCENARIOS[scenario](master, chat, passwords, check)
 
     try:
         with TemporaryDirectory(prefix="thorgor-harness-") as temp:
@@ -174,10 +201,20 @@ def run(scenario):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("scenario", choices=SCENARIOS)
+    parser.add_argument("scenario", choices=(*SCENARIOS, "native-match"))
+    parser.add_argument("--hon-home", type=Path, help="HoN 3.2.7.1 source installation for native-match")
+    parser.add_argument("--artifacts", type=Path, help="create a directory for credential-free event logs")
+    parser.add_argument("--admit-clients", action="store_true",
+                        help="require two connected native roster identities in native-match")
     parser.add_argument("--report", type=Path, help="also write the JSON result to this new file")
     args = parser.parse_args(argv)
-    report = run(args.scenario)
+    if (args.scenario == "native-match") != (args.hon_home is not None):
+        parser.error("--hon-home is required for native-match and applies only to that scenario")
+    if args.admit_clients and args.scenario != "native-match":
+        parser.error("--admit-clients applies only to native-match")
+    if args.artifacts:
+        args.artifacts.mkdir(parents=True, exist_ok=False)
+    report = run(args.scenario, args.hon_home, args.artifacts, args.admit_clients)
     output = json.dumps(report, indent=2) + "\n"
     print(output, end="")
     if args.report:

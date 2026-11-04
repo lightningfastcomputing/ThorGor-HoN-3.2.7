@@ -6,6 +6,8 @@ binary patching.
 
 The [test harness](docs/TEST_HARNESS.md) runs unattended master, chat, and
 backend lobby-authority scenarios with disposable accounts on loopback.
+It also runs a real native manager/slave smoke test and optional two-client
+protocol admission with authoritative native roster verification.
 
 ## Reconnect v39 frozen milestone
 

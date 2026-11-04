@@ -38,7 +38,8 @@ def manager_settings(dedicated_cpu: int | None) -> tuple[str, ...]:
     return MANAGER_SETTINGS + (f"Set man_allowCPUs {dedicated_cpu}",)
 
 
-def manager_command(hon_home: Path, dedicated_cpu: int | None = None) -> list[str]:
+def manager_command(hon_home: Path, dedicated_cpu: int | None = None, *,
+                    settings: tuple[str, ...] = ()) -> list[str]:
     hon = hon_home / "hon.exe"
     if not hon.is_file():
         raise FileNotFoundError(f"hon.exe not found: {hon}")
@@ -47,7 +48,7 @@ def manager_command(hon_home: Path, dedicated_cpu: int | None = None) -> list[st
         "-manager",
         "-noconfig",
         "-execute",
-        ";".join(manager_settings(dedicated_cpu)),
+        ";".join(manager_settings(dedicated_cpu) + settings),
         "-masterserver",
         "127.0.0.1",
     ]

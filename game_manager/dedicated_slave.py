@@ -858,6 +858,7 @@ def main(argv=None) -> None:
         a.inject_status_toggle_after_wake, a.inject_start_game_after_wake,
         a.start_game_string_encoding, a.start_game_delay, a.master_url,
     ) as s:
+        print(f"Listening: TCP {a.listen_host}:{s.server_address[1]}", flush=True)
         s.serve_forever(0.1)
 
 
