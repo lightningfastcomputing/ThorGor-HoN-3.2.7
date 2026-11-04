@@ -173,8 +173,32 @@ This distinguishes generation, recipient enumeration, native transmission,
 and downstream delivery. Player state alone cannot establish any of them.
 
 Team chat, movement/ability input, graphical rendering, and reconnect recovery
-controls remain unverified by this scenario. No graphical instances or manual
+controls remain separate from the creator-departure scenario. No graphical instances or manual
 input are needed for the active-match baseline or creator-departure test.
+
+## Independent departure and snapshot recovery
+
+```powershell
+py -m thorgor.tools.harness native-match --hon-home 'C:\intelprop\Heroes of Newerth' --native-variant registry-continuity --joiner-disconnect --artifacts .\work\joiner-departure
+py -m thorgor.tools.harness native-match --hon-home 'C:\intelprop\Heroes of Newerth' --native-variant registry-continuity --reconnect-cycle both --artifacts .\work\both-recovery
+```
+
+`--reconnect-cycle` accepts creator, joiner, or both. The combined scenario
+disconnects/rejoins the joiner first, then the creator in the same active match.
+Each departure requires 15 seconds of uninterrupted survivor snapshots. The
+returning account uses a fresh authenticated socket while the other client is
+continuously pumped. It must retain the same native CPlayer pointer, team,
+selected/spawned hero, and match ID. A new native client number is allowed and
+must match the active transport record. Inactive historical connections are
+recorded, with active records selected by both account and live native number.
+
+Initial world/state transfer can take more than five seconds. The harness
+allows at most 30 seconds for eight fresh complete frames beyond the departure
+frame, then requires both streams over a separate five-second baseline. Native
+admission or a cleared disconnect bit alone cannot pass recovery. Live testing
+verified both accounts' retained identity and snapshot resynchronization;
+movement, ability control, rendering, and selection-phase recovery require
+their own assertions.
 
 ## Native baseline and live verification
 

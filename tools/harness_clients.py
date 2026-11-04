@@ -116,6 +116,7 @@ class NativeClient:
             self.socket.bind(("127.0.0.1", 0))
             self.socket.connect(("127.0.0.1", 11236))
             self.socket.settimeout(0.01)
+            self.endpoint = self.socket.getsockname()
         except OSError:
             self.socket.close()
             raise
@@ -232,7 +233,7 @@ class NativeClient:
         self.send(b"\0\0\1\xc3")
         self.active = False
 
-    def admit(self):
+    def admit(self, peers=()):
         deadline = time.monotonic() + 10
         next_request = 0
         while time.monotonic() < deadline:
@@ -240,6 +241,8 @@ class NativeClient:
                 self.send(self.request)
                 next_request = time.monotonic() + 1
             self.poll()
+            for peer in peers:
+                peer.poll()
             if self.bootstrapped:
                 self.reliable(b"\xc2\xc4")
                 self.poll()

@@ -41,7 +41,7 @@ def inspect_gameplay(pid):
 
 def client_evidence(client):
     return {"account_id": client.account_id, "native_number": client.native_number,
-            "endpoint": list(client.socket.getsockname()),
+            "endpoint": list(client.endpoint),
             "sent": client.sent, "received": client.received,
             "unique_reliable": client.unique_reliable,
             "snapshot_frames": client.snapshot_frames, "last_snapshot_frame": client.last_snapshot_frame,
@@ -153,7 +153,8 @@ def verify_baseline(samples):
         raise RuntimeError("both clients need ongoing complete snapshots before disconnection")
 
 
-def creator_departure(pid, clients, job, check, event, transport=None, expect_freeze=False):
+def creator_departure(pid, clients, job, check, event, transport=None, expect_freeze=False,
+                      departing_name="creator", remaining_name="joiner"):
     creator, joiner = clients
     endpoint = joiner.socket.getsockname()
     before = inspect_gameplay(pid)
@@ -165,13 +166,13 @@ def creator_departure(pid, clients, job, check, event, transport=None, expect_fr
     joiner_number = next(p["native_client_number"] for p in before["players"]
                          if p["account_id_low30"] == joiner.account_id)
     creator.disconnect()
-    event("creator_c3_sent", joiner_endpoint=list(endpoint))
-    check("native_creator_disconnected", lambda: wait_state(
+    event(f"{departing_name}_c3_sent", remaining_endpoint=list(endpoint))
+    check(f"native_{departing_name}_disconnected", lambda: wait_state(
         pid, [joiner], lambda state: any(
             p["account_id_low30"] == creator.account_id and p["connection_status"] & 1
             for p in state["players"]), "creator_disconnected", event, timeout=5,
     ))
-    samples = observe_state(pid, [joiner], job, "after_creator_departure", event,
+    samples = observe_state(pid, [joiner], job, f"after_{departing_name}_departure", event,
                             seconds=15, transport=transport)
     if joiner.socket.getsockname() != endpoint:
         raise RuntimeError("joiner transport changed during observation")
@@ -183,9 +184,9 @@ def creator_departure(pid, clients, job, check, event, transport=None, expect_fr
         raise RuntimeError("joiner native connection changed")
     classification = classify_departure(samples)
     if classification == "continued_state" and not expect_freeze:
-        check("joiner_15s_continuity", lambda: verify_continuity(
+        check(f"{remaining_name}_15s_continuity", lambda: verify_continuity(
             samples, before, joiner.account_id, expected_transport=before_transport))
-    event("creator_departure_result", classification=classification,
+    event(f"{departing_name}_departure_result", classification=classification,
           expected="reproduced_freeze" if expect_freeze else "continued_state",
           observation_seconds=15, joiner_endpoint=list(endpoint), native_state=after)
     expected = "reproduced_freeze" if expect_freeze else "continued_state"
@@ -208,7 +209,8 @@ def verify_continuity(samples, before, account_id, seconds=15, expected_transpor
     server = first_transport["server"] if first_transport else None
     endpoint, connection = None, None
     if first_transport:
-        original = next(p for p in first_transport["clients"] if p["account_id_low30"] == account_id)
+        original = next(p for p in first_transport["clients"] if p["account_id_low30"] == account_id
+                        and p["native_client_number"] == identity[2] and p["state"] == 4)
         endpoint, connection = original["endpoint"], original["connection"]
     for sample in samples:
         state = sample["native_state"]
@@ -225,7 +227,8 @@ def verify_continuity(samples, before, account_id, seconds=15, expected_transpor
         if native:
             if native["server"] != server:
                 raise RuntimeError("native server identity changed")
-            record = next((p for p in native["clients"] if p["account_id_low30"] == account_id), None)
+            record = next((p for p in native["clients"] if p["account_id_low30"] == account_id and
+                           p["native_client_number"] == identity[2] and p["state"] == 4), None)
             if record is None or record["native_client_number"] != identity[2] or record["state"] != 4:
                 raise RuntimeError("joiner left the native transport registry")
             if endpoint is None:

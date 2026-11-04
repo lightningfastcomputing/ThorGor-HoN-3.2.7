@@ -7,7 +7,7 @@ import zlib
 from thorgor.protocols.native_snapshot import MAX_SNAPSHOT, SnapshotReceiver
 from thorgor.tools.harness_clients import Identity, NativeClient
 from thorgor.tools.harness_gameplay import (
-    classify_departure, creator_departure, verify_baseline, verify_continuity,
+    classify_departure, client_evidence, creator_departure, verify_baseline, verify_continuity,
 )
 
 
@@ -52,6 +52,14 @@ class SnapshotTests(unittest.TestCase):
 
 
 class ClientTelemetryTests(unittest.TestCase):
+    def test_summary_keeps_endpoint_after_socket_cleanup(self):
+        with patch("thorgor.tools.harness_clients.socket.socket") as factory:
+            factory.return_value.getsockname.return_value = ("127.0.0.1", 12345)
+            client = NativeClient("one", Identity(1, "cookie-one", "a" * 40), "key")
+            client.close()
+            factory.return_value.getsockname.side_effect = OSError("closed")
+            self.assertEqual(client_evidence(client)["endpoint"], ["127.0.0.1", 12345])
+
     def test_duplicate_frames_and_acknowledgments_are_independent_per_client(self):
         with patch("thorgor.tools.harness_clients.socket.socket"):
             first = NativeClient("one", Identity(1, "cookie-one", "a" * 40), "key")
@@ -147,3 +155,17 @@ class DepartureOracleTests(unittest.TestCase):
         samples[2]["native_state"] = {**before, "engine_time": 4000, "native_match_id": 2}
         with self.assertRaisesRegex(RuntimeError, "identity/clock"):
             verify_continuity(samples, before, 2)
+
+    def test_continuity_uses_live_transport_after_a_retained_inactive_connection(self):
+        player = {"account_id_low30": 2, "native_client_number": 2, "connection_status": 0x22,
+                  "player": "0x10000", "team": 2, "hero_index": 4227, "selected_hero": 1407}
+        before = {"players": [player], "native_match_id": 1, "phase": 6, "engine_time": 1000}
+        active = {"account_id_low30": 2, "native_client_number": 2, "state": 4,
+                  "endpoint": ["127.0.0.4", 1234], "connection": "0x20000"}
+        transport = {"server": "0x30000", "clients": [
+            {**active, "native_client_number": 1, "state": 0}, active]}
+        samples = self.samples([20] * 15)
+        for number, sample in enumerate(samples, 1):
+            sample.update(native_transport=transport,
+                          native_state={**before, "engine_time": 1000 + 1000 * number})
+        verify_continuity(samples, before, 2, expected_transport=transport)

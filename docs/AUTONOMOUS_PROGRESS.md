@@ -1,5 +1,35 @@
 # Autonomous development progress
 
+## Phase 4: verified active-match snapshot recovery
+
+Repair milestone b43aa8b is committed locally. The combined --reconnect-cycle
+both scenario on registry-continuity passed in a fresh native match. Joiner
+departure preserved 15 seconds of creator snapshots; the joiner returned as
+native client 2 with the same CPlayer/team/hero. Creator departure then
+preserved 15 seconds of reconnected joiner snapshots; the creator returned as
+client 3 with its own retained CPlayer/team/hero. Both streams resynchronized
+and advanced beyond departure frames (joiner 2861 -> 3380; creator 3380 -> 3899).
+Evidence: ../../outputs/creator-freeze-session/recovery-both-2.json.
+The complete recovery suite ran 109 tests: 107 passed, two historical skips
+(recovery-suite.txt). Both departed/reconnected accounts were tested without
+human input, and cleanup completed.
+
+The first recovery probe correctly failed its five-second stream check before
+the initial bulk state transfer finished. A bounded 30-second wait for eight
+fresh frames now precedes the independent stream baseline. It does not waive
+the passing baseline. Cleanup telemetry now retains endpoints before sockets
+close, preventing a closed-socket exception from masking scenario results.
+
+Verified scope is native retained identity and snapshot resynchronization,
+including creator rejoining an existing match. No rendering or movement/control
+claim is made. Next: authoritative movement, selection-phase reconnect,
+termination/lifecycle, and repeated-match state clearing. Movement investigation
+identified game+20 -> entity directory, its +10 vector indexed by hero ID,
+entity index +10/type +38/owner +444, and position +98/+9C/+A0. These offsets
+come from audited binary instructions and still need the live movement test.
+The newer C7 input uses entity snapshots rather than the older source's fixed
+input struct; old GAME_CMD_SELECTION 40 is unsupported in this binary.
+
 ## Creator-freeze repair continuation from 371db03
 
 On 2026-11-04, fresh auth, lobby-authority, original native admission, and

@@ -124,7 +124,8 @@ def wait_listener(process, log_path, prefix):
 
 
 def run(scenario, hon_home=None, artifacts=None, admit_clients=False, gameplay=False,
-        disconnect_creator=False, native_variant="v39", expect_freeze=False):
+        disconnect_creator=False, native_variant="v39", expect_freeze=False,
+        disconnect_joiner=False, reconnect_cycle=None):
     native = scenario == "native-match"
     if expect_freeze and (not native or not disconnect_creator or native_variant != "v39"):
         raise ValueError("expected-bug mode requires frozen v39 creator departure")
@@ -186,9 +187,10 @@ def run(scenario, hon_home=None, artifacts=None, admit_clients=False, gameplay=F
             stack, directory, env, "chat", ["--db", str(database)], event, port=11031 if native else 0))
         if native:
             run_native(stack, directory, env, install, master, chat, passwords, check, event,
-                       admit_clients=admit_clients or gameplay or disconnect_creator,
-                       gameplay=gameplay or disconnect_creator, disconnect_creator=disconnect_creator,
-                       native_variant=native_variant, expect_freeze=expect_freeze)
+                       admit_clients=admit_clients or gameplay or disconnect_creator or disconnect_joiner or reconnect_cycle,
+                       gameplay=gameplay or disconnect_creator or disconnect_joiner or reconnect_cycle,
+                       disconnect_creator=disconnect_creator, disconnect_joiner=disconnect_joiner,
+                       reconnect_cycle=reconnect_cycle, native_variant=native_variant, expect_freeze=expect_freeze)
         else:
             SCENARIOS[scenario](master, chat, passwords, check)
 
@@ -217,8 +219,13 @@ def main(argv=None):
                         help="require two connected native roster identities in native-match")
     parser.add_argument("--gameplay", action="store_true",
                         help="admit two clients and require native active gameplay with heroes")
-    parser.add_argument("--creator-disconnect", action="store_true",
-                        help="verify active state delivery, then run the creator-departure regression")
+    departure = parser.add_mutually_exclusive_group()
+    departure.add_argument("--creator-disconnect", action="store_true",
+                           help="verify active state delivery, then run the creator-departure regression")
+    departure.add_argument("--joiner-disconnect", action="store_true",
+                           help="require creator continuity after joiner departure")
+    departure.add_argument("--reconnect-cycle", choices=("creator", "joiner", "both"),
+                           help="verify departure, retained identity, and reconnected snapshot streams")
     parser.add_argument("--native-variant", choices=("v39", "registry-continuity"), default="v39",
                         help="select frozen v39 or the separate managed-registry successor")
     parser.add_argument("--expect-freeze", action="store_true",
@@ -227,14 +234,16 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if (args.scenario == "native-match") != (args.hon_home is not None):
         parser.error("--hon-home is required for native-match and applies only to that scenario")
-    if (args.admit_clients or args.gameplay or args.creator_disconnect) and args.scenario != "native-match":
+    if (args.admit_clients or args.gameplay or args.creator_disconnect or args.joiner_disconnect or
+            args.reconnect_cycle) and args.scenario != "native-match":
         parser.error("native client and gameplay flags apply only to native-match")
     if args.expect_freeze and (not args.creator_disconnect or args.native_variant != "v39"):
         parser.error("--expect-freeze requires --creator-disconnect --native-variant v39")
     if args.artifacts:
         args.artifacts.mkdir(parents=True, exist_ok=False)
     report = run(args.scenario, args.hon_home, args.artifacts, args.admit_clients, args.gameplay,
-                 args.creator_disconnect, args.native_variant, args.expect_freeze)
+                 args.creator_disconnect, args.native_variant, args.expect_freeze,
+                 args.joiner_disconnect, args.reconnect_cycle)
     output = json.dumps(report, indent=2) + "\n"
     print(output, end="")
     if args.report:

@@ -276,7 +276,8 @@ def record_native_logs(install, event):
 
 def run_native(stack, directory, env, staged, master, chat, passwords, check, event, *,
                admit_clients=False, gameplay=False, disconnect_creator=False,
-               native_variant="v39", expect_freeze=False):
+               native_variant="v39", expect_freeze=False, disconnect_joiner=False,
+               reconnect_cycle=None):
     from thorgor.tools.harness import authenticate, start_process, wait_listener
     from thorgor.tools.harness_job import NativeJob
     install, mod = staged
@@ -390,6 +391,24 @@ def run_native(stack, directory, env, staged, master, chat, passwords, check, ev
                     slave, clients, job, check, event, transport=transport,
                     expect_freeze=expect_freeze,
                 ))
+            if disconnect_joiner:
+                check("joiner_departure_regression", lambda: creator_departure(
+                    slave, [clients[1], clients[0]], job, check, event, transport=transport,
+                    departing_name="joiner", remaining_name="creator"))
+            if reconnect_cycle:
+                from thorgor.tools.harness_recovery import recovery_cycle
+                def replacement(index):
+                    username, identity, host_key = (("creator", creator, key),
+                                                     ("joiner", joiner, ""))[index]
+                    client = NativeClient(username, identity, host_key)
+                    stack.callback(client.close)
+                    stack.callback(lambda client=client, username=username: event(
+                        "reconnected_client_summary", username=username,
+                        state=client_evidence(client)))
+                    clients[index] = client
+                    return client
+                check("native_reconnect_cycle", lambda: recovery_cycle(
+                    slave, clients, reconnect_cycle, replacement, transport, job, check, event))
     if {job.pid, slave} - job.pids():
         raise RuntimeError("native process exited during the smoke test")
 
