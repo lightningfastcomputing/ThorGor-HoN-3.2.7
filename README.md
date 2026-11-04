@@ -4,6 +4,9 @@ An isolated Heroes of Newerth 3.2.7.1 LAN backend with master/authentication,
 chat, public games, dedicated-server management, matchmaking, and reproducible
 binary patching.
 
+The [test harness](docs/TEST_HARNESS.md) runs unattended master, chat, and
+backend lobby-authority scenarios with disposable accounts on loopback.
+
 ## Reconnect v39 frozen milestone
 
 This checkout contains the reconnect admission repair described in

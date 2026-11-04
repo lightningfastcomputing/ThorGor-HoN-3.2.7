@@ -1948,7 +1948,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print("=" * 92)
     print(APP_NAME)
-    print(f"Listening: http://127.0.0.1:{args.port}")
+    print(f"Listening: http://{args.host}:{server.server_port}")
     print(f"Account database: {CONFIG.database_path}")
     print(f"Configured accounts: {ACCOUNTS.count()}")
     print(f"salt2: {CONFIG.salt2!r}")

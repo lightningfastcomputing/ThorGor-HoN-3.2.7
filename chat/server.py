@@ -1020,7 +1020,7 @@ def main(argv: list[str] | None = None):
 
     print("=" * 88)
     print(APP_NAME)
-    print(f"Listening: TCP {args.host}:{args.port}")
+    print(f"Listening: TCP {args.host}:{server.server_address[1]}")
     print(f"Account database: {ACCOUNT_DB_PATH}")
     print("Observed client: HoN 3.2.7.1, protocol 47")
     print(f"Matchmaking assignment: {args.match_host}:{args.match_port}")
