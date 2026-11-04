@@ -12,7 +12,9 @@ Its creator-departure regression reproduces the frozen v39 joiner stream.
 The separate `registry-continuity` native variant repairs that freeze and has
 passed three fresh 15-second continuity tests. The harness also verifies
 retained-hero snapshot recovery, hero-selection reconnect, native termination,
-and consecutive matches. The normal installer still preserves frozen v39.
+and consecutive matches. The normal installer defaults to frozen v39.
+For a graphical test of the repair, follow [the manual test guide](docs/MANUAL_TEST.md).
+It uses a separate game copy and an explicit registry-continuity opt-in.
 
 ## Reconnect v39 frozen milestone
 

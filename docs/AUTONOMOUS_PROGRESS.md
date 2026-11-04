@@ -1,5 +1,31 @@
 # Autonomous development progress
 
+## Manual repaired-build launch
+
+The installer and dashboard now honor the explicit environment setting
+`THORGOR_NATIVE_VARIANT=registry-continuity`; absence still selects frozen v39.
+The same choice applies to remote-client setup. Installation preserves a
+verified v39 backup and supports restoring it when v39 is selected again.
+The harness's independent explicit native-variant selection is unchanged.
+
+A complete separate manual-test game copy is prepared at
+`work/manual-test/Heroes of Newerth`. Supported patch installation and CLI
+verification passed there with K2 hash `98138B1086092558...`. The original game
+installation was not modified. See `docs/MANUAL_TEST.md` for two-shell startup,
+accounts, two graphical clients, the creator-departure checklist, and shutdown.
+No graphical stack or clients were launched during this preparation; visual
+movement and creator rejoin still require their own verification. The normal
+stack's completion observer remains disabled by default.
+
+An initial preparation attempt hit the restricted default temporary directory;
+retrying with workspace TMP/TEMP succeeded. The first new rollback test caught
+that old K2 rebuilding cannot always recover v39 from the repaired binary;
+restoration now requires and uses the exact preserved v39 backup instead.
+Final verification: 120 unit tests ran, 118 passed, two historical checks skipped.
+Reinstalling the selected repair was idempotent, and CLI verification passed
+again. Tests cover exact repaired output, unchanged v39 backup, idempotence,
+restoration, default selection, and rejection of an unknown variant.
+
 ## Latest outcome: selection recovery and repeated native matches
 
 Local verified milestones: b43aa8b (registry repair) and 3e6eb25 (active-match

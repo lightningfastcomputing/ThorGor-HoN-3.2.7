@@ -181,19 +181,62 @@ def install_cgame(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
     return "Installed cgame complete-registry guard from the verified stock binary."
 
 
+def selected_native_variant() -> str:
+    variant = os.environ.get("THORGOR_NATIVE_VARIANT", "v39")
+    if variant not in ("v39", "registry-continuity"):
+        raise ValueError(f"unknown THORGOR_NATIVE_VARIANT: {variant!r}")
+    return variant
+
+
+def install_selected_k2(hon_home: Path, variant: str) -> str:
+    """Opt in to the verified repair without changing the frozen installer."""
+    if variant == "v39":
+        catalog = PatchCatalog()
+        target = hon_home / "k2.dll"
+        current = file_hash(target)
+        if current == catalog.get("dedicated.managed_registry").output_sha256:
+            frozen = hon_home / "k2.dll.thorgor_v39_baseline"
+            wanted = catalog.get("dedicated.creator_authority").output_sha256
+            if not _verified(frozen, {wanted}):
+                raise ValueError("verified frozen v39 backup required to restore this installation")
+            _preserve_verified(target, hon_home / f"k2.dll.thorgor_before_{current.lower()}", current)
+            with tempfile.TemporaryDirectory(prefix="thorgor-v39-") as directory:
+                candidate = Path(directory) / "k2.dll"
+                shutil.copy2(frozen, candidate)
+                os.replace(candidate, target)
+            return "Restored verified frozen v39; preserved registry-continuity backup."
+        return install_k2(hon_home)
+    if variant != "registry-continuity":
+        raise ValueError(f"unknown native variant: {variant!r}")
+    catalog = PatchCatalog()
+    repair = catalog.get("dedicated.managed_registry")
+    target = hon_home / "k2.dll"
+    if file_hash(target) == repair.output_sha256:
+        return "K2 registry-continuity repair is already installed."
+    install_k2(hon_home, catalog)
+    _preserve_verified(target, hon_home / "k2.dll.thorgor_v39_baseline",
+                       catalog.get("dedicated.creator_authority").output_sha256)
+    _replace_from_patch(repair, target, target)
+    return "Installed K2 registry-continuity repair; preserved frozen v39 backup."
+
+
 def install_supported_patches(hon_home: Path) -> tuple[str, ...]:
+    variant = selected_native_variant()
     hon_home = hon_home.expanduser().resolve()
-    return install_game_capacity(hon_home), install_k2(hon_home), install_cgame(hon_home), install_matchmaking_overlay(hon_home)
+    return install_game_capacity(hon_home), install_selected_k2(hon_home, variant), install_cgame(hon_home), install_matchmaking_overlay(hon_home)
 
 
 def verify_supported_install(hon_home: Path) -> tuple[str, ...]:
+    variant = selected_native_variant()
+    hon_home = hon_home.expanduser().resolve()
     catalog = PatchCatalog()
+    k2_patch = "dedicated.managed_registry" if variant == "registry-continuity" else "dedicated.creator_authority"
     expected = (
-        (hon_home / "k2.dll", catalog.get("dedicated.creator_authority").output_sha256),
+        (hon_home / "k2.dll", catalog.get(k2_patch).output_sha256),
         (hon_home / "game" / "game.dll", catalog.get("dedicated.reconnect_client_identity").output_sha256),
         (hon_home / "game" / "cgame.dll", catalog.get("dedicated.complete_registry_guard").output_sha256),
     )
-    verified = []
+    verified = [f"Native variant: {variant}"]
     for path, wanted in expected:
         if not path.is_file():
             raise FileNotFoundError(f"installed binary is missing: {path}")

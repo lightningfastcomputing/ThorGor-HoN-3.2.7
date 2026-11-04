@@ -4,9 +4,10 @@ from pathlib import Path
 import struct
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from thorgor.patches.builders import managed_registry as repair
-from thorgor.patches.installer import install_k2
+from thorgor.patches.installer import install_k2, install_selected_k2, selected_native_variant
 from thorgor.patches.engine import sha256
 
 try:
@@ -93,6 +94,21 @@ class ManagedRegistryTests(unittest.TestCase):
         self.assertEqual(self.read(self.creator + 0x8430), self.joiner)
         self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESI), self.creator)
 
+    def test_manual_install_preserves_frozen_input_and_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            stock = Path(os.environ["THORGOR_TEST_HON_HOME"]) / "k2.dll.thorgor_stock_3.2.7.1"
+            target = home / "k2.dll"
+            target.write_bytes(stock.read_bytes())
+            install_k2(home)
+            frozen = target.read_bytes()
+            install_selected_k2(home, "registry-continuity")
+            self.assertEqual(sha256(target.read_bytes()), self.digest)
+            self.assertEqual((home / "k2.dll.thorgor_v39_baseline").read_bytes(), frozen)
+            self.assertIn("already installed", install_selected_k2(home, "registry-continuity"))
+            install_selected_k2(home, "v39")
+            self.assertEqual(target.read_bytes(), frozen)
+
     def test_actual_snapshot_dispatch_loop_visits_survivors_after_head_removal(self):
         self.run_cleanup()
         for pointer in (self.joiner, self.third):
@@ -114,3 +130,14 @@ class ManagedRegistryTests(unittest.TestCase):
     def test_exact_output_and_frozen_input_preserved(self):
         self.assertEqual(self.digest, repair.OUTPUT_SHA256)
         self.assertEqual(self.frozen_hash, repair.SOURCE_SHA256)
+
+
+class NativeVariantSelectionTests(unittest.TestCase):
+    def test_default_opt_in_and_invalid_variant(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(selected_native_variant(), "v39")
+        with patch.dict(os.environ, {"THORGOR_NATIVE_VARIANT": "registry-continuity"}):
+            self.assertEqual(selected_native_variant(), "registry-continuity")
+        with patch.dict(os.environ, {"THORGOR_NATIVE_VARIANT": "typo"}):
+            with self.assertRaises(ValueError):
+                selected_native_variant()
