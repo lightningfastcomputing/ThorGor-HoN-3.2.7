@@ -123,7 +123,8 @@ def wait_listener(process, log_path, prefix):
     raise RuntimeError("service did not publish its bound loopback port")
 
 
-def run(scenario, hon_home=None, artifacts=None, admit_clients=False):
+def run(scenario, hon_home=None, artifacts=None, admit_clients=False, gameplay=False,
+        disconnect_creator=False):
     native = scenario == "native-match"
     events = []
     report = {"scenario": scenario, "scope": "live HoN dedicated server" if native else "simulated backend protocol",
@@ -179,7 +180,8 @@ def run(scenario, hon_home=None, artifacts=None, admit_clients=False):
             stack, directory, env, "chat", ["--db", str(database)], event, port=11031 if native else 0))
         if native:
             run_native(stack, directory, env, install, master, chat, passwords, check, event,
-                       admit_clients=admit_clients)
+                       admit_clients=admit_clients or gameplay or disconnect_creator,
+                       gameplay=gameplay or disconnect_creator, disconnect_creator=disconnect_creator)
         else:
             SCENARIOS[scenario](master, chat, passwords, check)
 
@@ -206,15 +208,20 @@ def main(argv=None):
     parser.add_argument("--artifacts", type=Path, help="create a directory for credential-free event logs")
     parser.add_argument("--admit-clients", action="store_true",
                         help="require two connected native roster identities in native-match")
+    parser.add_argument("--gameplay", action="store_true",
+                        help="admit two clients and require native active gameplay with heroes")
+    parser.add_argument("--creator-disconnect", action="store_true",
+                        help="verify active state delivery, then run the creator-departure regression")
     parser.add_argument("--report", type=Path, help="also write the JSON result to this new file")
     args = parser.parse_args(argv)
     if (args.scenario == "native-match") != (args.hon_home is not None):
         parser.error("--hon-home is required for native-match and applies only to that scenario")
-    if args.admit_clients and args.scenario != "native-match":
-        parser.error("--admit-clients applies only to native-match")
+    if (args.admit_clients or args.gameplay or args.creator_disconnect) and args.scenario != "native-match":
+        parser.error("native client and gameplay flags apply only to native-match")
     if args.artifacts:
         args.artifacts.mkdir(parents=True, exist_ok=False)
-    report = run(args.scenario, args.hon_home, args.artifacts, args.admit_clients)
+    report = run(args.scenario, args.hon_home, args.artifacts, args.admit_clients, args.gameplay,
+                 args.creator_disconnect)
     output = json.dumps(report, indent=2) + "\n"
     print(output, end="")
     if args.report:

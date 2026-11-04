@@ -91,9 +91,69 @@ It observed both native connected bits and completed cleanup. No `0x46`
 start-result acknowledgment appeared. The acceptance checks use the owned
 slave's game context and player map.
 
-Hero selection, team chat, active gameplay initiation, state-stream continuity, and
-disconnect/reconnect still require further protocol or isolated native-client
-automation. Graphical gameplay coverage remains unverified.
+## Unattended gameplay and creator-departure regression
+
+```powershell
+py -m thorgor.tools.harness native-match --hon-home 'C:\intelprop\Heroes of Newerth' --gameplay --artifacts .\work\gameplay-baseline --report .\work\gameplay-baseline.json
+py -m thorgor.tools.harness native-match --hon-home 'C:\intelprop\Heroes of Newerth' --creator-disconnect --artifacts .\work\creator-regression --report .\work\creator-regression.json
+```
+
+Both flags imply two-client admission. `--gameplay` requires native phase 6,
+two spawned hero entity indices, an advancing native clock, and independent
+complete snapshot frames for both clients over a five-second baseline.
+`--creator-disconnect` then sends creator C3 and observes the same joiner
+socket and native client number for another five seconds. Only continuing
+fresh snapshots pass. Frozen v39 deliberately returns exit code 1 with
+`creator_departure_result.classification = reproduced_freeze`. An incomplete
+baseline, partial-only snapshots, or decoder errors cannot establish this
+regression. Inspect the classification and cleanup events as well as the exit
+code; an arbitrary scenario failure is not proof of the freeze.
+
+The verified protocol sequence after admission is:
+
+1. Reliable C5 loading completion for both clients; start C7 snapshot ACKs.
+2. Reliable C8 01 with little-endian uint32 team (1/2) and slot 0.
+3. C8 2F ready from both; C8 30 match-start request from the creator.
+4. Wait for native hero selection/lock (phase 2/3), send C8 07 random hero
+   from each client, and verify selected hero types in native player records.
+5. Send ready again. At hero loading (phase 4), send C5 again and keep
+   heartbeats, reliable ACKs, retransmissions, and C7 frame ACKs running.
+6. Wait through native hero loading and prematch countdowns into phase 6.
+
+C8 controls are recovered from the native cgame.dll callbacks. Each socket
+owns its reliable sequence and pending ACK state. Server-random hero types
+are recorded; the test does not depend on a particular hero. Normal native
+hero loading and prematch timers take 30 and 90 seconds respectively. The
+scenario waits for them and typically completes in about three minutes.
+It does not modify native match phase or game speed to advance the match.
+
+Read-only native phase, clock, team, selected type, and hero index inspection
+requires game_shared.dll SHA-256
+`37BBC4706D06AE9857F2C56FDECE0E53F0E656A12ECDA6556CAE546CEC73506F`.
+This is authoritative live-server evidence; accepting a sent command cannot
+satisfy the checks. Existing native match-ID synchronization is unchanged.
+
+K2 commands 5A/5B carry plain/compressed snapshots; 5C fragments and 5D/5E
+termination frames are reassembled with strict length, size, zlib, and frame
+validation. Entity deltas remain opaque. Only a complete snapshot with a
+newer decoded server frame increments fresh-state counters. C7 carries a
+uint16 bit length of 32 followed by the last complete uint32 frame. This
+supplies an empty client input snapshot without requiring rendered clients.
+Per-client reports include packet types, snapshot candidates, complete and
+fresh frame counts, decoder errors, reliable counts, and send/receive counts.
+
+The regression gate requires the native slave to stay alive in phase 6 with
+an advancing clock, the creator's native disconnected bit set, and the joiner's
+disconnected bit clear with unchanged socket and native number. The last three
+one-second windows classify sustained fresh frames as `continued_state`, or
+zero fresh frames with continued client sends and absent/complete-stale
+snapshots as `reproduced_freeze`. Other results are `inconclusive` and fail.
+Active players clear their admission-transition bit 0x40 after C5, so that bit
+is deliberately not required during the departure check.
+
+Team chat, movement/ability input, graphical rendering, and reconnect recovery
+controls remain unverified by this scenario. No graphical instances or manual
+input are needed for the active-match baseline or creator-departure test.
 
 ## Native baseline and live verification
 
@@ -114,14 +174,11 @@ fixture and run the suite with `pefile` and `unicorn` importable. The tests
 rebuild the native patches in a temporary directory and exercise the manager
 stop suppression and host-successor selection.
 
-The v39 live freeze remains to be reproduced with a dedicated slave and two
-isolated real clients. Start with a fresh match and pin both DLL hashes to
-[the frozen v39 notes](../Reconnect-v39-notes.md). Establish that both players
-receive gameplay state before disconnecting the creator. Correlate creator C3,
-the slave PID and lifecycle, the joiner's unchanged UDP route, per-route
-`ROUTE_STATS`, and decoded state messages before and after departure. Treat a
-silent joiner route as evidence of the freeze only while the slave stays alive
-and the joiner keeps sending. Reconnect the joiner as a recovery control. Report
-missing baseline state, missing PID or route evidence, or an interrupted test
-as inconclusive. Use the native identity snapshots to investigate whether host
-selection, live identity, or state-recipient delivery first diverged.
+The v39 freeze has now been reproduced unattended against a dedicated slave
+with two independent simulated protocol clients. The frozen DLL hashes in
+[the v39 notes](../Reconnect-v39-notes.md) remain unchanged. The native server
+stays active while the already-connected joiner stops receiving snapshots
+after creator departure. See [autonomous progress](AUTONOMOUS_PROGRESS.md)
+for the latest run evidence and resume instructions. No reconnect repair is
+part of this harness milestone. A future repair should first compare the
+recipient routing, native identity, and host migration around the captured C3.

@@ -16,7 +16,12 @@ class NativeReadinessTests(unittest.TestCase):
     def test_native_bootstrap_ack_and_observed_ready_commands(self):
         with patch("thorgor.tools.harness_clients.socket.socket") as factory:
             connection = factory.return_value
-            connection.recv.side_effect = [bytes.fromhex("000003010000005400"), TimeoutError()]
+            packets = [bytes.fromhex("000003010000005400")]
+            def receive(_size):
+                if packets:
+                    return packets.pop(0)
+                raise TimeoutError()
+            connection.recv.side_effect = receive
             client = NativeClient("creator", Identity(1, "cookie", "a" * 40), "key")
             try:
                 client.admit()

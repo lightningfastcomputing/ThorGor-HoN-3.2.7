@@ -1,0 +1,157 @@
+# Autonomous development progress
+
+## Starting point
+
+Work continues from local commit a917b55 on dev/autonomous-harness.
+Native manager/slave startup and two simulated clients with distinct connected
+native roster identities are verified. Auth and lobby-authority scenarios pass.
+The v39 K2 and game DLL hashes remain pinned in the harness.
+
+## Current milestone
+
+Automate hero selection and active gameplay, establish state delivery to both
+clients, then disconnect the creator and reproduce the remaining v39 freeze.
+Reconnect fixes require a reproducible failing regression first.
+
+Completed: native-match now supports --gameplay and --creator-disconnect.
+The positive active-gameplay baseline passes; the frozen v39 departure
+regression fails reproducibly with authoritative evidence.
+
+## Verified discovery
+
+- Preserved native-client scripts use Team(1, 0), Team(2, 0),
+  SetPotentialHero('Hero_Chipper', ''), RandomHero(), Ready(), and
+  RequestMatchStart() through client UI console functions.
+- The native server contains StartMatch and OrderBot console commands.
+- The manager bridge already encodes opcode 0x25 console commands and opcode
+  0x26 lobby creation.
+- game_shared.dll exports phase predicates, CPlayer::SelectHero,
+  CPlayer::SetTeam, and CPlayer::SetHeroIndex. Their implementations can provide
+  read-only native state offsets and evidence for phase transitions.
+
+## Verified native gameplay probe
+
+The first unattended probe selected teams 1 and 2, requested match start,
+selected two heroes, and reached native phases 2, 3, 4, then 5. Both native
+hero entity indices became valid in phase 5. The probe timed out during the
+normal prematch timer before phase 6.
+
+Recovered client game commands use reliable C8 envelopes.
+
+| Command | Payload |
+| --- | --- |
+| 01 | Little-endian uint32 team and uint32 slot |
+| 07 | Random hero selection, no additional payload |
+| 2F | Ready, no additional payload |
+| 30 | Creator match-start request, no additional payload |
+| BD | Potential hero, uint16 native entity type plus NUL avatar string |
+
+The command values come from the audited cgame.dll callbacks. Reliable
+sequence numbers are tracked independently for each simulated client.
+
+Read-only native offsets verified against game_shared.dll exports include
+CGameInfo phase at +78, phase duration at +80, CPlayer team at +70,
+hero entity index at +74, and selected hero type at +84.
+
+## Reproduced v39 freeze
+
+Probe 2 reached native active phase 6 with two spawned heroes. Both clients
+received approximately 20 complete snapshot frames per second over a
+five-second baseline. After creator C3, the joiner received zero packets for
+five consecutive seconds while sending approximately 20 packets per second.
+Its last snapshot frame stayed at 2858. Native engine time advanced from
+142950 to 148050, phase stayed at 6, the slave survived, and the joiner's
+native client number stayed at 1. The emitted regression classification was
+reproduced_freeze. The scenario correctly returned a failure exit code.
+
+Evidence is in work/gameplay-probe-2.json and work/gameplay-probe-2/events.jsonl.
+All native and Python processes, the copied installation, and the test
+profile were cleaned up.
+
+The active client uses reliable C5 loading completion and C7 frame
+acknowledgments. Normal prematch duration was observed as 90000 ms and hero
+loading as 30000 ms. The active-phase deadline includes a margin over both.
+
+K2 snapshot handlers at RVAs 30A910, 309970 and 30A670 identify complete
+snapshots 5A/5B, fragments 5C, and final fragments 5D/5E.
+The first decoded snapshot uint32 is the server frame number. C7 contains
+a uint16 bit length followed by the client snapshot bit buffer. The empty
+input buffer has 32 bits containing the last complete server frame.
+
+The creator-departure check is gated on phase 6, valid native heroes,
+advancing native time, and fresh complete snapshots for both clients.
+It keeps the joiner endpoint and native client number unchanged. Snapshot
+decode errors and incomplete fragments produce an inconclusive result.
+
+Active native player records clear their initial connection-transition bit
+0x40 after C5. The departure check uses the documented disconnected bit 0,
+stable native client number, stable UDP endpoint, and continuing client sends.
+It does not require transition bit 0x40 to remain set during gameplay.
+
+## Fresh verification on 2026-11-04
+
+The final creator-departure run reproduced the freeze at 09:47 Eastern.
+Both independent clients received 20-21 complete fresh frames per second.
+After C3, the joiner received zero packets and frames in all five windows,
+while sending 20,20,20,20,19 packets. Its last frame remained 2858. Native
+engine time advanced from 142950 to 148050 in active phase 6. Joiner client
+number 1 and UDP endpoint 127.0.0.1:65527 stayed unchanged. The creator's
+native disconnected bit was set; the joiner's was clear. Decoder errors were
+zero. The regression correctly returned exit code 1 and classification
+reproduced_freeze. Native job processes, Python services, test profile, and
+runtime were cleaned up; the bootstrap log was restored.
+
+Credential-free evidence, relative to this checkout:
+
+- ../../outputs/gameplay-regression-verified.json
+- ../../outputs/gameplay-regression-verified/events.jsonl
+- ../../outputs/gameplay-baseline-verified.json (passed, exit 0)
+- ../../outputs/gameplay-auth.json (passed)
+- ../../outputs/gameplay-lobby-authority.json (passed)
+- ../../outputs/native-admission-preserved.json (original readiness/admission passed)
+- ../../outputs/gameplay-tests.txt (full suite)
+
+The full suite ran 96 tests: 94 passed, two historical rejected experiments
+were skipped. This includes the pinned v39 native-instruction emulation
+fixtures. New cases cover snapshot envelopes/reassembly, independent client
+sequence/ACK state, duplicate frame suppression, incomplete baseline rejection,
+and departure classification. A regression test also checks active status
+0x22 without the admission-only 0x40 transition bit.
+
+An intermediate verification still used the admission-only bit in its final
+joiner check and failed there. That was corrected in the harness, then tested
+and rerun; it was not a native reconnect change. The initial discovery probe
+also timed out too early during the normal prematch countdown. Final deadlines
+cover the observed native timers.
+
+The separate positive --gameplay verification passed at 09:50 Eastern with
+20-21 fresh frames per second for each client over all five baseline windows,
+zero decoder errors, native phase 6, and complete cleanup. Source-installation
+K2/game DLL hashes still match their original stock inputs. Frozen v39
+builders and commit f8bd799 are unchanged. No reconnect fix has been attempted.
+No manual interaction has been required. All commits remain local.
+The original admission-only native scenario also passed independently at
+09:51 Eastern, including two native roster identities and full cleanup.
+
+## Resume after interruption
+
+Keep the frozen v39 builders and binaries unchanged. The automated failing
+regression now exists. The next investigation can compare native recipient
+delivery, host migration, and client identity immediately around creator C3.
+Graphical rendering, movement/ability input, deterministic named hero lookup,
+and a joiner reconnect recovery control are still outside this verified test.
+Hero choice uses the native random-hero command and records the selected IDs.
+The creator's wire assignment may be absent because it is the native special
+local client; authoritative roster evidence identifies it as client number 0.
+
+## Reproduction
+
+Run from the checkout root.
+
+```powershell
+py -m thorgor.tools.harness native-match --hon-home 'C:\intelprop\Heroes of Newerth' --gameplay --artifacts .\work\fresh-baseline --report .\work\fresh-baseline.json
+py -m thorgor.tools.harness native-match --hon-home 'C:\intelprop\Heroes of Newerth' --creator-disconnect --artifacts .\work\fresh-regression --report .\work\fresh-regression.json
+```
+
+All changes and commits remain local. Obtain explicit approval before any
+push, publication, or pull request.

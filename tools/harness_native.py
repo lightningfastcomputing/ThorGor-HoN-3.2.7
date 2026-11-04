@@ -251,7 +251,7 @@ def record_native_logs(install, event):
 
 
 def run_native(stack, directory, env, staged, master, chat, passwords, check, event, *,
-               admit_clients=False):
+               admit_clients=False, gameplay=False, disconnect_creator=False):
     from thorgor.tools.harness import authenticate, start_process, wait_listener
     from thorgor.tools.harness_job import NativeJob
     install, mod = staged
@@ -345,6 +345,21 @@ def run_native(stack, directory, env, staged, master, chat, passwords, check, ev
         check("independent_native_clients", lambda: await_players(
             slave, match_id, clients, {creator.account_id, joiner.account_id}, event,
         ))
+        if gameplay:
+            from thorgor.tools.harness_gameplay import (
+                client_evidence, creator_departure, observe_state, start_gameplay, verify_baseline,
+            )
+            stack.callback(lambda: event("gameplay_client_evidence",
+                                        clients=[client_evidence(client) for client in clients]))
+            start_gameplay(slave, clients, check, event)
+            samples = check("active_state_baseline", lambda: observe_state(
+                slave, clients, job, "baseline", event,
+            ))
+            check("both_clients_receive_ongoing_state", lambda: verify_baseline(samples))
+            if disconnect_creator:
+                check("creator_departure_regression", lambda: creator_departure(
+                    slave, clients, job, check, event,
+                ))
     if {job.pid, slave} - job.pids():
         raise RuntimeError("native process exited during the smoke test")
 

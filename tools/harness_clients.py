@@ -9,6 +9,7 @@ import secrets
 import socket
 import struct
 import time
+import zlib
 from urllib.parse import urlencode
 
 from thorgor.chat.protocol import cstr, encode_packet
@@ -107,13 +108,14 @@ def native_connect_packet(username: str, identity: Identity, host_id: int, match
 
 
 class NativeClient:
-    """A bounded C0 admission probe. Gameplay state handling is a separate layer."""
+    """Independent admission, reliable controls, and snapshot acknowledgment state."""
     def __init__(self, username: str, identity: Identity, match_key: str):
+        self.account_id = identity.account_id
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
             self.socket.bind(("127.0.0.1", 0))
             self.socket.connect(("127.0.0.1", 11236))
-            self.socket.settimeout(0.25)
+            self.socket.settimeout(0.01)
         except OSError:
             self.socket.close()
             raise
@@ -123,27 +125,40 @@ class NativeClient:
         self.native_number = None
         self.packet_types = {}
         self.bootstrapped = False
-        self.ready_pending = False
-        self.next_ready = 0
+        self.next_sequence = 1
+        self.pending = {}
+        self.server_sequences = set()
+        self.unique_reliable = 0
+        self.packet_shapes = {}
         self.next_heartbeat = 0
+        self.snapshots_enabled = False
+        self.next_snapshot_ack = 0
+        self.snapshot_frames = 0
+        self.snapshot_packets = 0
+        self.snapshot_complete = 0
+        self.last_snapshot_frame = None
+        self.snapshot_errors = 0
+        self.active = True
+        from thorgor.protocols.native_snapshot import SnapshotReceiver
+        self.snapshot_receiver = SnapshotReceiver()
 
     def send(self, data):
         self.socket.send(data)
         self.sent += 1
 
-    def poll(self):
+    def reliable(self, payload):
+        sequence = self.next_sequence
+        self.next_sequence += 1
+        packet = b"\0\0\3" + struct.pack("<I", sequence) + payload
+        self.pending[sequence] = {"packet": packet, "sent_at": time.monotonic()}
+        self.send(packet)
+        return sequence
+
+    def game_command(self, command, payload=b""):
+        return self.reliable(bytes((0xC8, command)) + payload)
+
+    def receive(self, data):
         from thorgor.protocols.game_protocol import parse_server_client_assignment
-        now = time.monotonic()
-        if now >= self.next_heartbeat:
-            self.send(b"\0\0\1\xc9")
-            self.next_heartbeat = now + 0.25
-        if self.ready_pending and now >= self.next_ready:
-            self.send(b"\0\0\3" + struct.pack("<I", 1) + b"\xc2\xc4")
-            self.next_ready = now + 1
-        try:
-            data = self.socket.recv(65535)
-        except TimeoutError:
-            return None
         self.received += 1
         kind = f"type_{data[2]:02x}" if len(data) >= 3 else "short"
         command = None
@@ -151,16 +166,71 @@ class NativeClient:
             command = data[3]
         if len(data) >= 8 and data[2] == 3:
             command = data[7]
+            sequence = struct.unpack_from("<I", data, 3)[0]
             self.send(data[:2] + b"\x05" + data[3:7])
+            if sequence not in self.server_sequences:
+                self.server_sequences.add(sequence)
+                self.unique_reliable += 1
+            if command == 0x54:
+                self.bootstrapped = True
         if command is not None:
             kind += f"_command_{command:02x}"
+        if command in range(0x5A, 0x5F):
+            self.snapshot_packets += 1
+            offset = 7 if data[2] == 3 else 3
+            try:
+                frame = self.snapshot_receiver.receive(data[offset:])
+            except (ValueError, zlib.error):
+                self.snapshot_errors += 1
+            else:
+                if frame is not None:
+                    self.snapshot_complete += 1
+                if frame is not None and (self.last_snapshot_frame is None or
+                        0 < (frame - self.last_snapshot_frame) & 0xFFFFFFFF < 0x80000000):
+                    self.snapshot_frames += 1
+                    self.last_snapshot_frame = frame
         self.packet_types[kind] = self.packet_types.get(kind, 0) + 1
-        if len(data) >= 7 and data[2] == 5 and struct.unpack_from("<I", data, 3)[0] == 1:
-            self.ready_pending = False
+        shape = (kind, len(data))
+        if len(self.packet_shapes) < 64 or shape in self.packet_shapes:
+            self.packet_shapes[shape] = data[:8].hex()
+        if len(data) >= 7 and data[2] == 5:
+            self.pending.pop(struct.unpack_from("<I", data, 3)[0], None)
         assigned = parse_server_client_assignment(data)
         if assigned is not None:
             self.native_number = assigned
         return command
+
+    def poll(self):
+        if not self.active:
+            return None
+        now = time.monotonic()
+        if now >= self.next_heartbeat:
+            self.send(b"\0\0\1\xc9")
+            self.next_heartbeat = now + 0.25
+        if self.snapshots_enabled and now >= self.next_snapshot_ack:
+            frame = self.last_snapshot_frame
+            self.send(b"\0\0\1\xc7" + struct.pack("<HI", 32, 0xFFFFFFFF if frame is None else frame))
+            self.next_snapshot_ack = now + 0.05
+        for pending in self.pending.values():
+            if now - pending["sent_at"] >= 1:
+                self.send(pending["packet"])
+                pending["sent_at"] = now
+        command = None
+        for _ in range(128):
+            try:
+                data = self.socket.recv(65535)
+            except TimeoutError:
+                break
+            command = self.receive(data)
+        return command
+
+    def finish_loading(self):
+        self.reliable(b"\xc5")
+        self.snapshots_enabled = True
+
+    def disconnect(self):
+        self.send(b"\0\0\1\xc3")
+        self.active = False
 
     def admit(self):
         deadline = time.monotonic() + 10
@@ -169,10 +239,9 @@ class NativeClient:
             if time.monotonic() >= next_request:
                 self.send(self.request)
                 next_request = time.monotonic() + 1
-            if self.poll() == 0x54:
-                self.bootstrapped = True
-                self.ready_pending = True
-                self.next_ready = 0
+            self.poll()
+            if self.bootstrapped:
+                self.reliable(b"\xc2\xc4")
                 self.poll()
                 return
         raise TimeoutError("native slave did not bootstrap the simulated client")

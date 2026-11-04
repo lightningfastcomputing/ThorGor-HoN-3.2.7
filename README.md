@@ -6,8 +6,9 @@ binary patching.
 
 The [test harness](docs/TEST_HARNESS.md) runs unattended master, chat, and
 backend lobby-authority scenarios with disposable accounts on loopback.
-It also runs a real native manager/slave smoke test and optional two-client
-protocol admission with authoritative native roster verification.
+It also starts a real native manager/slave, admits two protocol clients,
+selects heroes, and verifies active gameplay and independent snapshot streams.
+Its creator-departure regression reproduces the frozen v39 joiner stream.
 
 ## Reconnect v39 frozen milestone
 
