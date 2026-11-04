@@ -9,6 +9,10 @@ backend lobby-authority scenarios with disposable accounts on loopback.
 It also starts a real native manager/slave, admits two protocol clients,
 selects heroes, and verifies active gameplay and independent snapshot streams.
 Its creator-departure regression reproduces the frozen v39 joiner stream.
+The separate `registry-continuity` native variant repairs that freeze and has
+passed three fresh 15-second continuity tests. The harness also verifies
+retained-hero snapshot recovery, hero-selection reconnect, native termination,
+and consecutive matches. The normal installer still preserves frozen v39.
 
 ## Reconnect v39 frozen milestone
 

@@ -125,7 +125,8 @@ def wait_listener(process, log_path, prefix):
 
 def run(scenario, hon_home=None, artifacts=None, admit_clients=False, gameplay=False,
         disconnect_creator=False, native_variant="v39", expect_freeze=False,
-        disconnect_joiner=False, reconnect_cycle=None):
+        disconnect_joiner=False, reconnect_cycle=None, movement=False, terminate_match=False,
+        hero_reconnect=None, repeat_matches=1):
     native = scenario == "native-match"
     if expect_freeze and (not native or not disconnect_creator or native_variant != "v39"):
         raise ValueError("expected-bug mode requires frozen v39 creator departure")
@@ -186,11 +187,15 @@ def run(scenario, hon_home=None, artifacts=None, admit_clients=False, gameplay=F
         chat = check("start_chat", lambda: start_service(
             stack, directory, env, "chat", ["--db", str(database)], event, port=11031 if native else 0))
         if native:
+            needs_gameplay = bool(gameplay or disconnect_creator or disconnect_joiner or
+                                  reconnect_cycle or movement or terminate_match or hero_reconnect or
+                                  repeat_matches > 1)
             run_native(stack, directory, env, install, master, chat, passwords, check, event,
-                       admit_clients=admit_clients or gameplay or disconnect_creator or disconnect_joiner or reconnect_cycle,
-                       gameplay=gameplay or disconnect_creator or disconnect_joiner or reconnect_cycle,
+                       admit_clients=admit_clients or needs_gameplay, gameplay=needs_gameplay,
                        disconnect_creator=disconnect_creator, disconnect_joiner=disconnect_joiner,
-                       reconnect_cycle=reconnect_cycle, native_variant=native_variant, expect_freeze=expect_freeze)
+                       reconnect_cycle=reconnect_cycle, native_variant=native_variant, expect_freeze=expect_freeze,
+                       movement=movement, terminate_match=terminate_match, hero_reconnect=hero_reconnect,
+                       repeat_matches=repeat_matches)
         else:
             SCENARIOS[scenario](master, chat, passwords, check)
 
@@ -219,6 +224,14 @@ def main(argv=None):
                         help="require two connected native roster identities in native-match")
     parser.add_argument("--gameplay", action="store_true",
                         help="admit two clients and require native active gameplay with heroes")
+    parser.add_argument("--movement", action="store_true",
+                        help="require protocol movement and native hero coordinate changes")
+    parser.add_argument("--terminate-match", action="store_true",
+                        help="require native EndMatch phase and automatic lifecycle completion")
+    parser.add_argument("--hero-selection-reconnect", choices=("creator", "joiner", "both"),
+                        help="require selected hero/team retention across selection-phase reconnect")
+    parser.add_argument("--repeat-matches", type=int, choices=(1, 2, 3), default=1,
+                        help="run consecutive matches on the same native manager and backend")
     departure = parser.add_mutually_exclusive_group()
     departure.add_argument("--creator-disconnect", action="store_true",
                            help="verify active state delivery, then run the creator-departure regression")
@@ -235,7 +248,8 @@ def main(argv=None):
     if (args.scenario == "native-match") != (args.hon_home is not None):
         parser.error("--hon-home is required for native-match and applies only to that scenario")
     if (args.admit_clients or args.gameplay or args.creator_disconnect or args.joiner_disconnect or
-            args.reconnect_cycle) and args.scenario != "native-match":
+            args.reconnect_cycle or args.movement or args.terminate_match or
+            args.hero_selection_reconnect or args.repeat_matches > 1) and args.scenario != "native-match":
         parser.error("native client and gameplay flags apply only to native-match")
     if args.expect_freeze and (not args.creator_disconnect or args.native_variant != "v39"):
         parser.error("--expect-freeze requires --creator-disconnect --native-variant v39")
@@ -243,7 +257,8 @@ def main(argv=None):
         args.artifacts.mkdir(parents=True, exist_ok=False)
     report = run(args.scenario, args.hon_home, args.artifacts, args.admit_clients, args.gameplay,
                  args.creator_disconnect, args.native_variant, args.expect_freeze,
-                 args.joiner_disconnect, args.reconnect_cycle)
+                 args.joiner_disconnect, args.reconnect_cycle, args.movement, args.terminate_match,
+                 args.hero_selection_reconnect, args.repeat_matches)
     output = json.dumps(report, indent=2) + "\n"
     print(output, end="")
     if args.report:

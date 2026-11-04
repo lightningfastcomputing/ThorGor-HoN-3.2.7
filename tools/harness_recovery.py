@@ -13,6 +13,39 @@ def retained_identity(state, account_id):
             player["hero_index"], player["selected_hero"])
 
 
+def selection_recovery(pid, clients, role, factory, transport, check, event):
+    indices = (1, 0) if role == "both" else ((0,) if role == "creator" else (1,))
+    for index in indices:
+        name = "creator" if index == 0 else "joiner"
+        account_id = clients[index].account_id
+        before = inspect_gameplay(pid)
+        original = next(p for p in before["players"] if p["account_id_low30"] == account_id)
+        if before["phase"] not in (2, 3):
+            raise RuntimeError("hero-selection recovery requires selection phase")
+        clients[index].disconnect()
+        departed = check(f"selection_{name}_departure", lambda: wait_state(
+            pid, [clients[1-index]], lambda state: not any(
+                p["account_id_low30"] == account_id and not p["connection_status"] & 1
+                for p in state["players"]), "selection_player_departed", event, timeout=5))
+        event("hero_selection_departure", role=name, before=before, after=departed,
+              native_transport=transport.inspect())
+        replacement = factory(index)
+        check(f"selection_{name}_bootstrap", lambda: replacement.admit([clients[1-index]]))
+        replacement.finish_loading()
+        after = check(f"selection_{name}_reentry", lambda: wait_state(
+            pid, clients, lambda state: any(p["account_id_low30"] == account_id and
+                not p["connection_status"] & 1 for p in state["players"]),
+            "selection_player_reentered", event, timeout=15))
+        returned = next(p for p in after["players"] if p["account_id_low30"] == account_id)
+        event("hero_selection_reentry", role=name, before=original, after=returned,
+              state=after, native_transport=transport.inspect())
+        if (after["native_match_id"] != before["native_match_id"] or
+                after["phase"] not in (2, 3) or
+                (returned["team"], returned["selected_hero"]) !=
+                (original["team"], original["selected_hero"])):
+            raise RuntimeError("selection reconnect lost selected hero/team or changed phase/match")
+
+
 def recovery_cycle(pid, clients, role, factory, transport, job, check, event):
     indices = (1, 0) if role == "both" else ((0,) if role == "creator" else (1,))
     for index in indices:

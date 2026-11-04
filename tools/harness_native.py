@@ -277,7 +277,8 @@ def record_native_logs(install, event):
 def run_native(stack, directory, env, staged, master, chat, passwords, check, event, *,
                admit_clients=False, gameplay=False, disconnect_creator=False,
                native_variant="v39", expect_freeze=False, disconnect_joiner=False,
-               reconnect_cycle=None):
+               reconnect_cycle=None, movement=False, terminate_match=False, hero_reconnect=None,
+               repeat_matches=1):
     from thorgor.tools.harness import authenticate, start_process, wait_listener
     from thorgor.tools.harness_job import NativeJob
     install, mod = staged
@@ -334,6 +335,38 @@ def run_native(stack, directory, env, staged, master, chat, passwords, check, ev
         event("native_loaded_game", sha256=actual)
 
     check("verify_loaded_game", verify_loaded_game)
+    if terminate_match or repeat_matches > 1:
+        def completion_session():
+            path = directory / "work/v31_registration_state.json"
+            state = json.loads(path.read_text(encoding="utf-8-sig"))
+            bootstrapped = not (state.get("server_session") or state.get("manager_session"))
+            if bootstrapped:
+                from thorgor.tools.harness_clients import post
+                from thorgor.protocols.php_wire import parse_php_string_field
+                wire = post(master, "/server_requester.php", f="new_session", ip=HOST,
+                            port=str(SLAVE_PORT), name="ThorGor native harness")
+                if not parse_php_string_field(wire, "session"):
+                    raise ValueError("native completion registration returned no session")
+            event("native_completion_auth", bootstrapped=bootstrapped)
+        check("native_completion_registration", completion_session)
+        monitor, _ = start_process(stack, directory, env, "native_completion_monitor", [
+            sys.executable, "-u", "-m", "thorgor.game_manager.native_match_id",
+            "--state-file", str(directory / "work/v31_registration_state.json"),
+            "--status-file", str(directory / "work/native_completion_status.json"),
+            "--log-file", str(directory / "work/native_completion.log"),
+            "--identity-trace", str(directory / "work/native_completion_players.jsonl"),
+            "--complete-matches", "--master-url", MASTER_URL, "--poll", "0.1",
+        ], event)
+        def record_completion():
+            path = directory / "work/native_completion.log"
+            lines = path.read_text(errors="replace").splitlines() if path.exists() else []
+            status_path = directory / "work/native_completion_status.json"
+            status = json.loads(status_path.read_text()) if status_path.exists() else {}
+            event("native_completion_summary", completed=[line for line in lines
+                  if "NATIVE_MATCH_COMPLETED " in line], observations=[line for line in lines
+                  if "NATIVE_COMPLETION_OBSERVATION " in line], waits=[line for line in lines
+                  if "NATIVE_COMPLETION_WAIT " in line][-5:], last_status=status)
+        stack.callback(record_completion)
     creator, joiner = authenticate(master, chat, passwords, check)
     if admit_clients:
         from thorgor.tools.harness_clients import NativeClient
@@ -373,7 +406,7 @@ def run_native(stack, directory, env, staged, master, chat, passwords, check, ev
         ))
         if gameplay:
             from thorgor.tools.harness_gameplay import (
-                client_evidence, creator_departure, observe_state, start_gameplay, verify_baseline,
+                client_evidence, creator_departure, inspect_gameplay, observe_state, start_gameplay, verify_baseline,
             )
             stack.callback(lambda: event("gameplay_client_evidence",
                                         clients=[client_evidence(client) for client in clients]))
@@ -381,11 +414,30 @@ def run_native(stack, directory, env, staged, master, chat, passwords, check, ev
             transport = check("verify_native_transport_inspector", lambda: TransportProbe(
                 slave, expected_hash=K2_VARIANTS[native_variant]))
             event("native_transport_admitted", state=check("inspect_native_transport", transport.inspect))
-            start_gameplay(slave, clients, check, event)
+            def replacement(index):
+                username, identity, host_key = (("creator", creator, key),
+                                                 ("joiner", joiner, ""))[index]
+                client = NativeClient(username, identity, host_key)
+                stack.callback(client.close)
+                stack.callback(lambda client=client, username=username: event(
+                    "reconnected_client_summary", username=username,
+                    state=client_evidence(client)))
+                clients[index] = client
+                return client
+            selection_hook = None
+            if hero_reconnect:
+                from thorgor.tools.harness_recovery import selection_recovery
+                selection_hook = lambda: selection_recovery(
+                    slave, clients, hero_reconnect, replacement, transport, check, event)
+            start_gameplay(slave, clients, check, event, selection_recovery=selection_hook)
             samples = check("active_state_baseline", lambda: observe_state(
                 slave, clients, job, "baseline", event, transport=transport,
             ))
             check("both_clients_receive_ongoing_state", lambda: verify_baseline(samples))
+            if movement:
+                from thorgor.tools.harness_motion import movement as move_players
+                check("native_movement", lambda: move_players(
+                    slave, clients, job, transport, check, event))
             if disconnect_creator:
                 check("creator_departure_regression", lambda: creator_departure(
                     slave, clients, job, check, event, transport=transport,
@@ -397,19 +449,69 @@ def run_native(stack, directory, env, staged, master, chat, passwords, check, ev
                     departing_name="joiner", remaining_name="creator"))
             if reconnect_cycle:
                 from thorgor.tools.harness_recovery import recovery_cycle
-                def replacement(index):
-                    username, identity, host_key = (("creator", creator, key),
-                                                     ("joiner", joiner, ""))[index]
-                    client = NativeClient(username, identity, host_key)
-                    stack.callback(client.close)
-                    stack.callback(lambda client=client, username=username: event(
-                        "reconnected_client_summary", username=username,
-                        state=client_evidence(client)))
-                    clients[index] = client
-                    return client
                 check("native_reconnect_cycle", lambda: recovery_cycle(
                     slave, clients, reconnect_cycle, replacement, transport, job, check, event))
-    if {job.pid, slave} - job.pids():
+            if terminate_match or repeat_matches > 1:
+                from thorgor.tools.harness_lifecycle import end_match
+                for completed in range(1, repeat_matches + 1):
+                    result = check("native_match_lifecycle", lambda: end_match(
+                        slave, clients, job, check, event))
+                    event("native_round_completed", round=completed, match_id=match_id, lifecycle=result)
+                    def backend_completed():
+                        deadline = time.monotonic() + 10
+                        path = directory / "work/v31_registration_state.json"
+                        state = {}
+                        while time.monotonic() < deadline:
+                            state = json.loads(path.read_text(encoding="utf-8-sig"))
+                            if int(state.get("match_id") or 0) == 0 and int(
+                                    state.get("last_completed_match_id") or 0) == match_id:
+                                event("backend_native_match_completed", match_id=match_id)
+                                return
+                            time.sleep(0.1)
+                        event("backend_completion_missing", match_id=state.get("match_id"),
+                              completed=state.get("last_completed_match_id"))
+                        raise TimeoutError("backend did not observe authoritative native completion")
+                    check("backend_native_completion", backend_completed)
+                    if completed == repeat_matches:
+                        break
+                    for client in clients:
+                        client.disconnect()
+                    if slave not in job.pids():
+                        raise RuntimeError("repeat requires a reusable owned native slave")
+                    picker = post(master, f="server_list", cookie=creator.cookie, gametype="90")
+                    key = parse_php_string_field(picker, "acc_key")
+                    from thorgor.protocols.admission import validate_c_conn_response
+                    wire = post(master, "/server_requester.php", f="c_conn",
+                                cookie=creator.cookie, host_key=key)
+                    accepted, _, host, account = validate_c_conn_response(wire, creator.cookie)
+                    event("next_round_authority", accepted=accepted, creator=host, account_id=account)
+                    if not accepted or not host or account != creator.account_id:
+                        raise RuntimeError("backend did not grant next-match creator authority")
+                    previous_id = match_id
+                    match_id = check("create_next_native_lobby", create_lobby)
+                    if match_id == previous_id:
+                        event("repeat_match_blocked", reason="backend_reused_completed_match_id",
+                              match_id=match_id, native_lifecycle=result)
+                        raise RuntimeError("backend reused the completed native match ID")
+                    check("next_native_lobby_context", lambda: await_lobby(
+                        slave, match_id, [], directory, event))
+                    for index in range(2):
+                        replacement(index)
+                    for client in clients:
+                        check("next_round_bootstrap", lambda client=client: client.admit())
+                    check("next_round_native_clients", lambda: await_players(
+                        slave, match_id, clients, {creator.account_id, joiner.account_id}, event))
+                    state = inspect_gameplay(slave)
+                    if state["phase"] != 1 or any(p["hero_index"] != 0xFFFFFFFF or
+                            p["selected_hero"] != 0xFFFF for p in state["players"]):
+                        raise RuntimeError("next match inherited gameplay or selected heroes")
+                    event("native_round_fresh_state", round=completed + 1, state=state)
+                    start_gameplay(slave, clients, check, event)
+                    samples = observe_state(slave, clients, job, "next_round_baseline", event,
+                                            transport=transport)
+                    check("next_round_both_streams", lambda: verify_baseline(samples))
+    expected = {job.pid} if terminate_match or repeat_matches > 1 else {job.pid, slave}
+    if expected - job.pids():
         raise RuntimeError("native process exited during the smoke test")
 
 

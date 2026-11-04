@@ -72,7 +72,7 @@ def wait_state(pid, clients, predicate, label, event, timeout=30):
     raise TimeoutError(f"native gameplay did not reach {label}")
 
 
-def start_gameplay(pid, clients, check, event):
+def start_gameplay(pid, clients, check, event, selection_recovery=None):
     check("verify_gameplay_inspector", lambda: verify_gameplay_module(pid))
     event("gameplay_initial_state", state=inspect_gameplay(pid))
     for client in clients:
@@ -97,6 +97,8 @@ def start_gameplay(pid, clients, check, event):
         all(p["selected_hero"] != 0xFFFF for p in state["players"]),
         "heroes_selected", event,
     ))
+    if selection_recovery:
+        check("native_hero_selection_recovery", selection_recovery)
     for client in clients:
         client.game_command(0x2F)
     check("native_hero_loading", lambda: wait_state(
@@ -188,7 +190,9 @@ def creator_departure(pid, clients, job, check, event, transport=None, expect_fr
             samples, before, joiner.account_id, expected_transport=before_transport))
     event(f"{departing_name}_departure_result", classification=classification,
           expected="reproduced_freeze" if expect_freeze else "continued_state",
-          observation_seconds=15, joiner_endpoint=list(endpoint), native_state=after)
+          observation_seconds=15, remaining_role=remaining_name,
+          remaining_endpoint=list(endpoint), native_state=after,
+          **({"joiner_endpoint": list(endpoint)} if remaining_name == "joiner" else {}))
     expected = "reproduced_freeze" if expect_freeze else "continued_state"
     if classification != expected:
         raise RuntimeError(f"creator-departure regression result {classification}")

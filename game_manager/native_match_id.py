@@ -418,6 +418,9 @@ def main(argv=None) -> int:
     ap.add_argument("--allow-unknown-game-dll", action="store_true")
     ap.add_argument("--force-positive-overwrite", action="store_true")
     ap.add_argument("--once", action="store_true", help="perform one scan and exit")
+    ap.add_argument("--complete-matches", action="store_true",
+                    help="notify backend only after native phase 7 followed by game-context clear")
+    ap.add_argument("--master-url", default="http://127.0.0.1/server_requester.php")
     args = ap.parse_args(argv)
 
     if os.name != "nt":
@@ -435,6 +438,8 @@ def main(argv=None) -> int:
     last_signature = None
     last_player_signatures: dict[int, str] = {}
     last_player_errors: dict[int, str] = {}
+    from thorgor.game_manager.native_completion import CompletionTracker, notify_completion
+    completion = CompletionTracker()
     while True:
         wanted = desired_match_id(args.state_file)
         pids = dedicated_hon_pids()
@@ -467,6 +472,16 @@ def main(argv=None) -> int:
                             f"GAME_DLL_VERIFIED pid={pid} path={str(dll_path)!r} sha256={dll_hash}",
                         )
                     action, info = synchronize_pid(pid, wanted, args.force_positive_overwrite)
+                    if args.complete_matches and dll_hash in VERIFIED_GAME_DLL_SHA256S:
+                        with RemoteProcess(pid) as proc:
+                            phase = proc.read_u32(info["cgameinfo"] + 0x78)
+                        shared = read_json(args.state_file)
+                        if info.get("confirmed_match_id", info["native_match_id"]) == wanted:
+                            session = str(shared.get("server_session") or shared.get("manager_session") or "")
+                            prior = pid in completion.ended
+                            completion.observe(pid, info["cgame"], wanted, session, phase)
+                            if phase == 7 and not prior:
+                                append_log(args.log_file, f"NATIVE_COMPLETION_OBSERVATION pid={pid} match_id={wanted} authenticated_session={bool(session)}")
                     info["game_dll_sha256"] = dll_hash
                     result = {"action": action, **info}
                     try:
@@ -518,6 +533,24 @@ def main(argv=None) -> int:
                             append_log(args.log_file, f"NATIVE_MATCH_ID_VERIFY_FAILED pid={pid} desired={wanted}")
                         last_signature = signature
                 except Exception as exc:
+                    if args.complete_matches and pid in completion.ended:
+                        try:
+                            mod = module_info(pid, "game.dll")
+                            if mod and (pid, str(mod[1]).casefold()) in verified_modules:
+                                with RemoteProcess(pid) as proc:
+                                    game = proc.read_u32(mod[0] + GAME_SINGLETON_PTR_RVA)
+                                    context = proc.read_u32(game + CGAME_GAMEINFO_OFFSET)
+                                shared = read_json(args.state_file)
+                                session = str(shared.get("server_session") or shared.get("manager_session") or "")
+                                if context == 0 and completion.cleared(pid, game, wanted, session):
+                                    notify_completion(args.master_url, session, wanted)
+                                    completion.confirmed(pid)
+                                    status["results"].append({"pid": pid, "action": "native_match_completed",
+                                                              "match_id": wanted})
+                                    append_log(args.log_file, f"NATIVE_MATCH_COMPLETED pid={pid} match_id={wanted}")
+                                    continue
+                        except Exception as completion_error:
+                            append_log(args.log_file, f"NATIVE_COMPLETION_WAIT pid={pid} error={type(completion_error).__name__}")
                     status["results"].append({"pid": pid, "action": "error", "error": repr(exc)})
                     signature = (pid, wanted, "error", repr(exc))
                     if signature != last_signature:

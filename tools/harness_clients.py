@@ -26,8 +26,8 @@ class Identity:
     auth_hash: str
 
 
-def post(port: int, path: str = "/", **fields: str) -> bytes:
-    connection = HTTPConnection("127.0.0.1", port, timeout=3)
+def post(http_port: int, path: str = "/", **fields: str) -> bytes:
+    connection = HTTPConnection("127.0.0.1", http_port, timeout=3)
     try:
         connection.request("POST", path, urlencode(fields),
                            {"Content-Type": "application/x-www-form-urlencoded"})

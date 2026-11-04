@@ -618,6 +618,7 @@ SERVER_REQUEST_HINTS = {
     "start_game": "candidate match-id/start-game request",
     "host_lobby": "verified final Create Game publication",
     "host_release": "release an abandoned host reservation",
+    "native_match_complete": "authenticated completion after native ended/context-clear evidence",
     "c_conn": "candidate game-server client authorization",
     "client_auth": "candidate game-server client authorization alias",
     "accept_key": "candidate hosting permission/account-key validation",
@@ -1242,7 +1243,7 @@ class Handler(BaseHTTPRequestHandler):
         generic_response = {"success": 1, "vested_threshold": 5, 0: True}
         response_policy = (
             "v43 exact KONGOR-compatible response"
-            if function in {"start_game", "host_lobby", "host_release", "set_reconnect", "c_conn", "client_auth"}
+            if function in {"start_game", "host_lobby", "host_release", "native_match_complete", "set_reconnect", "c_conn", "client_auth"}
             else "v24-compatible generic success for unknown requests"
         )
 
@@ -1428,6 +1429,24 @@ class Handler(BaseHTTPRequestHandler):
                     pending_host_reserved_at=0.0,
                 )
                 server_log(f"HOST_RESERVATION_RELEASED account_id={identity['account_id']}")
+            self.send_php({"success": 1})
+            return
+        elif function == "native_match_complete":
+            from thorgor.master.match_completion import completion_updates
+            try:
+                match_id = int(params.get("match_id", ["0"])[0])
+                with RESERVATION_LOCK:
+                    updates = completion_updates(v31_read_state(),
+                        params.get("session", [""])[0], match_id)
+                    if ACCOUNTS is None:
+                        raise ValueError("Account database is not initialized")
+                    ACCOUNTS.clear_match_reconnects(match_id)
+                    if updates:
+                        v31_update_state(**updates)
+            except ValueError as error:
+                self.send_php({"success": 0, "error": [str(error)]})
+                return
+            server_log(f"NATIVE_MATCH_COMPLETED match_id={match_id}")
             self.send_php({"success": 1})
             return
         elif function == "set_reconnect":

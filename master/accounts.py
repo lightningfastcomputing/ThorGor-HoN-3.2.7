@@ -157,6 +157,11 @@ class AccountStore:
                 db.execute("DELETE FROM reconnects WHERE account_id=?", (account_id,))
             db.commit()
 
+    def clear_match_reconnects(self, match_id: int) -> None:
+        with self.lock, self.connect() as db:
+            db.execute("DELETE FROM reconnects WHERE match_id=?", (match_id,))
+            db.commit()
+
     def list_accounts(self) -> list[Account]:
         with self.lock, self.connect() as db: rows = db.execute("SELECT account_id,username,password,nickname,enabled FROM accounts ORDER BY account_id").fetchall()
         return [self._account(row) for row in rows]

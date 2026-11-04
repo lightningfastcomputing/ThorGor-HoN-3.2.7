@@ -1,5 +1,59 @@
 # Autonomous development progress
 
+## Latest outcome: selection recovery and repeated native matches
+
+Local verified milestones: b43aa8b (registry repair) and 3e6eb25 (active-match
+snapshot recovery). Subsequent selection/lifecycle changes are verified and
+being committed as the next local milestone.
+
+- selection-recovery-1.json passed both joiner and creator reconnect during
+  hero selection. Their chosen heroes and teams survived, and the same match
+  then reached active phase 6 with both snapshot streams.
+- termination-1.json passed the native C6 EndMatch 1 command, authoritative
+  phase 7, the 21-second end countdown, and native game-context clearing while
+  the manager/slave survived.
+- repeat-matches-1.json exposed a second lifecycle defect: native context was
+  cleared, but backend match_id stayed 1 and next creator authority was denied.
+  Genuine control traffic still contained only association/wake, without a
+  native completion/status notification.
+- repeat-matches-4.json passed two complete matches on the same slave PID
+  29184 and the same manager/backend. Match IDs 1 and 2 were independently
+  allocated. Round 2 began in phase 1 with no selected/spawned heroes, then
+  reached phase 6 with both streams. Both rounds ended and cleared natively.
+
+The completion observer requires a verified native phase 7 followed by clearing
+of that same CGame's context, with the same PID, match ID, and authenticated
+server/manager session. Its new backend notification clears only that match's
+ownership and reconnect records; stale/wrong-session requests cannot clear a
+newer match. The harness registers a session before admission when the hybrid
+manager flow has none. The normal installer and stack defaults remain frozen;
+--complete-matches is an opt-in observer capability exercised by lifecycle tests.
+
+The first observer probe had no registered session and correctly failed to
+release backend ownership. A later registration probe exposed the HTTP helper's
+argument-name collision with the protocol's port field; that was corrected
+and tested. Failed probes remain in the evidence directory. No failing candidate
+was labeled a successful repeat-match test.
+
+Movement remains blocked and is exposed by --movement: movement-1.json verified
+both native hero pointers, types, owners, and world coordinates, then failed
+with native_control_selection_missing. Both control-selection sets were empty.
+The old source's C8 40 selection command is unsupported in the 3.2.7.1 dispatch
+table. Native C7 serializes a 32-bit frame ACK followed by input entity snapshots
+(CClientSnapshot::WriteBuffer at K2 379980, 78-byte internal entity entries).
+The required control-selection input entity/schema has not been recovered from
+the available older source and preserved traces. Sending position commands
+without that selection cannot establish movement. No selection-memory writes,
+fabricated state packets, rendering claims, or untested control claims were used.
+
+All evidence above is under ../../outputs/creator-freeze-session/. Final full
+suite: 118 run, 116 passed, two historical skips (final-suite.txt). Auth,
+lobby-authority, original frozen native admission, and a fourth repaired
+creator-departure check were re-executed before the next local commit.
+Resume with the input-entity encoding or an independently isolated native-client
+input capture; the creator freeze, retained-hero snapshot recovery, selection
+recovery, and two-match lifecycle have already been exercised unattended.
+
 ## Phase 4: verified active-match snapshot recovery
 
 Repair milestone b43aa8b is committed locally. The combined --reconnect-cycle

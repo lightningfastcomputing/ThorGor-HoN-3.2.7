@@ -200,6 +200,46 @@ verified both accounts' retained identity and snapshot resynchronization;
 movement, ability control, rendering, and selection-phase recovery require
 their own assertions.
 
+## Selection recovery, termination, and repeated matches
+
+```powershell
+py -m thorgor.tools.harness native-match --hon-home 'C:\intelprop\Heroes of Newerth' --native-variant registry-continuity --hero-selection-reconnect both --artifacts .\work\selection-recovery
+py -m thorgor.tools.harness native-match --hon-home 'C:\intelprop\Heroes of Newerth' --native-variant registry-continuity --terminate-match --artifacts .\work\native-ending
+py -m thorgor.tools.harness native-match --hon-home 'C:\intelprop\Heroes of Newerth' --native-variant registry-continuity --repeat-matches 2 --artifacts .\work\consecutive-matches
+```
+
+Selection recovery disconnects/rejoins the requested roles after hero choice
+and before readying. Their native team and selected hero must survive, and the
+match must subsequently reach active gameplay with both snapshot streams.
+Both roles passed this test.
+
+Termination uses the creator's native-admin C6 remote-console path to execute
+`EndMatch 1`. It requires native phase 7, then lifecycle completion; the
+verified build clears its game context after a 21-second ending countdown.
+The lifecycle scenarios register a backend server session before admission if
+the hybrid manager flow has no server/manager session. A separate hash-verified
+native observer must see phase 7 and the same context subsequently cleared
+before it sends an authenticated completion notification. Synthetic bridge
+Idle status cannot satisfy it.
+
+Repeated matches keep the same backend services and manager/slave job. Every
+round must end natively and release backend ownership. The next match must
+receive a different ID, begin with an empty hero selection in phase 1, admit
+two native identities, and deliver state to both in phase 6. Two consecutive
+matches passed on the same slave. See [lifecycle evidence](NATIVE_MATCH_LIFECYCLE.md).
+
+## Current movement blocker
+
+`--movement` is an experimental failing gate. It independently verifies hero
+index, type, native owner, and server coordinates. The current simulated clients
+have empty native control-selection sets and the test reports
+`native_control_selection_missing`, then exits 1. It does not send ineffective
+orders and claim success. Establishing control selection requires the newer
+C7 input-entity snapshot encoding, which differs from the available older
+source. C8 40 is unsupported by this binary; the verified C8 1E positional-order
+payload uses a 16-bit single-entity index. Movement, abilities, rendering, and
+decoded per-entity client position updates remain unproven.
+
 ## Native baseline and live verification
 
 The canonical launch plan in `game_manager/stack.py` adds the UDP proxy,
