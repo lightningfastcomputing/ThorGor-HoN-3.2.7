@@ -118,7 +118,7 @@ def start_gameplay(pid, clients, check, event, selection_recovery=None, *, pick_
     ))
 
 
-def observe_state(pid, clients, job, label, event, seconds=5, transport=None):
+def observe_state(pid, clients, job, label, event, seconds=5, transport=None, *, phase=6):
     samples = []
     before = [client_evidence(client) for client in clients]
     first_clock = inspect_gameplay(pid)["engine_time"]
@@ -128,8 +128,8 @@ def observe_state(pid, clients, job, label, event, seconds=5, transport=None):
             for client in clients:
                 client.poll()
         state = inspect_gameplay(pid)
-        if pid not in job.pids() or state["phase"] != 6:
-            raise RuntimeError("authoritative active server did not survive observation")
+        if pid not in job.pids() or state["phase"] != phase:
+            raise RuntimeError("authoritative server or match phase changed during observation")
         current = [client_evidence(client) for client in clients]
         sample = {"second": number + 1, "engine_time": state["engine_time"],
                   "pid": pid, "native_state": state,
@@ -160,7 +160,7 @@ def verify_baseline(samples):
 
 
 def creator_departure(pid, clients, job, check, event, transport=None, expect_freeze=False,
-                      departing_name="creator", remaining_name="joiner"):
+                      departing_name="creator", remaining_name="joiner", *, phase=6):
     creator, joiner = clients
     endpoint = joiner.socket.getsockname()
     before = inspect_gameplay(pid)
@@ -178,8 +178,11 @@ def creator_departure(pid, clients, job, check, event, transport=None, expect_fr
             p["account_id_low30"] == creator.account_id and p["connection_status"] & 1
             for p in state["players"]), "creator_disconnected", event, timeout=5,
     ))
-    samples = observe_state(pid, [joiner], job, f"after_{departing_name}_departure", event,
-                            seconds=15, transport=transport)
+    window = f"after_{departing_name}_departure"
+    if phase != 6:
+        window = f"selection_{window}"
+    samples = observe_state(pid, [joiner], job, window, event,
+                            seconds=15, transport=transport, phase=phase)
     if joiner.socket.getsockname() != endpoint:
         raise RuntimeError("joiner transport changed during observation")
     after = inspect_gameplay(pid)
@@ -190,11 +193,14 @@ def creator_departure(pid, clients, job, check, event, transport=None, expect_fr
         raise RuntimeError("joiner native connection changed")
     classification = classify_departure(samples)
     if classification == "continued_state" and not expect_freeze:
-        check(f"{remaining_name}_15s_continuity", lambda: verify_continuity(
-            samples, before, joiner.account_id, expected_transport=before_transport))
+        continuity = f"{remaining_name}_15s_continuity"
+        if phase != 6:
+            continuity = f"selection_{continuity}"
+        check(continuity, lambda: verify_continuity(
+            samples, before, joiner.account_id, expected_transport=before_transport, phase=phase))
     event(f"{departing_name}_departure_result", classification=classification,
           expected="reproduced_freeze" if expect_freeze else "continued_state",
-          observation_seconds=15, remaining_role=remaining_name,
+          observation_seconds=15, observed_phase=phase, remaining_role=remaining_name,
           remaining_endpoint=list(endpoint), native_state=after,
           **({"joiner_endpoint": list(endpoint)} if remaining_name == "joiner" else {}))
     expected = "reproduced_freeze" if expect_freeze else "continued_state"
@@ -208,7 +214,7 @@ def player_identity(state, account_id):
             player["team"], player["hero_index"], player["selected_hero"])
 
 
-def verify_continuity(samples, before, account_id, seconds=15, expected_transport=None):
+def verify_continuity(samples, before, account_id, seconds=15, expected_transport=None, *, phase=6):
     if len(samples) < seconds:
         raise RuntimeError("continuity observation was too short")
     identity = player_identity(before, account_id)
@@ -223,7 +229,7 @@ def verify_continuity(samples, before, account_id, seconds=15, expected_transpor
     for sample in samples:
         state = sample["native_state"]
         player = next(p for p in state["players"] if p["account_id_low30"] == account_id)
-        if (state["phase"] != 6 or player_identity(state, account_id) != identity or
+        if (state["phase"] != phase or player_identity(state, account_id) != identity or
                 player["connection_status"] & 1 or
                 not 0 < (state["engine_time"] - clock) & 0xFFFFFFFF < 0x80000000):
             raise RuntimeError("native match or joiner identity/clock changed")

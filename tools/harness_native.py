@@ -436,7 +436,8 @@ def run_native(stack, directory, env, staged, master, chat, passwords, check, ev
             if hero_reconnect:
                 from thorgor.tools.harness_recovery import selection_recovery
                 selection_hook = lambda: selection_recovery(
-                    slave, clients, hero_reconnect, replacement, transport, check, event)
+                    slave, clients, hero_reconnect, replacement, transport, check, event,
+                    watch_job=job if pick_after_reconnect else None)
             start_gameplay(slave, clients, check, event, selection_recovery=selection_hook,
                            pick_after_reconnect=pick_after_reconnect)
             samples = check("active_state_baseline", lambda: observe_state(

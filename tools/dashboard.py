@@ -398,7 +398,8 @@ class Dashboard(tk.Tk):
         outer.pack(fill="both", expand=True, padx=18, pady=(12, 10))
 
         ttk.Label(self, text="ThorGor HoN 3.2.7 LAN Sandbox", style="Title.TLabel").pack(anchor="w", padx=22, pady=(17, 0))
-        ttk.Label(self, text=f"Isolated master, chat, game and dedicated-server stack  •  LAN {LAN_IP} ({LAN_IP_SOURCE})", style="Sub.TLabel").pack(anchor="w", padx=23, pady=(1, 0))
+        native_variant = os.environ.get("THORGOR_NATIVE_VARIANT", "v39")
+        ttk.Label(self, text=f"Native build: {native_variant}  •  LAN {LAN_IP} ({LAN_IP_SOURCE})", style="Sub.TLabel").pack(anchor="w", padx=23, pady=(1, 0))
 
         self.rows: dict[str, tuple[tk.Label, ttk.Label]] = {}
         items = [

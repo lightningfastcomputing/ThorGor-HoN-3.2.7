@@ -13,8 +13,10 @@ def retained_identity(state, account_id):
             player["hero_index"], player["selected_hero"])
 
 
-def selection_recovery(pid, clients, role, factory, transport, check, event):
+def selection_recovery(pid, clients, role, factory, transport, check, event, *, watch_job=None):
     indices = (1, 0) if role == "both" else ((0,) if role == "creator" else (1,))
+    if watch_job and role == "both":
+        indices = (0, 1)
     for index in indices:
         name = "creator" if index == 0 else "joiner"
         account_id = clients[index].account_id
@@ -22,11 +24,21 @@ def selection_recovery(pid, clients, role, factory, transport, check, event):
         original = next(p for p in before["players"] if p["account_id_low30"] == account_id)
         if before["phase"] not in (2, 3):
             raise RuntimeError("hero-selection recovery requires selection phase")
-        clients[index].disconnect()
-        departed = check(f"selection_{name}_departure", lambda: wait_state(
-            pid, [clients[1-index]], lambda state: not any(
-                p["account_id_low30"] == account_id and not p["connection_status"] & 1
-                for p in state["players"]), "selection_player_departed", event, timeout=5))
+        if watch_job and index == 0:
+            phase = before["phase"]
+            samples = check("selection_state_baseline", lambda: observe_state(
+                pid, clients, watch_job, "selection_baseline", event, seconds=3,
+                transport=transport, phase=phase))
+            check("selection_both_clients_receive_state", lambda: verify_baseline(samples))
+            check("selection_creator_departure_continuity", lambda: creator_departure(
+                pid, clients, watch_job, check, event, transport=transport, phase=phase))
+            departed = inspect_gameplay(pid)
+        else:
+            clients[index].disconnect()
+            departed = check(f"selection_{name}_departure", lambda: wait_state(
+                pid, [clients[1-index]], lambda state: not any(
+                    p["account_id_low30"] == account_id and not p["connection_status"] & 1
+                    for p in state["players"]), "selection_player_departed", event, timeout=5))
         event("hero_selection_departure", role=name, before=before, after=departed,
               native_transport=transport.inspect())
         replacement = factory(index)

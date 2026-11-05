@@ -1,5 +1,30 @@
 # Autonomous development progress
 
+## Countdown continuity and repaired launcher
+
+Both follow-up graphical bundles, 13:30:37 and 13:33:25 on November 5,
+recorded `native_variant: v39` and the Program Files installation. The last
+slave loaded the frozen game.dll hash. At 13:32:59 its creator sent C3, and the
+joiner's inbound rate dropped from about 20 packets per second to zero despite
+continued sends.
+
+`START_SELECTION_RECOVERY.bat` selects the workspace copy and the repaired
+variant in both server and client mode. Its verification command passed even
+when the shell pointed at Program Files and v39. The dashboard displays the
+variant next to the LAN address. This keeps the manual test on the build whose
+results it is meant to verify.
+
+The unpicked selection test now disconnects the creator first and checks the
+joiner's same connection for 15 seconds before reconnect. Frozen v39 delivered
+zero snapshots during all 15 windows while the native phase 3 clock advanced
+(`work/selection-countdown-v39.json`). The repaired slave delivered 304 fresh
+snapshots, with 20 or 21 per window, and both players chose heroes after
+reconnecting. Both heroes spawned in phase 6. A second creator departure
+left the joiner receiving 303 fresh snapshots over 15 seconds. The repaired
+run passed and cleaned up (`work/selection-countdown-repaired.json`).
+The graphical countdown and picker still need a retest on this build.
+Unit suite result: 119 passed and two historical skips.
+
 ## November 5 graphical report and native reproduction
 
 The debug archive contained the repaired 12:39 launch and a later frozen v39

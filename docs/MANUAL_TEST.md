@@ -1,44 +1,37 @@
 # Manual repaired-build test
 
-Set `THORGOR_NATIVE_VARIANT=selection-recovery` in every shell that installs
-or verifies patches. This selects the hero-pick repair and the creator-departure
-repair. The dashboard verifies both DLLs. The default is frozen v39.
-The harness has its own explicit `--native-variant` option.
+`START_SELECTION_RECOVERY.bat` always selects the prepared game copy and the
+`selection-recovery` build. The regular `START_STACK.bat` defaults to frozen
+v39. The dashboard displays the chosen build and verifies both DLLs.
 
 This checkout has a separate prepared installation at
 `work\manual-test\Heroes of Newerth`. The original
 `C:\intelprop\Heroes of Newerth` and frozen fixtures remain unchanged.
 For another checkout, copy the complete game directory there first.
 
-Close existing HoN and ThorGor processes. Open PowerShell as Administrator:
+Close existing HoN clients and dashboards. Open PowerShell as Administrator
+and run the repaired launcher.
 
 ```powershell
 Set-Location 'C:\Users\Thor\Documents\Codex\2026-11-03\do-x20\work\ThorGor-HoN-3.2.7'
-$env:HON_HOME = (Resolve-Path '.\work\manual-test\Heroes of Newerth').Path
-$env:THORGOR_NATIVE_VARIANT = 'selection-recovery'
-& .\START_STACK.bat 127.0.0.1
+.\START_SELECTION_RECOVERY.bat
 ```
 
-Wait for the dashboard's startup checks, dedicated slave, and Public Server Ready
-to turn green. In a second Administrator PowerShell:
+Wait for **Native build: selection-recovery** and for the startup checks,
+dedicated slave, and Public Server Ready to turn green. In a second
+Administrator PowerShell, open both clients.
 
 ```powershell
 Set-Location 'C:\Users\Thor\Documents\Codex\2026-11-03\do-x20\work\ThorGor-HoN-3.2.7'
-$env:HON_HOME = (Resolve-Path '.\work\manual-test\Heroes of Newerth').Path
-$env:THORGOR_NATIVE_VARIANT = 'selection-recovery'
-py -m thorgor accounts
-# Create two different enabled accounts, then exit the account manager.
-py -m thorgor remote-setup --hon-home "$env:HON_HOME" --server-ip 127.0.0.1
-if ($LASTEXITCODE -ne 0) { throw 'Client setup failed' }
-py -m thorgor remote-client --hon-home "$env:HON_HOME" --server-ip 127.0.0.1 --instances 2
+.\START_SELECTION_RECOVERY.bat clients
 ```
 
-Remote setup installs/verifies the selected patches and maps the legacy chat
-hostname to this server in the Windows hosts file. Two client processes share
-the retail user profile; profile isolation has not been verified. Use distinct
-accounts. For another PC, use the dashboard's LAN IPv4 address instead of
-127.0.0.1, launch the stack with that IPv4, and configure that client's game
-installation on the other PC.
+The clients command verifies the repaired copy, maps the legacy chat hostname
+to this server in the Windows hosts file, and opens two game windows. Use two
+different accounts. Create them with `py -m thorgor accounts` if needed.
+Two client processes share the retail user profile.
+The launcher uses loopback by default. For a LAN test, start it with
+`server <LAN IPv4>` and use the same address in `clients <LAN IPv4>`.
 
 1. Log in separately in both clients. Have one create a public game through
    the dedicated-server flow; have the other join it through the server browser.
@@ -51,9 +44,11 @@ installation on the other PC.
 4. Optionally reconnect the creator and check control of the original hero.
    Record this separately from the continuous-joiner result.
 
-In a fresh match, disconnect and reconnect each role during hero selection
-while that player has no hero. Pick a specific hero after returning and confirm
-that both heroes appear in Caldavar when the match starts.
+In a fresh match, disconnect the host during the hero-selection countdown
+before either player picks. Watch the joiner's countdown for 15 seconds before
+reconnecting the host. Have the host pick a specific hero, then disconnect
+and reconnect the joiner and pick a hero there too. Confirm both heroes appear
+in Caldavar when the match starts.
 
 The automated tests already prove native snapshot continuity. These manual
 checks establish visual gameplay and input behavior, which are not yet claimed

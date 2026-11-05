@@ -214,11 +214,15 @@ and before readying. Their native team and selected hero must survive, and the
 match must subsequently reach active gameplay with both snapshot streams.
 Both roles passed this test.
 
-`--pick-after-reconnect` moves the departures before hero choice. Both returning
-players must retain their original player record, match and team, receive fresh
-snapshots under the assigned native client number, and successfully choose a
-hero in the native selection phase. The `selection-recovery` variant combines
-the K2 registry fix with the direct and random hero-pick lookup repair.
+`--pick-after-reconnect` moves the departures before hero choice and tests
+the creator first when both roles are selected. The joiner must receive fresh
+snapshots on the same socket for 15 seconds during the selection countdown
+before the creator returns. Both returning players must retain their player
+record, match and team, receive fresh snapshots under their assigned native
+client number, and successfully choose a hero. The `selection-recovery`
+variant combines the K2 registry fix with the direct and random hero-pick
+lookup repair. The same selection scenario on v39 fails with
+`reproduced_freeze` in phase 3.
 The optional creator-departure check runs after both heroes spawn and the
 match reaches active gameplay.
 
