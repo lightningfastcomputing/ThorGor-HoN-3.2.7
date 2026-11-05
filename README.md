@@ -13,8 +13,11 @@ The separate `registry-continuity` native variant repairs that freeze and has
 passed three fresh 15-second continuity tests. The harness also verifies
 retained-hero snapshot recovery, hero-selection reconnect, native termination,
 and consecutive matches. The normal installer defaults to frozen v39.
-For a graphical test of the repair, follow [the manual test guide](docs/MANUAL_TEST.md).
-It uses a separate game copy and an explicit registry-continuity opt-in.
+The `selection-recovery` build combines the registry repair with the hero
+selection and repeat departure repairs. Graphical testing confirmed that
+the joiner stays connected after the host leaves and both players can pick a
+hero after reconnecting. Use `START_SELECTION_RECOVERY.bat` with the
+separate game copy described in the [manual test guide](docs/MANUAL_TEST.md).
 
 ## Reconnect v39 frozen milestone
 
@@ -56,7 +59,7 @@ launching; for example, `$env:HON_HOME = 'C:\intelprop\Heroes of Newerth'`.
 
 ## PowerShell one-liners
 
-These commands use the current reconnect work branch and the default HoN path.
+These commands run the historical v39 comparison with the default HoN path.
 Change `HON_HOME` when the game is installed elsewhere.
 
 Acquire, install, and run:

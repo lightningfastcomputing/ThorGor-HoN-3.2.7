@@ -4,25 +4,22 @@
 `selection-recovery` build. The regular `START_STACK.bat` defaults to frozen
 v39. The dashboard displays the chosen build and verifies both DLLs.
 
-This checkout has a separate prepared installation at
-`work\manual-test\Heroes of Newerth`. The original
-`C:\intelprop\Heroes of Newerth` and frozen fixtures remain unchanged.
-For another checkout, copy the complete game directory there first.
+For a fresh checkout, copy a complete HoN 3.2.7.1 installation into
+`work\manual-test\Heroes of Newerth` before launching. The launcher patches
+that copy.
 
 Close existing HoN clients and dashboards. Open PowerShell as Administrator
-and run the repaired launcher.
+in the checkout root and run the repaired launcher.
 
 ```powershell
-Set-Location 'C:\Users\Thor\Documents\Codex\2026-11-03\do-x20\work\ThorGor-HoN-3.2.7'
 .\START_SELECTION_RECOVERY.bat
 ```
 
 Wait for **Native build: selection-recovery** and for the startup checks,
 dedicated slave, and Public Server Ready to turn green. In a second
-Administrator PowerShell, open both clients.
+Administrator PowerShell in the same checkout, open both clients.
 
 ```powershell
-Set-Location 'C:\Users\Thor\Documents\Codex\2026-11-03\do-x20\work\ThorGor-HoN-3.2.7'
 .\START_SELECTION_RECOVERY.bat clients
 ```
 

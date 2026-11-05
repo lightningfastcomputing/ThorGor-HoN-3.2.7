@@ -1,5 +1,14 @@
 # Autonomous development progress
 
+## Graphically verified reconnect milestone
+
+On November 5, 2026, the user confirmed in the graphical HoN clients that
+host departure no longer freezes the other player and that both roles can
+select a hero after reconnecting. This freezes the behavior tested at
+`a2d49ea` with the `selection-recovery` build. The automated countdown and
+active-play regressions also passed. The unit suite recorded 119 passes and
+two historical skips.
+
 ## Countdown continuity and repaired launcher
 
 Both follow-up graphical bundles, 13:30:37 and 13:33:25 on November 5,
@@ -22,7 +31,8 @@ snapshots, with 20 or 21 per window, and both players chose heroes after
 reconnecting. Both heroes spawned in phase 6. A second creator departure
 left the joiner receiving 303 fresh snapshots over 15 seconds. The repaired
 run passed and cleaned up (`work/selection-countdown-repaired.json`).
-The graphical countdown and picker still need a retest on this build.
+The user subsequently confirmed the graphical countdown and hero picker
+on this build.
 Unit suite result: 119 passed and two historical skips.
 
 ## November 5 graphical report and native reproduction

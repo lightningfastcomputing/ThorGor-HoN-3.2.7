@@ -2,6 +2,10 @@
 
 ## Hero selection and repeated departure after reconnect
 
+On November 5, 2026, the user confirmed that the `selection-recovery` build
+kept the joiner connected when the host left and restored hero selection for
+both roles after reconnecting.
+
 The November 5 graphical report showed both roles returning without the
 ability to pick a hero. The local client console recorded completed world
 loading on some returns, then players listed as "No Hero" and a missing
