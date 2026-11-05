@@ -1,5 +1,41 @@
 # Autonomous development progress
 
+## November 5 graphical report and native reproduction
+
+The debug archive contained the repaired 12:39 launch and a later frozen v39
+launch. The latter reproduced zero inbound packets for the joiner after the
+creator's C3. The repaired launch did not contain the same departure sequence.
+The dashboard now includes the current variant in new debug ZIP metadata and
+timestamps each health-check block.
+
+The new `--pick-after-reconnect` gate exercises both roles before their first
+hero pick. `unpicked-reconnect-repaired-1.json` exposed the missing creator
+assignment from a combined 69 01 / 50 reliable packet. With that parser
+corrected, `unpicked-reconnect-repaired-2.json` reproduced the native hero
+selection failure. Both players resumed fresh snapshots but neither pick
+changed selected hero from 0xFFFF.
+
+`unpicked-selection-fix-1.json` verified the first candidate's random picks
+after reconnect and both native heroes spawning in phase 6. A second creator
+departure then failed the disconnected-bit check. The joiner still received
+about 20 packets per second. Disassembly traced this to a third historical-key
+lookup in RemoveClient, so the final candidate also resolves that lookup for
+already started matches. See `docs/RECONNECT.md` for details.
+
+The final `selection-recovery` candidate passed
+`work/unpicked-selection-direct.json`. Both unpicked roles reconnected with
+their retained player records and selected specific hero types through C8 06.
+Both heroes spawned in phase 6. The returning creator's subsequent C3 marked
+their player disconnected. The joiner received 304 fresh snapshots in 15
+seconds, with 20 or 21 per window and the same native connection and match.
+The run cleaned up the native job and restored the shared console log.
+
+Authentication and lobby-authority scenarios passed. The full unit suite ran
+121 tests with 119 passes and two historical skips, including instruction
+emulation of both hero-pick hooks and the phase-bounded removal fallback.
+The manual copy was upgraded and verified with the new variant. Graphical
+hero selection and the main-menu overlay still need a manual retest.
+
 ## Manual repaired-build launch
 
 The installer and dashboard now honor the explicit environment setting

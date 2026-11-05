@@ -30,12 +30,17 @@ class BrowserOccupancyTests(unittest.TestCase):
             + b"\0"
         )
         self.assertEqual(parse_server_client_assignment(packet), 7)
+        host_packet = packet[:7] + b"\x69\x01" + packet[7:]
+        self.assertEqual(parse_server_client_assignment(host_packet), 7)
         for malformed in (
             b"",
+            host_packet[:-1],
+            packet[:7] + b"\x69\x00" + packet[7:],
             packet[:7] + b"\x51" + packet[8:],
             packet[:10] + struct.pack("<I", 256) + b"\0",
         ):
             self.assertIsNone(parse_server_client_assignment(malformed))
+
     def test_live_lobby_tracks_authenticated_players(self):
         for count in range(1, 11):
             connections = [player(f"cookie-{index}") for index in range(count)]

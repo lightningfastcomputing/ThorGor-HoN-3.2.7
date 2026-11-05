@@ -204,6 +204,7 @@ their own assertions.
 
 ```powershell
 py -m thorgor.tools.harness native-match --hon-home 'C:\intelprop\Heroes of Newerth' --native-variant registry-continuity --hero-selection-reconnect both --artifacts .\work\selection-recovery
+py -m thorgor.tools.harness native-match --hon-home 'C:\intelprop\Heroes of Newerth' --native-variant selection-recovery --hero-selection-reconnect both --pick-after-reconnect --creator-disconnect --artifacts .\work\unpicked-recovery
 py -m thorgor.tools.harness native-match --hon-home 'C:\intelprop\Heroes of Newerth' --native-variant registry-continuity --terminate-match --artifacts .\work\native-ending
 py -m thorgor.tools.harness native-match --hon-home 'C:\intelprop\Heroes of Newerth' --native-variant registry-continuity --repeat-matches 2 --artifacts .\work\consecutive-matches
 ```
@@ -212,6 +213,14 @@ Selection recovery disconnects/rejoins the requested roles after hero choice
 and before readying. Their native team and selected hero must survive, and the
 match must subsequently reach active gameplay with both snapshot streams.
 Both roles passed this test.
+
+`--pick-after-reconnect` moves the departures before hero choice. Both returning
+players must retain their original player record, match and team, receive fresh
+snapshots under the assigned native client number, and successfully choose a
+hero in the native selection phase. The `selection-recovery` variant combines
+the K2 registry fix with the direct and random hero-pick lookup repair.
+The optional creator-departure check runs after both heroes spawn and the
+match reaches active gameplay.
 
 Termination uses the creator's native-admin C6 remote-console path to execute
 `EndMatch 1`. It requires native phase 7, then lifecycle completion; the

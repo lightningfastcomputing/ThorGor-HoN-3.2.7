@@ -1,12 +1,9 @@
 # Manual repaired-build test
 
-The default launcher still selects frozen v39. Set
-`THORGOR_NATIVE_VARIANT=registry-continuity` in every shell that installs or
-verifies patches to select the creator-departure repair. The dashboard inherits
-this setting and verifies the repaired K2 hash. Unknown variant names fail.
-Omitting the setting selects v39; an installation upgraded by this opt-in can
-restore its verified `k2.dll.thorgor_v39_baseline` backup. Both versions are
-preserved. The harness has its own explicit `--native-variant` option.
+Set `THORGOR_NATIVE_VARIANT=selection-recovery` in every shell that installs
+or verifies patches. This selects the hero-pick repair and the creator-departure
+repair. The dashboard verifies both DLLs. The default is frozen v39.
+The harness has its own explicit `--native-variant` option.
 
 This checkout has a separate prepared installation at
 `work\manual-test\Heroes of Newerth`. The original
@@ -18,7 +15,7 @@ Close existing HoN and ThorGor processes. Open PowerShell as Administrator:
 ```powershell
 Set-Location 'C:\Users\Thor\Documents\Codex\2026-11-03\do-x20\work\ThorGor-HoN-3.2.7'
 $env:HON_HOME = (Resolve-Path '.\work\manual-test\Heroes of Newerth').Path
-$env:THORGOR_NATIVE_VARIANT = 'registry-continuity'
+$env:THORGOR_NATIVE_VARIANT = 'selection-recovery'
 & .\START_STACK.bat 127.0.0.1
 ```
 
@@ -28,7 +25,7 @@ to turn green. In a second Administrator PowerShell:
 ```powershell
 Set-Location 'C:\Users\Thor\Documents\Codex\2026-11-03\do-x20\work\ThorGor-HoN-3.2.7'
 $env:HON_HOME = (Resolve-Path '.\work\manual-test\Heroes of Newerth').Path
-$env:THORGOR_NATIVE_VARIANT = 'registry-continuity'
+$env:THORGOR_NATIVE_VARIANT = 'selection-recovery'
 py -m thorgor accounts
 # Create two different enabled accounts, then exit the account manager.
 py -m thorgor remote-setup --hon-home "$env:HON_HOME" --server-ip 127.0.0.1
@@ -54,6 +51,10 @@ installation on the other PC.
 4. Optionally reconnect the creator and check control of the original hero.
    Record this separately from the continuous-joiner result.
 
+In a fresh match, disconnect and reconnect each role during hero selection
+while that player has no hero. Pick a specific hero after returning and confirm
+that both heroes appear in Caldavar when the match starts.
+
 The automated tests already prove native snapshot continuity. These manual
 checks establish visual gameplay and input behavior, which are not yet claimed
 by the simulated clients. Native match-completion automation remains opt-in in
@@ -61,7 +62,9 @@ the harness; restart the stack for independent manual matches.
 
 Use **Create Debug ZIP** on the dashboard immediately after a failure. Local
 logs are in `var\dashboard_logs`, including `health_check.log` with the selected
-variant and K2 hash. The repaired K2 SHA-256 begins `98138B1086092558`.
+variant and DLL hashes. The expected prefixes are `98138B1086092558` for K2
+and `2B7C387F1884637B` for game.dll. The debug ZIP records the current
+dashboard variant in `dashboard_status.json`.
 Debug archives may contain private runtime details; review before sharing.
 
 To stop, close both graphical clients and the dashboard, then run:

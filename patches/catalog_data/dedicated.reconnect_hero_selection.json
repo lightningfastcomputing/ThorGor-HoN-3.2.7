@@ -1,0 +1,46 @@
+{
+  "id": "dedicated.reconnect_hero_selection",
+  "binary": "game.dll",
+  "version": "3.2.7.1-reconnect-hero-selection-and-departure",
+  "source_sha256": "0DA7FA068C813328BCF89CADAAB0EB9C17B5963B9C27E49298D6D6DEFCC9D43B",
+  "output_sha256": "2B7C387F1884637B10D162E72A0A9C6EA34984460F8C60DC63245DD08C2B19D2",
+  "reason": "On a stock player-map miss in direct hero selection, random hero selection, or mid-match removal, resolve the connected player with the matching live client number.",
+  "observed_failure": "Reconnected players received fresh snapshots but could not pick a hero. A returning creator's later departure removed traffic from their transport but left their native player marked connected. All three paths repeated the historical-key lookup.",
+  "discovered": "2026-11-05",
+  "evidence": [
+    "docs/RECONNECT.md",
+    "tests/test_native_lobby_authority.py"
+  ],
+  "operations": [
+    {
+      "address": "rva",
+      "offset": "0x3FFBD",
+      "expected": "8B4C24143BC8",
+      "replacement": "E8E63D030090"
+    },
+    {
+      "address": "rva",
+      "offset": "0x47337",
+      "expected": "8B4C24143BC8",
+      "replacement": "E86CCA020090"
+    },
+    {
+      "address": "rva",
+      "offset": "0x73DA8",
+      "expected": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "replacement": "8B4C24183BC8750C528B550CE8040000005A3BC8C3535689D6508B08513B4C240474258B591085DB741285F6780E39736C7509F6835A03000001740C8BD4E8D573FAFF8B0C24EBD583C404585E5BC3"
+    },
+    {
+      "address": "rva",
+      "offset": "0x32ACA",
+      "expected": "39452C752E",
+      "replacement": "E9B1100400"
+    },
+    {
+      "address": "rva",
+      "offset": "0x73B80",
+      "expected": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "replacement": "8B4D2C3BC875258B4E7885C974238B497883F902721B83F9067716528B556CE8190200005A3BC87408894D2CE94CEFFBFFE919EFFBFF"
+    }
+  ]
+}

@@ -72,7 +72,7 @@ def wait_state(pid, clients, predicate, label, event, timeout=30):
     raise TimeoutError(f"native gameplay did not reach {label}")
 
 
-def start_gameplay(pid, clients, check, event, selection_recovery=None):
+def start_gameplay(pid, clients, check, event, selection_recovery=None, *, pick_after_reconnect=False):
     check("verify_gameplay_inspector", lambda: verify_gameplay_module(pid))
     event("gameplay_initial_state", state=inspect_gameplay(pid))
     for client in clients:
@@ -90,14 +90,18 @@ def start_gameplay(pid, clients, check, event, selection_recovery=None):
         pid, clients, lambda state: state["phase"] in (2, 3),
         "hero_selection", event, timeout=30,
     ))
+    if selection_recovery and pick_after_reconnect:
+        check("native_unpicked_hero_selection_recovery", selection_recovery)
+        if any(p["selected_hero"] != 0xFFFF for p in inspect_gameplay(pid)["players"]):
+            raise RuntimeError("pick-after-reconnect requires both players to return without a hero")
     for client in clients:
         client.game_command(0x07)
     check("native_heroes_selected", lambda: wait_state(
-        pid, clients, lambda state: len(state["players"]) == 2 and
+        pid, clients, lambda state: state["phase"] in (2, 3) and len(state["players"]) == 2 and
         all(p["selected_hero"] != 0xFFFF for p in state["players"]),
         "heroes_selected", event,
     ))
-    if selection_recovery:
+    if selection_recovery and not pick_after_reconnect:
         check("native_hero_selection_recovery", selection_recovery)
     for client in clients:
         client.game_command(0x2F)

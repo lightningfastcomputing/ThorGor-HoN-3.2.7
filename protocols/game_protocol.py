@@ -398,9 +398,14 @@ def parse_server_team_chat(data: bytes) -> tuple[int, bytes] | None:
 
 def parse_server_client_assignment(data: bytes) -> int | None:
     """Return the native client number from K2's reliable NETCMD 0x50."""
-    if len(data) < 15 or data[:3] != b"\x00\x00\x03" or data[7] != 0x50:
+    if data[:3] != b"\x00\x00\x03":
         return None
-    client_number = struct.unpack_from("<I", data, 10)[0]
+    # K2 puts NETCMD_GAME_HOST and its one-byte flag before AUTH_OKAY
+    # in the same reliable packet for the creator.
+    offset = 9 if data[7:9] == b"\x69\x01" else 7
+    if len(data) < offset + 8 or data[offset] != 0x50:
+        return None
+    client_number = struct.unpack_from("<I", data, offset + 3)[0]
     return client_number if client_number <= 0xFF else None
 
 

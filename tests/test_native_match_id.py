@@ -15,10 +15,12 @@ class NativeMatchIdVerificationTests(unittest.TestCase):
         catalog = PatchCatalog()
         capacity = catalog.get("dedicated.server_capacity")
         reconnect = catalog.get("dedicated.reconnect_client_identity")
+        selection = catalog.get("dedicated.reconnect_hero_selection")
 
         self.assertTrue(set(capacity.source_sha256) <= VERIFIED_GAME_DLL_SHA256S)
         self.assertIn(capacity.output_sha256, VERIFIED_GAME_DLL_SHA256S)
         self.assertIn(reconnect.output_sha256, VERIFIED_GAME_DLL_SHA256S)
+        self.assertIn(selection.output_sha256, VERIFIED_GAME_DLL_SHA256S)
 
     def test_reconnect_preserves_identity_and_restores_connected_state(self):
         reconnect = PatchCatalog().get("dedicated.reconnect_client_identity")

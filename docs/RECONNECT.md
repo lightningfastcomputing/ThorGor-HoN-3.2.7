@@ -1,5 +1,46 @@
 # Native reconnect identity
 
+## Hero selection and repeated departure after reconnect
+
+The November 5 graphical report showed both roles returning without the
+ability to pick a hero. The local client console recorded completed world
+loading on some returns, then players listed as "No Hero" and a missing
+`client:curgame_heroes` context during the transition. The shared console log
+does not establish which graphical window owned each event.
+
+The debug ZIP spans two dashboard launches. Its current launch at 12:43 used
+frozen v39 in Program Files. At 12:44:59 the creator sent C3. The joiner went
+from about 20 server packets per second to zero while continuing to send.
+The earlier 12:39 launch used registry-continuity from the workspace copy.
+Its creator stopped sending before the joiner finished admission, so it does
+not supply the same controlled departure comparison.
+
+The native `--pick-after-reconnect` gate reproduced the hero-pick failure on
+registry-continuity. Both unpicked players retained their team and player
+record, received hundreds of fresh snapshots under new native numbers, and
+remained at selected hero `0xFFFF` after both sent C8 07. The proxy initially
+missed the creator's assigned number because K2 emits `69 01` immediately
+before the reliable `50` assignment. The parser now recognizes both forms.
+
+In game.dll, the direct and random selection handlers repeat the stock
+historical-key player lookup even after the C8 dispatcher has found the
+returning player. The first pick repair resolved these misses and both heroes
+spawned. That run exposed a second lookup miss in RemoveClient. The returning
+creator's later C3 left their player marked connected while the joiner still
+received about 20 server packets per second.
+
+The opt-in `selection-recovery` build combines the K2 registry repair with
+`dedicated.reconnect_hero_selection`. The game.dll patch resolves a connected
+player by the live number after a stock miss at direct selection (RVA
+`0x3FFBD`), random selection (`0x47337`), and removal (`0x32ACA`). The
+removal fallback is limited to phases 2 through 6. The resolver uses the
+retail tree iterator and leaves the historical map keys intact. The existing
+selection rules and removal code still act on the resulting player.
+
+The expected game.dll SHA-256 is
+`2B7C387F1884637B10D162E72A0A9C6EA34984460F8C60DC63245DD08C2B19D2`.
+See [manual test setup](MANUAL_TEST.md) for launcher settings.
+
 ## Current implementation: v39 host continuity after creator departure
 
 The v38 live test was a major boundary: both creator and joiner reconnected to

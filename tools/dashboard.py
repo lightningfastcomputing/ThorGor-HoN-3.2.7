@@ -246,6 +246,7 @@ def run_validation() -> None:
         out = _log_handle("health_check")
         from thorgor.patches.installer import verify_supported_install
 
+        print(f"\n===== dashboard health check {time.strftime('%Y-%m-%d %H:%M:%S')} =====", file=out)
         for result in verify_supported_install(HON_HOME):
             print(result, file=out)
         VALIDATION_OK = True
@@ -290,6 +291,7 @@ def create_debug_bundle(status_snapshot: dict | None = None) -> Path:
         "lan_ip": LAN_IP,
         "python": sys.executable,
         "hon_home": str(HON_HOME),
+        "native_variant": os.environ.get("THORGOR_NATIVE_VARIANT", "v39"),
         "hon_exe_exists": HON_EXE.is_file(),
         "dashboard_pid": os.getpid(),
         "status": status_snapshot or {},

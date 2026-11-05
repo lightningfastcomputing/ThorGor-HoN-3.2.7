@@ -26,8 +26,11 @@ V39_HASHES = {
     "k2.dll": "CB12258566BA001B528F3A48E4C8CC795992DCB17333BCE5ABF8EF4E5DCCB24D",
     "game/game.dll": "0DA7FA068C813328BCF89CADAAB0EB9C17B5963B9C27E49298D6D6DEFCC9D43B",
 }
-K2_VARIANTS = {"v39": V39_HASHES["k2.dll"],
-               "registry-continuity": "98138B1086092558014B4808D3AA75B00BA87450EA3112171F68CC3DC99048C2"}
+REPAIRED_K2_HASH = "98138B1086092558014B4808D3AA75B00BA87450EA3112171F68CC3DC99048C2"
+K2_VARIANTS = {"v39": V39_HASHES["k2.dll"], "registry-continuity": REPAIRED_K2_HASH,
+               "selection-recovery": REPAIRED_K2_HASH}
+GAME_VARIANTS = {"v39": V39_HASHES["game/game.dll"], "registry-continuity": V39_HASHES["game/game.dll"],
+                 "selection-recovery": "2B7C387F1884637B10D162E72A0A9C6EA34984460F8C60DC63245DD08C2B19D2"}
 
 
 def preflight():
@@ -47,7 +50,7 @@ def preflight():
 
 
 def stage_install(source, directory, event, *, variant="v39"):
-    from thorgor.patches.installer import file_hash, install_game_capacity, install_k2
+    from thorgor.patches.installer import file_hash, install_game_capacity, install_k2, install_selected_game
 
     source = source.resolve(strict=True)
     install = directory / "Heroes of Newerth"
@@ -70,11 +73,16 @@ def stage_install(source, directory, event, *, variant="v39"):
     hashes = {name: file_hash(install / name) for name in V39_HASHES}
     if hashes != V39_HASHES:
         raise ValueError("staged native DLLs do not match frozen v39")
-    if variant == "registry-continuity":
+    if variant in ("registry-continuity", "selection-recovery"):
         from thorgor.patches.builders.managed_registry import build
         build(install / "k2.dll", install / "k2.dll")
     elif variant != "v39":
         raise ValueError("unknown native variant")
+    if variant == "selection-recovery":
+        install_selected_game(install, variant)
+    hashes["game/game.dll"] = file_hash(install / "game" / "game.dll")
+    if hashes["game/game.dll"] != GAME_VARIANTS[variant]:
+        raise ValueError("staged native game.dll variant mismatch")
     hashes["k2.dll"] = file_hash(install / "k2.dll")
     if hashes["k2.dll"] != K2_VARIANTS[variant]:
         raise ValueError("staged native K2 variant mismatch")
@@ -278,7 +286,7 @@ def run_native(stack, directory, env, staged, master, chat, passwords, check, ev
                admit_clients=False, gameplay=False, disconnect_creator=False,
                native_variant="v39", expect_freeze=False, disconnect_joiner=False,
                reconnect_cycle=None, movement=False, terminate_match=False, hero_reconnect=None,
-               repeat_matches=1):
+               repeat_matches=1, pick_after_reconnect=False):
     from thorgor.tools.harness import authenticate, start_process, wait_listener
     from thorgor.tools.harness_job import NativeJob
     install, mod = staged
@@ -330,7 +338,7 @@ def run_native(stack, directory, env, staged, master, chat, passwords, check, ev
         if loaded is None or not loaded[1].resolve().is_relative_to(install.resolve()):
             raise ValueError("owned native slave did not load the staged game DLL")
         actual = file_hash(loaded[1])
-        if actual != V39_HASHES["game/game.dll"]:
+        if actual != GAME_VARIANTS[native_variant]:
             raise ValueError("loaded native slave has an unexpected game DLL hash")
         event("native_loaded_game", sha256=actual)
 
@@ -429,7 +437,8 @@ def run_native(stack, directory, env, staged, master, chat, passwords, check, ev
                 from thorgor.tools.harness_recovery import selection_recovery
                 selection_hook = lambda: selection_recovery(
                     slave, clients, hero_reconnect, replacement, transport, check, event)
-            start_gameplay(slave, clients, check, event, selection_recovery=selection_hook)
+            start_gameplay(slave, clients, check, event, selection_recovery=selection_hook,
+                           pick_after_reconnect=pick_after_reconnect)
             samples = check("active_state_baseline", lambda: observe_state(
                 slave, clients, job, "baseline", event, transport=transport,
             ))

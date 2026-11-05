@@ -8,7 +8,7 @@ from pathlib import Path
 from thorgor.patches.builders import creator_authority as authority
 from thorgor.patches.catalog import PatchCatalog
 from thorgor.patches.engine import apply_patch, sha256
-from thorgor.patches.installer import install_game_capacity, install_k2
+from thorgor.patches.installer import install_game_capacity, install_k2, install_selected_game
 
 try:
     import pefile
@@ -325,6 +325,78 @@ class NativeLobbyAuthorityTests(unittest.TestCase):
         self.vm.reg_write(reg.UC_X86_REG_EAX, self.client)
         self.vm.emu_start(base + 0x32FB2, base + 0x32FB8, count=1)
         self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EDX), virtual_target)
+
+    def test_hero_selection_resolves_connected_reconnects_at_both_pick_handlers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            install = Path(directory)
+            game_dll = install / "game" / "game.dll"
+            game_dll.parent.mkdir()
+            game_dll.write_bytes(self.game)
+            install_selected_game(install, "selection-recovery")
+            pe = pefile.PE(data=game_dll.read_bytes())
+            install_selected_game(install, "registry-continuity")
+            self.assertEqual(game_dll.read_bytes(), self.game)
+
+        base = pe.OPTIONAL_HEADER.ImageBase
+        self.vm.mem_map(base, (pe.OPTIONAL_HEADER.SizeOfImage + 4095) & ~4095)
+        self.vm.mem_write(base, pe.get_memory_mapped_image())
+        head, first, second = 0x100000, 0x100100, 0x100200
+        players = (0x101000, 0x102000)
+        for node, left, parent, right, player in (
+            (head, first, first, second, 0),
+            (first, head, head, second, players[0]),
+            (second, head, first, head, players[1]),
+        ):
+            self.vm.mem_write(node, struct.pack("<IIIII", left, parent, right, 0, player))
+        self.vm.mem_write(head + 0x15, b"\x01")
+        self.vm.mem_write(players[0] + 0x6C, struct.pack("<I", 2))
+        self.vm.mem_write(players[1] + 0x6C, struct.pack("<I", 3))
+        for hook in (0x3FFBD, 0x47337):
+            for stock, sender, disconnected, expected in (
+                (first, 3, 0, first),
+                (head, 2, 0, first),
+                (head, 3, 0, second),
+                (head, 3, 1, head),
+                (head, 7, 0, head),
+            ):
+                with self.subTest(hook=hook, stock=stock, sender=sender, disconnected=disconnected):
+                    self.vm.mem_write(self.stack + 0x14, struct.pack("<I", stock))
+                    self.vm.mem_write(self.frame + 0xC, struct.pack("<I", sender))
+                    self.vm.mem_write(players[1] + 0x35A, bytes([disconnected]))
+                    self.vm.reg_write(reg.UC_X86_REG_EAX, head)
+                    self.vm.reg_write(reg.UC_X86_REG_EBP, self.frame)
+                    self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
+                    self.vm.emu_start(base + hook, base + hook + 6, count=100)
+                    self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ECX), expected)
+                    self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EAX), head)
+                    self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), self.stack)
+                    self.assertEqual(bool(self.vm.reg_read(reg.UC_X86_REG_EFLAGS) & 0x40),
+                                     expected == head)
+
+        game, info = 0x103000, 0x104000
+        self.vm.mem_write(game + 0x78, struct.pack("<I", info))
+        self.vm.mem_write(players[1] + 0x35A, b"\x00")
+        for phase, stock, sender, expected in (
+            (1, first, 3, first),
+            (1, head, 3, head),
+            (3, head, 3, second),
+            (6, head, 3, second),
+            (6, head, 7, head),
+            (7, head, 3, head),
+        ):
+            with self.subTest(phase=phase, stock=stock, sender=sender):
+                self.vm.mem_write(info + 0x78, struct.pack("<I", phase))
+                self.vm.mem_write(self.frame + 0x2C, struct.pack("<I", stock))
+                self.vm.mem_write(self.frame + 0x6C, struct.pack("<I", sender))
+                self.vm.reg_write(reg.UC_X86_REG_EAX, head)
+                self.vm.reg_write(reg.UC_X86_REG_ESI, game)
+                self.vm.reg_write(reg.UC_X86_REG_EBP, self.frame)
+                self.vm.reg_write(reg.UC_X86_REG_ESP, self.stack)
+                destination = base + (0x32ACF if expected == head else 0x32AFD)
+                self.vm.emu_start(base + 0x32ACA, destination, count=100)
+                self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_EIP), destination)
+                self.assertEqual(self.vm.mem_read(self.frame + 0x2C, 4), struct.pack("<I", expected))
+                self.assertEqual(self.vm.reg_read(reg.UC_X86_REG_ESP), self.stack)
 
     @unittest.skip("rejected v36 game-side host-migration experiment removed in v38")
     def test_host_migration_promotes_valid_player_when_k2_lookup_is_null(self):

@@ -48,6 +48,17 @@ def _preserve_verified(source: Path, backup: Path, expected_hash: str) -> None:
         raise ValueError(f"could not verify new ThorGor backup: {backup}")
 
 
+def _restore_v39(target: Path, wanted: str, current: str) -> None:
+    frozen = target.with_name(target.name + ".thorgor_v39_baseline")
+    if not _verified(frozen, {wanted}):
+        raise ValueError(f"verified frozen v39 backup required: {frozen}")
+    _preserve_verified(target, target.with_name(f"{target.name}.thorgor_before_{current.lower()}"), current)
+    with tempfile.TemporaryDirectory(prefix="thorgor-v39-") as directory:
+        candidate = Path(directory) / target.name
+        shutil.copy2(frozen, candidate)
+        os.replace(candidate, target)
+
+
 def _install_k2_recipient(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
     catalog = catalog or PatchCatalog()
     redirects = catalog.get("client.server_redirects")
@@ -183,7 +194,7 @@ def install_cgame(hon_home: Path, catalog: PatchCatalog | None = None) -> str:
 
 def selected_native_variant() -> str:
     variant = os.environ.get("THORGOR_NATIVE_VARIANT", "v39")
-    if variant not in ("v39", "registry-continuity"):
+    if variant not in ("v39", "registry-continuity", "selection-recovery"):
         raise ValueError(f"unknown THORGOR_NATIVE_VARIANT: {variant!r}")
     return variant
 
@@ -195,18 +206,11 @@ def install_selected_k2(hon_home: Path, variant: str) -> str:
         target = hon_home / "k2.dll"
         current = file_hash(target)
         if current == catalog.get("dedicated.managed_registry").output_sha256:
-            frozen = hon_home / "k2.dll.thorgor_v39_baseline"
             wanted = catalog.get("dedicated.creator_authority").output_sha256
-            if not _verified(frozen, {wanted}):
-                raise ValueError("verified frozen v39 backup required to restore this installation")
-            _preserve_verified(target, hon_home / f"k2.dll.thorgor_before_{current.lower()}", current)
-            with tempfile.TemporaryDirectory(prefix="thorgor-v39-") as directory:
-                candidate = Path(directory) / "k2.dll"
-                shutil.copy2(frozen, candidate)
-                os.replace(candidate, target)
+            _restore_v39(target, wanted, current)
             return "Restored verified frozen v39; preserved registry-continuity backup."
         return install_k2(hon_home)
-    if variant != "registry-continuity":
+    if variant not in ("registry-continuity", "selection-recovery"):
         raise ValueError(f"unknown native variant: {variant!r}")
     catalog = PatchCatalog()
     repair = catalog.get("dedicated.managed_registry")
@@ -220,20 +224,41 @@ def install_selected_k2(hon_home: Path, variant: str) -> str:
     return "Installed K2 registry-continuity repair; preserved frozen v39 backup."
 
 
+def install_selected_game(hon_home: Path, variant: str) -> str:
+    catalog = PatchCatalog()
+    repair = catalog.get("dedicated.reconnect_hero_selection")
+    target = hon_home / "game" / "game.dll"
+    current = file_hash(target)
+    if variant != "selection-recovery":
+        if current == repair.output_sha256:
+            _restore_v39(target, repair.source_sha256[0], current)
+            return "Restored verified frozen v39 game.dll."
+        return install_game_capacity(hon_home, catalog)
+    if current == repair.output_sha256:
+        return "Hero selection reconnect repair is already installed."
+    install_game_capacity(hon_home, catalog)
+    _preserve_verified(target, target.with_name("game.dll.thorgor_v39_baseline"),
+                       repair.source_sha256[0])
+    _replace_from_patch(repair, target, target)
+    return "Installed hero selection reconnect repair; preserved frozen v39 game.dll."
+
+
 def install_supported_patches(hon_home: Path) -> tuple[str, ...]:
     variant = selected_native_variant()
     hon_home = hon_home.expanduser().resolve()
-    return install_game_capacity(hon_home), install_selected_k2(hon_home, variant), install_cgame(hon_home), install_matchmaking_overlay(hon_home)
+    return install_selected_game(hon_home, variant), install_selected_k2(hon_home, variant), install_cgame(hon_home), install_matchmaking_overlay(hon_home)
 
 
 def verify_supported_install(hon_home: Path) -> tuple[str, ...]:
     variant = selected_native_variant()
     hon_home = hon_home.expanduser().resolve()
     catalog = PatchCatalog()
-    k2_patch = "dedicated.managed_registry" if variant == "registry-continuity" else "dedicated.creator_authority"
+    k2_patch = "dedicated.creator_authority" if variant == "v39" else "dedicated.managed_registry"
+    game_patch = ("dedicated.reconnect_hero_selection" if variant == "selection-recovery"
+                  else "dedicated.reconnect_client_identity")
     expected = (
         (hon_home / "k2.dll", catalog.get(k2_patch).output_sha256),
-        (hon_home / "game" / "game.dll", catalog.get("dedicated.reconnect_client_identity").output_sha256),
+        (hon_home / "game" / "game.dll", catalog.get(game_patch).output_sha256),
         (hon_home / "game" / "cgame.dll", catalog.get("dedicated.complete_registry_guard").output_sha256),
     )
     verified = [f"Native variant: {variant}"]
