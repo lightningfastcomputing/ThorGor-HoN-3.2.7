@@ -21,9 +21,9 @@ separate game copy described in the [manual test guide](docs/MANUAL_TEST.md).
 
 ## Reconnect v39 frozen milestone
 
-This checkout contains the reconnect admission repair described in
-[docs/RECONNECT.md](docs/RECONNECT.md). Run `INSTALL_RECONNECT_V39.bat` from
-this checkout to install the verified patches and launch its dashboard.
+Frozen v39 is a historical regression control. Its reconnect admission
+repair is described in [docs/RECONNECT.md](docs/RECONNECT.md). For the
+graphically verified repairs, use the selection-recovery launcher below.
 Start a fresh match: earlier builds stored incorrect native account identities.
 V39 preserves the complete live-proven v32 joiner reconnect path. Ghidra showed
 that creator departure independently queues K2's `StopServer` command because
@@ -57,50 +57,19 @@ The core stack has no third-party Python package requirements.
 Developers using another preserved game installation can set `HON_HOME` before
 launching; for example, `$env:HON_HOME = 'C:\intelprop\Heroes of Newerth'`.
 
-## PowerShell one-liners
+## Acquire, install, and run selection-recovery
 
-These commands use the refactored-testing-harness-reconnect-fixed branch in
-`%USERPROFILE%\thorgor-reconnect-fixed`. If you already have this branch
-checked out elsewhere, use that folder in the launcher commands. Close all HoN
-clients before installing or updating patched DLLs.
-
-### Frozen v39 comparison
-
-Acquire, install, and run from a fresh checkout:
+Close all HoN clients and dashboards, then run this one-liner in Administrator
+PowerShell. It clones the fixed branch, copies your HoN installation into the
+checkout, and starts the dashboard using that copy. Change `$gameSource` if HoN
+is installed elsewhere. The checkout destination must be absent or empty.
 
 ```powershell
-git clone --branch refactored-testing-harness-reconnect-fixed --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git "$env:USERPROFILE\thorgor-reconnect-fixed"; if ($LASTEXITCODE -eq 0) { $env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor-reconnect-fixed\INSTALL_RECONNECT_V39.bat" }
+$checkout = "$env:USERPROFILE\thorgor-reconnect-fixed"; $gameSource = 'C:\Program Files (x86)\Heroes of Newerth'; git clone --branch refactored-testing-harness-reconnect-fixed --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git $checkout; if ($LASTEXITCODE -eq 0) { $gameCopy = Join-Path $checkout 'work\manual-test\Heroes of Newerth'; New-Item -ItemType Directory -Path (Split-Path -Parent $gameCopy) -Force -ErrorAction Stop | Out-Null; Copy-Item -LiteralPath $gameSource -Destination $gameCopy -Recurse -ErrorAction Stop; & "$checkout\START_SELECTION_RECOVERY.bat" }
 ```
 
-The destination must be absent or empty. Change `HON_HOME` in the command
-if HoN is installed elsewhere. The installer requests administrator approval,
-installs and verifies the patches, and starts the dashboard.
-
-Run an existing checkout from an Administrator PowerShell:
-
-```powershell
-$env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor-reconnect-fixed\START_STACK.bat"
-```
-
-Start the account manager:
-
-```powershell
-& "$env:USERPROFILE\thorgor-reconnect-fixed\START_ACCOUNT_MANAGER.bat"
-```
-
-### Selection-recovery build
-
-For a fresh checkout, acquire this branch:
-
-```powershell
-git clone --branch refactored-testing-harness-reconnect-fixed --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git "$env:USERPROFILE\thorgor-reconnect-fixed"
-```
-
-Place a complete HoN 3.2.7.1 installation in
-`%USERPROFILE%\thorgor-reconnect-fixed\work\manual-test\Heroes of Newerth`.
-This launcher patches that separate game copy.
-
-Start the repaired stack from an Administrator PowerShell:
+For an existing checkout with the game copy prepared, start the repaired stack
+from Administrator PowerShell. Substitute your checkout path if needed.
 
 ```powershell
 & "$env:USERPROFILE\thorgor-reconnect-fixed\START_SELECTION_RECOVERY.bat"
@@ -116,6 +85,9 @@ PowerShell:
 
 See the [manual test guide](docs/MANUAL_TEST.md) for LAN addresses, test
 accounts, and the reconnect checks.
+
+For the historical v39 control, use the explicit `--native-variant v39`
+scenario in the [test harness guide](docs/TEST_HARNESS.md).
 
 ## Local stack performance
 
