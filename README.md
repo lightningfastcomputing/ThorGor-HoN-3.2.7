@@ -50,7 +50,7 @@ their own disconnect/reconnect. This exact state is frozen locally as
 - Windows 10 or 11 with Windows PowerShell.
 - [Git for Windows](https://git-scm.com/download/win) available as `git`.
 - 64-bit [Python 3.10 or newer](https://www.python.org/downloads/windows/) available as `python`; use the normal Windows installer so Tkinter is included.
-- Heroes of Newerth 3.2.7 installed at `C:\Program Files (x86)\Heroes of Newerth` (the clean-machine default).
+- Heroes of Newerth 3.2.7.1 installed at `C:\Program Files (x86)\Heroes of Newerth` (the clean-machine default).
 - Administrator approval when the launcher installs/verifies the game patches and configures remote-client routing.
 
 The core stack has no third-party Python package requirements.
@@ -59,32 +59,63 @@ launching; for example, `$env:HON_HOME = 'C:\intelprop\Heroes of Newerth'`.
 
 ## PowerShell one-liners
 
-These commands run the historical v39 comparison with the default HoN path.
-Change `HON_HOME` when the game is installed elsewhere.
+These commands use the refactored-testing-harness-reconnect-fixed branch in
+`%USERPROFILE%\thorgor-reconnect-fixed`. If you already have this branch
+checked out elsewhere, use that folder in the launcher commands. Close all HoN
+clients before installing or updating patched DLLs.
 
-Acquire, install, and run:
+### Frozen v39 comparison
+
+Acquire, install, and run from a fresh checkout:
 
 ```powershell
-git clone --branch refactored-architecture-reconnect-wip --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git "$env:USERPROFILE\thorgor"; if ($LASTEXITCODE -eq 0) { $env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor\INSTALL_RECONNECT_V39.bat" }
+git clone --branch refactored-testing-harness-reconnect-fixed --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git "$env:USERPROFILE\thorgor-reconnect-fixed"; if ($LASTEXITCODE -eq 0) { $env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor-reconnect-fixed\INSTALL_RECONNECT_V39.bat" }
 ```
 
-Run the local installation:
+The destination must be absent or empty. Change `HON_HOME` in the command
+if HoN is installed elsewhere. The installer requests administrator approval,
+installs and verifies the patches, and starts the dashboard.
+
+Run an existing checkout from an Administrator PowerShell:
 
 ```powershell
-$env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor\START_STACK.bat"
+$env:HON_HOME = 'C:\Program Files (x86)\Heroes of Newerth'; & "$env:USERPROFILE\thorgor-reconnect-fixed\START_STACK.bat"
 ```
 
 Start the account manager:
 
 ```powershell
-& "$env:USERPROFILE\thorgor\START_ACCOUNT_MANAGER.bat"
+& "$env:USERPROFILE\thorgor-reconnect-fixed\START_ACCOUNT_MANAGER.bat"
 ```
 
-`INSTALL_RECONNECT_V39.bat` elevates when needed, stops old ThorGor processes,
-installs and verifies the supported binary patches, resets volatile state, and
-starts the dashboard. `START_STACK.bat` performs the same patch verification
-and state reset in the foreground during normal launches. Close all HoN clients
-before installing or updating patched DLLs.
+### Selection-recovery build
+
+For a fresh checkout, acquire this branch:
+
+```powershell
+git clone --branch refactored-testing-harness-reconnect-fixed --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git "$env:USERPROFILE\thorgor-reconnect-fixed"
+```
+
+Place a complete HoN 3.2.7.1 installation in
+`%USERPROFILE%\thorgor-reconnect-fixed\work\manual-test\Heroes of Newerth`.
+This launcher patches that separate game copy.
+
+Start the repaired stack from an Administrator PowerShell:
+
+```powershell
+& "$env:USERPROFILE\thorgor-reconnect-fixed\START_SELECTION_RECOVERY.bat"
+```
+
+Wait for **Native build: selection-recovery** and **Public Server Ready** in
+the dashboard. Start two local test clients from a second Administrator
+PowerShell:
+
+```powershell
+& "$env:USERPROFILE\thorgor-reconnect-fixed\START_SELECTION_RECOVERY.bat" clients
+```
+
+See the [manual test guide](docs/MANUAL_TEST.md) for LAN addresses, test
+accounts, and the reconnect checks.
 
 ## Local stack performance
 
