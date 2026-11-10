@@ -1,5 +1,16 @@
 # Autonomous development progress
 
+## Standard stack launcher
+
+`START_STACK.bat` now selects `selection-recovery` and the prepared game copy
+when no overrides are set. It applies the repairs as needed and defaults to
+loopback. `START_SELECTION_RECOVERY.bat clients` remains the two-client
+shortcut. The historical installer explicitly selects v39.
+
+Direct and compatibility launcher verification passed with the expected
+repaired hashes. The native readiness and two-client admission scenario
+passed, and the unit suite recorded 119 passes and two historical skips.
+
 ## Graphically verified reconnect milestone
 
 On November 5, 2026, the user confirmed in the graphical HoN clients that

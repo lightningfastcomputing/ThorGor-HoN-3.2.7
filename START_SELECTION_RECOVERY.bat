@@ -24,11 +24,8 @@ call "%~dp0START_STACK.bat" "%SERVER_IP%"
 exit /b %ERRORLEVEL%
 
 :verify
-pushd "%~dp0"
-python -m thorgor patches verify --hon-home "%HON_HOME%"
-set "RESULT=%ERRORLEVEL%"
-popd
-exit /b %RESULT%
+call "%~dp0START_STACK.bat" verify
+exit /b %ERRORLEVEL%
 
 :clients
 call "%~f0" verify

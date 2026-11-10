@@ -12,11 +12,11 @@ Its creator-departure regression reproduces the frozen v39 joiner stream.
 The separate `registry-continuity` native variant repairs that freeze and has
 passed three fresh 15-second continuity tests. The harness also verifies
 retained-hero snapshot recovery, hero-selection reconnect, native termination,
-and consecutive matches. The normal installer defaults to frozen v39.
+and consecutive matches.
 The `selection-recovery` build combines the registry repair with the hero
 selection and repeat departure repairs. Graphical testing confirmed that
 the joiner stays connected after the host leaves and both players can pick a
-hero after reconnecting. Use `START_SELECTION_RECOVERY.bat` with the
+hero after reconnecting. Use `START_STACK.bat` with the
 separate game copy described in the [manual test guide](docs/MANUAL_TEST.md).
 
 ## Reconnect v39 frozen milestone
@@ -68,11 +68,11 @@ is installed elsewhere. The checkout destination must be absent or empty.
 $checkout = "$env:USERPROFILE\thorgor-reconnect-fixed"; $gameSource = 'C:\Program Files (x86)\Heroes of Newerth'; git clone --branch refactored-testing-harness-reconnect-fixed --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git $checkout; if ($LASTEXITCODE -eq 0) { $gameCopy = Join-Path $checkout 'work\manual-test\Heroes of Newerth'; New-Item -ItemType Directory -Path (Split-Path -Parent $gameCopy) -Force -ErrorAction Stop | Out-Null; Copy-Item -LiteralPath $gameSource -Destination $gameCopy -Recurse -ErrorAction Stop; & "$checkout\START_SELECTION_RECOVERY.bat" }
 ```
 
-For an existing checkout with the game copy prepared, start the repaired stack
-from Administrator PowerShell. Substitute your checkout path if needed.
+For an existing checkout with the game copy prepared, open Administrator
+PowerShell in the checkout and start the stack.
 
 ```powershell
-& "$env:USERPROFILE\thorgor-reconnect-fixed\START_SELECTION_RECOVERY.bat"
+.\START_STACK.bat
 ```
 
 Wait for **Native build: selection-recovery** and **Public Server Ready** in

@@ -4,14 +4,22 @@ setlocal EnableExtensions EnableDelayedExpansion
 rem The thorgor package is portable and may be moved with no adjacent legacy files.
 for %%I in ("%~dp0.") do set "THORGOR_PACKAGE=%%~fI"
 
-if not defined HON_HOME set "HON_HOME=C:\Program Files (x86)\Heroes of Newerth"
+if not defined THORGOR_NATIVE_VARIANT set "THORGOR_NATIVE_VARIANT=selection-recovery"
+if not defined HON_HOME (
+    if /i "!THORGOR_NATIVE_VARIANT!"=="selection-recovery" (
+        set "HON_HOME=!THORGOR_PACKAGE!\work\manual-test\Heroes of Newerth"
+    ) else (
+        set "HON_HOME=C:\Program Files (x86)\Heroes of Newerth"
+    )
+)
 set "THORGOR_HON_HOME=!HON_HOME!"
 
 if not exist "!HON_HOME!\hon.exe" (
     echo ERROR: hon.exe was not found:
     echo   !HON_HOME!\hon.exe
     echo.
-    echo Set HON_HOME before launching to use another installation.
+    echo Prepare the game copy as described in docs\MANUAL_TEST.md.
+    echo Set HON_HOME to use another installation.
     pause
     exit /b 3
 )
@@ -29,9 +37,11 @@ if not defined PYEXE (
 echo ThorGor HoN 3.2.7 LAN Sandbox launcher
 echo   Package: !THORGOR_PACKAGE!
 echo   HoN:     !HON_HOME!
+echo   Build:   !THORGOR_NATIVE_VARIANT!
 echo.
 
 pushd "!THORGOR_PACKAGE!"
+if /i "%~1"=="verify" goto verify
 
 echo Installing or verifying supported binary patches...
 "!PYEXE!" -m thorgor patches install --hon-home "!HON_HOME!"
@@ -63,6 +73,7 @@ if not "!RESET_EXIT!"=="0" (
 )
 
 set "LAN_IP=%~1"
+if not defined LAN_IP if /i "!THORGOR_NATIVE_VARIANT!"=="selection-recovery" set "LAN_IP=127.0.0.1"
 if defined LAN_IP (
     echo Launching ThorGor dashboard for LAN IP !LAN_IP!...
     "!PYEXE!" -m thorgor dashboard "!LAN_IP!"
@@ -80,3 +91,9 @@ if not "!DASHBOARD_EXIT!"=="0" (
 )
 
 exit /b !DASHBOARD_EXIT!
+
+:verify
+"!PYEXE!" -m thorgor patches verify --hon-home "!HON_HOME!"
+set "VERIFY_EXIT=!ERRORLEVEL!"
+popd
+exit /b !VERIFY_EXIT!

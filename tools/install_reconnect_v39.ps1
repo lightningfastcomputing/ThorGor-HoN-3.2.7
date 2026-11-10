@@ -14,6 +14,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 
 $env:HON_HOME = $gameDirectory
 $env:THORGOR_HON_HOME = $gameDirectory
+$env:THORGOR_NATIVE_VARIANT = 'v39'
 $env:PYTHONPATH = $repository
 Set-Location -LiteralPath $repository
 $logDirectory = Join-Path $repository 'work'
