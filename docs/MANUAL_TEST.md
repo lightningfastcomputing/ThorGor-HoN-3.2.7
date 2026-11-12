@@ -1,37 +1,33 @@
 # Manual repaired-build test
 
-`START_STACK.bat` defaults to the prepared game copy and the
-`selection-recovery` build. It applies the patches when needed. The dashboard
-displays the chosen build and verifies both DLLs.
-`START_SELECTION_RECOVERY.bat` also starts the stack and provides the
-two-client shortcut.
-
-For a fresh checkout, copy a complete HoN 3.2.7.1 installation into
-`work\manual-test\Heroes of Newerth` before launching. The launcher patches
-that copy.
+`START_STACK.bat` and `START_REMOTE_CLIENT.bat` default to the installed
+HoN 3.2.7.1 folder under Program Files (x86) and apply the `selection-recovery`
+patches. Set `HON_HOME` before launching if the game is installed elsewhere.
+`START_SELECTION_RECOVERY.bat` remains available for testing with a separate
+game copy under `work\manual-test\Heroes of Newerth`.
 
 Close existing HoN clients and dashboards. Open PowerShell as Administrator
 in the checkout root and run the repaired launcher.
 
 ```powershell
-.\START_STACK.bat
+.\START_STACK.bat 127.0.0.1
 ```
 
 Wait for **Native build: selection-recovery** and for the startup checks,
 dedicated slave, and Public Server Ready to turn green. In a second
-Administrator PowerShell in the same checkout, open both clients.
+PowerShell in the same checkout, open both clients.
 
 ```powershell
-.\START_SELECTION_RECOVERY.bat clients
+.\START_REMOTE_CLIENT.bat 127.0.0.1 2
 ```
 
-The clients command verifies the repaired copy, maps the legacy chat hostname
-to this server in the Windows hosts file, and opens two game windows. Use two
+Accept the administrator prompt. The launcher verifies the installed repair,
+maps the legacy chat hostname to this server, and opens two game windows. Use two
 different accounts. Create them with `py -m thorgor accounts` if needed.
 Two client processes share the retail user profile.
-The launcher uses loopback by default. For a LAN test, pass the LAN IPv4
-address as the first argument to `START_STACK.bat` and use the same address
-in `START_SELECTION_RECOVERY.bat clients <LAN IPv4>`.
+For a LAN test, run `START_STACK.bat` with automatic LAN detection or pass the
+server's LAN IPv4 explicitly. On each client PC run `START_REMOTE_CLIENT.bat`
+and enter the dashboard's LAN IPv4.
 
 1. Log in separately in both clients. Have one create a public game through
    the dedicated-server flow; have the other join it through the server browser.

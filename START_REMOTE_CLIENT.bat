@@ -9,7 +9,8 @@ if not defined SERVER_IP exit /b 3
 set "INSTANCES=%~2"
 if not defined INSTANCES set "INSTANCES=1"
 
-if not defined HON_HOME set "HON_HOME=C:\Program Files (x86)\Heroes of Newerth"
+if not defined HON_HOME set "HON_HOME=%ProgramFiles(x86)%\Heroes of Newerth"
+if not defined THORGOR_NATIVE_VARIANT set "THORGOR_NATIVE_VARIANT=selection-recovery"
 if not exist "!HON_HOME!\hon.exe" (
     echo ERROR: hon.exe was not found:
     echo   !HON_HOME!\hon.exe
@@ -42,18 +43,17 @@ if errorlevel 1 (
 echo ThorGor HoN 3.2.7 LAN Sandbox remote client
 echo   Package: !THORGOR_PACKAGE!
 echo   HoN:     !HON_HOME!
+echo   Build:   !THORGOR_NATIVE_VARIANT!
 echo   Server:  !SERVER_IP!
 echo   Clients: !INSTANCES!
 echo.
 echo Installing patches and configuring the legacy chat hostname...
 echo Accept the Windows administrator prompt to update the game DLLs and hosts file.
 
-set "THORGOR_REMOTE_PYTHON=!PYEXE!"
-set "THORGOR_REMOTE_PARENT=!THORGOR_PACKAGE!"
-set "THORGOR_REMOTE_HON_HOME=!HON_HOME!"
 set "THORGOR_REMOTE_LOG=!THORGOR_PACKAGE!\var\remote_client_setup.log"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$p=Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','""!THORGOR_PACKAGE!\REMOTE_SETUP_ADMIN.ps1""','-PythonPath','""!THORGOR_REMOTE_PYTHON!""','-ProjectRoot','""!THORGOR_REMOTE_PARENT!""','-HonHome','""!THORGOR_REMOTE_HON_HOME!""','-ServerIP','!THORGOR_REMOTE_SERVER_IP!','-LogPath','""!THORGOR_REMOTE_LOG!""'; exit $p.ExitCode"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "!THORGOR_PACKAGE!\REMOTE_SETUP_ADMIN.ps1" ^
+  -PythonPath "!PYEXE!" -ProjectRoot "!THORGOR_PACKAGE!" -HonHome "!HON_HOME!" ^
+  -ServerIP "!SERVER_IP!" -LogPath "!THORGOR_REMOTE_LOG!" -NativeVariant "!THORGOR_NATIVE_VARIANT!"
 if errorlevel 1 (
     popd
     echo.

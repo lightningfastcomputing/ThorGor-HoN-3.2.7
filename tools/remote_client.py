@@ -10,7 +10,7 @@ import traceback
 from pathlib import Path
 
 from thorgor.paths import ROOT
-from thorgor.patches.installer import install_supported_patches
+from thorgor.patches.installer import install_supported_patches, verify_supported_install
 from thorgor.game_manager.performance import (
     client_affinity_mask,
     resolve_dedicated_cpu,
@@ -79,6 +79,8 @@ def chat_reachable(server_ip: str, timeout: float = 4.0) -> bool:
 
 def setup(hon_home: Path, server_ip: str) -> None:
     for message in install_supported_patches(hon_home):
+        print(message)
+    for message in verify_supported_install(hon_home):
         print(message)
     configured = configure_chat_host(server_ip)
     print(f"Configured {CHAT_HOSTNAME} in {configured}")

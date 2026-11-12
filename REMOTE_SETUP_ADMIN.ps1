@@ -3,7 +3,9 @@ param(
     [Parameter(Mandatory = $true)][string]$ProjectRoot,
     [Parameter(Mandatory = $true)][string]$HonHome,
     [Parameter(Mandatory = $true)][string]$ServerIP,
-    [Parameter(Mandatory = $true)][string]$LogPath
+    [Parameter(Mandatory = $true)][string]$LogPath,
+    [ValidateSet('v39', 'registry-continuity', 'selection-recovery')]
+    [string]$NativeVariant = 'selection-recovery'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,7 +22,25 @@ try {
         throw "HoN installation is unavailable: $HonHome"
     }
 
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+    if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        $arguments = @(
+            '-NoProfile', '-ExecutionPolicy', 'Bypass',
+            '-File', ('"{0}"' -f $PSCommandPath),
+            '-PythonPath', ('"{0}"' -f $PythonPath),
+            '-ProjectRoot', ('"{0}"' -f $ProjectRoot),
+            '-HonHome', ('"{0}"' -f $HonHome),
+            '-ServerIP', $ServerIP,
+            '-LogPath', ('"{0}"' -f $LogPath),
+            '-NativeVariant', $NativeVariant
+        )
+        $elevated = Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -Wait -PassThru -ArgumentList $arguments
+        exit $elevated.ExitCode
+    }
+
     Set-Location -LiteralPath $ProjectRoot
+    $env:THORGOR_NATIVE_VARIANT = $NativeVariant
     $output = @(& $PythonPath -m thorgor remote-setup --hon-home $HonHome --server-ip $ServerIP 2>&1)
     $exitCode = $LASTEXITCODE
     $output | ForEach-Object { Write-Host $_ }

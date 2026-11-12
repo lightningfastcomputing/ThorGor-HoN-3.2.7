@@ -1,8 +1,24 @@
 # Autonomous development progress
 
+## Installed game launchers
+
+`START_STACK.bat` and `START_REMOTE_CLIENT.bat` now target the HoN install
+under Program Files (x86) by default. Both select `selection-recovery` and
+honor `HON_HOME` for alternate installations. The stack detects its LAN
+address by default. The remote launcher passes the selected build through
+the administrator prompt, verifies the patched files, and maps the chat
+hostname before launching the game.
+
+On November 12, 2026, a disposable Program Files layout passed stock
+installation and v39 upgrade through remote setup. The tests used a
+temporary hosts file and checked the elevation arguments without opening
+a UAC prompt. The repaired native slave passed two-client admission. The
+unit suite recorded 119 passes and two historical skips. A graphical
+connection from a separate PC remains to be tested.
+
 ## Standard stack launcher
 
-`START_STACK.bat` now selects `selection-recovery` and the prepared game copy
+`START_STACK.bat` initially selected `selection-recovery` and the prepared game copy
 when no overrides are set. It applies the repairs as needed and defaults to
 loopback. `START_SELECTION_RECOVERY.bat clients` remains the two-client
 shortcut. The historical installer explicitly selects v39.

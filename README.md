@@ -16,8 +16,8 @@ and consecutive matches.
 The `selection-recovery` build combines the registry repair with the hero
 selection and repeat departure repairs. Graphical testing confirmed that
 the joiner stays connected after the host leaves and both players can pick a
-hero after reconnecting. Use `START_STACK.bat` with the
-separate game copy described in the [manual test guide](docs/MANUAL_TEST.md).
+hero after reconnecting. `START_STACK.bat` installs and uses that build in the
+default HoN installation under Program Files (x86).
 
 ## Reconnect v39 frozen milestone
 
@@ -54,33 +54,39 @@ their own disconnect/reconnect. This exact state is frozen locally as
 - Administrator approval when the launcher installs/verifies the game patches and configures remote-client routing.
 
 The core stack has no third-party Python package requirements.
-Developers using another preserved game installation can set `HON_HOME` before
+Anyone using a different HoN installation can set `HON_HOME` before
 launching; for example, `$env:HON_HOME = 'C:\intelprop\Heroes of Newerth'`.
 
 ## Acquire, install, and run selection-recovery
 
 Close all HoN clients and dashboards, then run this one-liner in Administrator
-PowerShell. It clones the fixed branch, copies your HoN installation into the
-checkout, and starts the dashboard using that copy. Change `$gameSource` if HoN
-is installed elsewhere. The checkout destination must be absent or empty.
+PowerShell. It clones the fixed branch, patches HoN in its installed folder,
+and starts the dashboard. Change `HON_HOME` if HoN is installed elsewhere.
+The checkout destination must be absent or empty.
 
 ```powershell
-$checkout = "$env:USERPROFILE\thorgor-reconnect-fixed"; $gameSource = 'C:\Program Files (x86)\Heroes of Newerth'; git clone --branch refactored-testing-harness-reconnect-fixed --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git $checkout; if ($LASTEXITCODE -eq 0) { $gameCopy = Join-Path $checkout 'work\manual-test\Heroes of Newerth'; New-Item -ItemType Directory -Path (Split-Path -Parent $gameCopy) -Force -ErrorAction Stop | Out-Null; Copy-Item -LiteralPath $gameSource -Destination $gameCopy -Recurse -ErrorAction Stop; & "$checkout\START_SELECTION_RECOVERY.bat" }
+$checkout = "$env:USERPROFILE\thorgor-reconnect-fixed"; git clone --branch refactored-testing-harness-reconnect-fixed --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git $checkout; if ($LASTEXITCODE -eq 0) { $env:HON_HOME = "${env:ProgramFiles(x86)}\Heroes of Newerth"; $env:THORGOR_NATIVE_VARIANT = 'selection-recovery'; & "$checkout\START_STACK.bat" }
 ```
 
-For an existing checkout with the game copy prepared, open Administrator
-PowerShell in the checkout and start the stack.
+For an existing checkout, open Administrator PowerShell in the checkout and
+start the stack.
 
 ```powershell
 .\START_STACK.bat
 ```
 
 Wait for **Native build: selection-recovery** and **Public Server Ready** in
-the dashboard. Start two local test clients from a second Administrator
-PowerShell:
+the dashboard. On a client PC, close HoN and run `START_REMOTE_CLIENT.bat`
+from its checkout. Enter the LAN IPv4 shown in the server dashboard and
+accept the Windows administrator prompt. The launcher patches and verifies
+the local HoN installation, sets the chat hostname, and opens the game.
+
+To open two clients on the server PC, pass its dashboard IP and instance
+count from a second PowerShell in the checkout. Replace the example address
+with the address shown on your dashboard.
 
 ```powershell
-& "$env:USERPROFILE\thorgor-reconnect-fixed\START_SELECTION_RECOVERY.bat" clients
+.\START_REMOTE_CLIENT.bat 192.168.1.20 2
 ```
 
 See the [manual test guide](docs/MANUAL_TEST.md) for LAN addresses, test

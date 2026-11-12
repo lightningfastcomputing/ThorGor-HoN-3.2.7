@@ -5,20 +5,14 @@ rem The thorgor package is portable and may be moved with no adjacent legacy fil
 for %%I in ("%~dp0.") do set "THORGOR_PACKAGE=%%~fI"
 
 if not defined THORGOR_NATIVE_VARIANT set "THORGOR_NATIVE_VARIANT=selection-recovery"
-if not defined HON_HOME (
-    if /i "!THORGOR_NATIVE_VARIANT!"=="selection-recovery" (
-        set "HON_HOME=!THORGOR_PACKAGE!\work\manual-test\Heroes of Newerth"
-    ) else (
-        set "HON_HOME=C:\Program Files (x86)\Heroes of Newerth"
-    )
-)
+if not defined HON_HOME set "HON_HOME=%ProgramFiles(x86)%\Heroes of Newerth"
 set "THORGOR_HON_HOME=!HON_HOME!"
 
 if not exist "!HON_HOME!\hon.exe" (
     echo ERROR: hon.exe was not found:
     echo   !HON_HOME!\hon.exe
     echo.
-    echo Prepare the game copy as described in docs\MANUAL_TEST.md.
+    echo Install HoN 3.2.7.1 before launching the stack.
     echo Set HON_HOME to use another installation.
     pause
     exit /b 3
@@ -50,6 +44,7 @@ if not "!SETUP_EXIT!"=="0" (
     popd
     echo.
     echo ERROR: ThorGor binary verification or installation failed.
+    echo Close HoN and run START_STACK.bat from Administrator PowerShell.
     pause
     exit /b 4
 )
@@ -73,7 +68,6 @@ if not "!RESET_EXIT!"=="0" (
 )
 
 set "LAN_IP=%~1"
-if not defined LAN_IP if /i "!THORGOR_NATIVE_VARIANT!"=="selection-recovery" set "LAN_IP=127.0.0.1"
 if defined LAN_IP (
     echo Launching ThorGor dashboard for LAN IP !LAN_IP!...
     "!PYEXE!" -m thorgor dashboard "!LAN_IP!"
