@@ -1,13 +1,15 @@
 @echo off
 setlocal EnableExtensions
 
-set "HON_HOME=%~dp0work\manual-test\Heroes of Newerth"
+for %%I in ("%~dp0..\..") do set "THORGOR_ROOT=%%~fI"
+if not defined HON_HOME set "HON_HOME=%THORGOR_ROOT%\work\manual-test\Heroes of Newerth"
 set "THORGOR_NATIVE_VARIANT=selection-recovery"
 set "SERVER_IP=%~2"
 if not defined SERVER_IP set "SERVER_IP=127.0.0.1"
 
 if not exist "%HON_HOME%\hon.exe" (
     echo Repaired HoN copy missing: "%HON_HOME%"
+    echo Set HON_HOME to the game copy you want to test.
     exit /b 3
 )
 
@@ -20,17 +22,17 @@ exit /b 2
 
 :server
 echo Starting ThorGor selection-recovery from "%HON_HOME%"
-call "%~dp0START_STACK.bat" "%SERVER_IP%"
+call "%THORGOR_ROOT%\START_STACK.bat" "%SERVER_IP%"
 exit /b %ERRORLEVEL%
 
 :verify
-call "%~dp0START_STACK.bat" verify
+call "%THORGOR_ROOT%\START_STACK.bat" verify
 exit /b %ERRORLEVEL%
 
 :clients
 call "%~f0" verify
 if errorlevel 1 exit /b 4
-pushd "%~dp0"
+pushd "%THORGOR_ROOT%"
 python -m thorgor remote-setup --hon-home "%HON_HOME%" --server-ip "%SERVER_IP%"
 if errorlevel 1 (
     popd

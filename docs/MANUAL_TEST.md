@@ -3,8 +3,9 @@
 `START_STACK.bat` and `START_REMOTE_CLIENT.bat` default to the installed
 HoN 3.2.7.1 folder under Program Files (x86) and apply the `selection-recovery`
 patches. Set `HON_HOME` before launching if the game is installed elsewhere.
-`START_SELECTION_RECOVERY.bat` remains available for testing with a separate
-game copy under `work\manual-test\Heroes of Newerth`.
+For tests with a separate game copy, set `HON_HOME` to that copy before using
+the standard launchers. The [former test launcher](../tools/legacy/START_SELECTION_RECOVERY.bat)
+is also available under `tools\legacy`.
 
 Close existing HoN clients and dashboards. Open PowerShell as Administrator
 in the checkout root and run the repaired launcher.

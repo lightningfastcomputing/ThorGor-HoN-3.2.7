@@ -24,7 +24,7 @@ Expected SHA-256 values:
 - `k2.dll`: `CB12258566BA001B528F3A48E4C8CC795992DCB17333BCE5ABF8EF4E5DCCB24D`
 - `game/game.dll`: `0DA7FA068C813328BCF89CADAAB0EB9C17B5963B9C27E49298D6D6DEFCC9D43B`
 
-Install with `INSTALL_RECONNECT_V39.bat`, then start a fresh match. Confirm
+Install with `tools\legacy\INSTALL_RECONNECT_V39.bat`, then start a fresh match. Confirm
 player2 receives continuous state while the creator is disconnected before
 testing creator reconnect.
 

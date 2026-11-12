@@ -1,5 +1,17 @@
 # Autonomous development progress
 
+## Launcher and test file cleanup
+
+The repo root contains the standard stack, remote client, and account
+launchers. The optional copy launcher and the v39 control launcher moved
+to `tools/legacy`. The numbered installers and milestone notes are in
+`docs/reconnect-history`. To launch three clients, pass `3` as the second
+argument to `START_REMOTE_CLIENT.bat`.
+
+The local test game copy and its reports moved to a sibling archive. The
+archived copy passed the relocated launcher's verification, and the unit
+suite recorded 119 passes and two historical skips.
+
 ## Installed game launchers
 
 `START_STACK.bat` and `START_REMOTE_CLIENT.bat` now target the HoN install
@@ -20,7 +32,7 @@ connection from a separate PC remains to be tested.
 
 `START_STACK.bat` initially selected `selection-recovery` and the prepared game copy
 when no overrides are set. It applies the repairs as needed and defaults to
-loopback. `START_SELECTION_RECOVERY.bat clients` remains the two-client
+loopback. `START_SELECTION_RECOVERY.bat clients` served as the two-client
 shortcut. The historical installer explicitly selects v39.
 
 Direct and compatibility launcher verification passed with the expected

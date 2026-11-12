@@ -274,7 +274,7 @@ stop suppression and host-successor selection.
 
 The v39 freeze has now been reproduced unattended against a dedicated slave
 with two independent simulated protocol clients. The frozen DLL hashes in
-[the v39 notes](../Reconnect-v39-notes.md) remain unchanged. The native server
+[the v39 notes](reconnect-history/Reconnect-v39-notes.md) remain available. The native server
 stays active while the already-connected joiner stops receiving snapshots
 after creator departure. See [autonomous progress](AUTONOMOUS_PROGRESS.md)
 for the latest run evidence and resume instructions. The separate managed

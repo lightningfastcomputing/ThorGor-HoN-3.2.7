@@ -209,7 +209,8 @@ unchanged. It adds a fallback only inside `CGameServer::ProcessGameDataFromClien
 after a stock miss, retained player values are scanned for a live `+0x6C` matching
 the packet sender. Lobby admission never calls this fallback.
 
-Install with `INSTALL_RECONNECT_V39.bat`. Expected game.dll SHA-256:
+Install the v39 control with `tools\legacy\INSTALL_RECONNECT_V39.bat`.
+Expected game.dll SHA-256:
 `0DA7FA068C813328BCF89CADAAB0EB9C17B5963B9C27E49298D6D6DEFCC9D43B`.
 Expected K2 SHA-256:
 `CB12258566BA001B528F3A48E4C8CC795992DCB17333BCE5ABF8EF4E5DCCB24D`.
