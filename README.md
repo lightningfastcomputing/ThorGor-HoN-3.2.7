@@ -61,11 +61,11 @@ launching; for example, `$env:HON_HOME = 'C:\intelprop\Heroes of Newerth'`.
 
 Close all HoN clients and dashboards, then run this one-liner in Administrator
 PowerShell. It clones the fixed branch, patches HoN in its installed folder,
-and starts the dashboard. Change `HON_HOME` if HoN is installed elsewhere.
+and starts the dashboard. Set `HON_HOME` first if HoN is installed elsewhere.
 The checkout destination must be absent or empty.
 
 ```powershell
-$checkout = "$env:USERPROFILE\thorgor-reconnect-fixed"; git clone --branch refactored-testing-harness-reconnect-fixed --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git $checkout; if ($LASTEXITCODE -eq 0) { $env:HON_HOME = "${env:ProgramFiles(x86)}\Heroes of Newerth"; $env:THORGOR_NATIVE_VARIANT = 'selection-recovery'; & "$checkout\START_STACK.bat" }
+$checkout = "$env:USERPROFILE\thorgor-reconnect-fixed"; git clone --branch refactored-testing-harness-reconnect-fixed --single-branch https://github.com/lightningfastcomputing/ThorGor-HoN-3.2.7.git $checkout; if ($LASTEXITCODE -eq 0) { $env:THORGOR_NATIVE_VARIANT = 'selection-recovery'; & "$checkout\START_STACK.bat" }
 ```
 
 For an existing checkout, open Administrator PowerShell in the checkout and
